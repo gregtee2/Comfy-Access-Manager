@@ -635,8 +635,8 @@ class LoadVideoFromMediaVault:
             },
         }
 
-    RETURN_TYPES = ("IMAGE", "STRING", "INT", "FLOAT")
-    RETURN_NAMES = ("images", "file_path", "frame_count", "fps")
+    RETURN_TYPES = ("IMAGE", "STRING", "INT", "FLOAT", "VHS_VIDEOINFO")
+    RETURN_NAMES = ("images", "file_path", "frame_count", "fps", "video_info")
     FUNCTION = "load_video"
     CATEGORY = "MediaVault"
 
@@ -691,6 +691,9 @@ class LoadVideoFromMediaVault:
 
         total_frames = int(cap.get(cv2.CAP_PROP_FRAME_COUNT))
         fps = cap.get(cv2.CAP_PROP_FPS) or 24.0
+        source_width = int(cap.get(cv2.CAP_PROP_FRAME_WIDTH))
+        source_height = int(cap.get(cv2.CAP_PROP_FRAME_HEIGHT))
+        source_duration = total_frames / fps if fps > 0 else 0.0
 
         # Resolve range
         start = min(frame_start, total_frames - 1)
@@ -729,9 +732,26 @@ class LoadVideoFromMediaVault:
         # Stack into batch tensor [N, H, W, 3]
         image_tensor = torch.from_numpy(np.stack(frames, axis=0))
         loaded = image_tensor.shape[0]
+        loaded_width = image_tensor.shape[2]
+        loaded_height = image_tensor.shape[1]
+        loaded_fps = fps / step if step > 0 else fps
+        loaded_duration = loaded / loaded_fps if loaded_fps > 0 else 0.0
         print(f"[MediaVault]   Loaded {loaded} frames → tensor {list(image_tensor.shape)}")
 
-        return (image_tensor, file_path, loaded, fps)
+        video_info = {
+            "source_fps": fps,
+            "source_frame_count": total_frames,
+            "source_duration": source_duration,
+            "source_width": source_width,
+            "source_height": source_height,
+            "loaded_fps": loaded_fps,
+            "loaded_frame_count": loaded,
+            "loaded_duration": loaded_duration,
+            "loaded_width": loaded_width,
+            "loaded_height": loaded_height,
+        }
+
+        return (image_tensor, file_path, loaded, fps, video_info)
 
 
 # ═══════════════════════════════════════════
