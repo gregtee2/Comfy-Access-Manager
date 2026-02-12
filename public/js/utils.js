@@ -37,6 +37,17 @@ export function formatDate(dateStr) {
     return d.toLocaleDateString('en-US', { month: 'short', day: 'numeric' });
 }
 
+export function formatDateTime(dateStr) {
+    if (!dateStr) return '';
+    const d = new Date(dateStr);
+    const yr = d.getFullYear();
+    const mo = String(d.getMonth() + 1).padStart(2, '0');
+    const dy = String(d.getDate()).padStart(2, '0');
+    const hh = String(d.getHours()).padStart(2, '0');
+    const mm = String(d.getMinutes()).padStart(2, '0');
+    return `${yr}-${mo}-${dy} ${hh}:${mm}`;
+}
+
 export function typeIcon(type) {
     const icons = { video: '🎬', image: '🖼️', audio: '🔊', exr: '✨', threed: '🧊', document: '📄' };
     return icons[type] || '📎';

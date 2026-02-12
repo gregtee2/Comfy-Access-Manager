@@ -5,7 +5,7 @@
 
 import { state } from './state.js';
 import { api } from './api.js';
-import { esc, escAttr, formatSize, formatDuration, formatDate, typeIcon, showToast, closeModal } from './utils.js';
+import { esc, escAttr, formatSize, formatDuration, formatDate, formatDateTime, typeIcon, showToast, closeModal } from './utils.js';
 import { openPlayer } from './player.js';
 
 // ═══════════════════════════════════════════
@@ -526,22 +526,44 @@ function renderAssets() {
         `).join('');
     } else {
         container.className = 'asset-list';
-        container.innerHTML = state.assets.map((a, i) => `
+        const headerRow = `
+            <div class="asset-row asset-row-header">
+                <div class="row-id">ID</div>
+                <div class="row-thumb">Media</div>
+                <div class="row-audio">Audio</div>
+                <div class="row-show">Show</div>
+                <div class="row-shot">Shot</div>
+                <div class="row-name">Vault Name</div>
+                <div class="row-role">Role</div>
+                <div class="row-res">Resolution</div>
+                <div class="row-size">Size</div>
+                <div class="row-date">Created</div>
+                <div class="row-star"></div>
+            </div>`;
+        const rows = state.assets.map((a, i) => {
+            const hasAudio = a.media_type === 'audio' || (a.media_type === 'video' && a.codec && !a.codec.toLowerCase().includes('mjpeg'));
+            return `
             <div class="asset-row ${state.selectedAssets.includes(a.id) ? 'asset-selected' : ''}" 
                 data-aidx="${i}" onclick="handleAssetClick(event, ${i})" ondblclick="handleAssetDblClick(event, ${i})" oncontextmenu="showContextMenu(event, ${i})"
                 draggable="true" ondragstart="onAssetDragStart(event, ${i})">
                 ${state.selectedAssets.includes(a.id) ? '<div class="asset-check-row">✓</div>' : ''}
+                <div class="row-id">${a.id}</div>
                 <div class="row-thumb">
                     <img src="/api/assets/${a.id}/thumbnail" onerror="this.outerHTML='<span>${typeIcon(a.media_type)}</span>'">
+                    <span class="row-type-pip ${a.media_type}" title="${a.media_type}">${a.file_ext || ''}</span>
                 </div>
+                <div class="row-audio">${hasAudio ? '🔊' : '<span style="opacity:.25">🔇</span>'}</div>
+                <div class="row-show">${esc(a.project_code || '')}</div>
+                <div class="row-shot">${esc(a.shot_code || a.shot_name || '—')}</div>
                 <div class="row-name">${a.is_linked ? '🔗 ' : ''}${esc(a.vault_name)}</div>
-                <div class="row-role">${a.role_name ? `<span class="role-tag" style="background:${a.role_color || '#666'}">${esc(a.role_code)}</span>` : ''}</div>
-                <div class="row-type">${a.media_type}</div>
+                <div class="row-role">${a.role_name ? `<span class="role-tag" style="background:${a.role_color || '#666'}">${a.role_icon || ''} ${esc(a.role_code)}</span>` : ''}</div>
+                <div class="row-res">${a.width ? `${a.width}×${a.height}` : '—'}</div>
                 <div class="row-size">${formatSize(a.file_size)}</div>
-                <div class="row-date">${formatDate(a.created_at)}</div>
+                <div class="row-date">${formatDateTime(a.created_at)}</div>
                 <button class="asset-star" onclick="event.stopPropagation();toggleStar(${a.id})" style="position:static">${a.starred ? '⭐' : '☆'}</button>
-            </div>
-        `).join('');
+            </div>`;
+        }).join('');
+        container.innerHTML = headerRow + rows;
     }
 
     updateSelectionToolbar();
