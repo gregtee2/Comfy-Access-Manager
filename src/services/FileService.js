@@ -65,12 +65,18 @@ class FileService {
         // ShotGrid style: scan for {project}_{seq}_{shot}_{step}_v* in target dir
         let version = 1;
         if (opts.roleCode) {
-            const basePattern = [
-                opts.projectCode,
-                opts.sequenceCode,
-                opts.shotCode,
-                opts.roleCode.toLowerCase(),
-            ].filter(Boolean).join('_') + '_v';
+            // basePattern must match the ACTUAL generated filename prefix.
+            // SHOTGRID_FULL  = {shot}_{step}_v{version}  → pattern: "EDA1500_ai_v"
+            // SHOTGRID_SEQ   = {sequence}_{step}_v{version} → pattern: "EDA_ai_v"
+            // SHOTGRID_PROJ  = {project}_{step}_v{version} → pattern: "AP1_ai_v"
+            let basePattern;
+            if (opts.sequenceCode && opts.shotCode) {
+                basePattern = `${opts.shotCode}_${opts.roleCode.toLowerCase()}_v`;
+            } else if (opts.sequenceCode) {
+                basePattern = `${opts.sequenceCode}_${opts.roleCode.toLowerCase()}_v`;
+            } else {
+                basePattern = `${opts.projectCode}_${opts.roleCode.toLowerCase()}_v`;
+            }
             version = getNextVersion(vaultDir, basePattern);
         }
 
@@ -150,7 +156,18 @@ class FileService {
         );
         this.ensureDir(vaultDir);
 
-        const version = opts.version || getNextVersion(vaultDir, '');
+        // Build basePattern matching the actual filename template (same logic as importFile)
+        let basePattern = '';
+        if (opts.roleCode) {
+            if (opts.sequenceCode && opts.shotCode) {
+                basePattern = `${opts.shotCode}_${opts.roleCode.toLowerCase()}_v`;
+            } else if (opts.sequenceCode) {
+                basePattern = `${opts.sequenceCode}_${opts.roleCode.toLowerCase()}_v`;
+            } else {
+                basePattern = `${opts.projectCode}_${opts.roleCode.toLowerCase()}_v`;
+            }
+        }
+        const version = opts.version || getNextVersion(vaultDir, basePattern);
 
         const { vaultName } = generateVaultName({
             originalName,

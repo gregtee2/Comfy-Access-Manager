@@ -39,7 +39,8 @@ export function formatDate(dateStr) {
 
 export function formatDateTime(dateStr) {
     if (!dateStr) return '';
-    const d = new Date(dateStr);
+    // SQLite datetime('now') stores UTC — append 'Z' so JS parses as UTC, then display local
+    const d = new Date(dateStr.endsWith('Z') ? dateStr : dateStr + 'Z');
     const yr = d.getFullYear();
     const mo = String(d.getMonth() + 1).padStart(2, '0');
     const dy = String(d.getDate()).padStart(2, '0');

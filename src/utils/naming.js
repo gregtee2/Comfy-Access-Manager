@@ -158,6 +158,7 @@ function parseStructuredName(filename) {
 function getNextVersion(directory, basePattern) {
     const fs = require('fs');
     if (!fs.existsSync(directory)) return 1;
+    if (!basePattern) return 1;  // No pattern to match
 
     const files = fs.readdirSync(directory);
     let maxVersion = 0;
@@ -165,7 +166,8 @@ function getNextVersion(directory, basePattern) {
     for (const file of files) {
         const base = path.basename(file, path.extname(file));
         if (base.startsWith(basePattern)) {
-            const match = base.match(/v(\d+)$/);
+            // Match clean version (v002) or collision-suffixed version (v002_14)
+            const match = base.match(/v(\d+)(?:_\d+)?$/);
             if (match) {
                 const v = parseInt(match[1]);
                 if (v > maxVersion) maxVersion = v;
