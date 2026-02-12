@@ -1,5 +1,9 @@
 # Digital Media Vault (DMV)
 
+![Version](https://img.shields.io/badge/version-1.0.0-blue)
+![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)
+![License](https://img.shields.io/badge/license-Proprietary-red)
+
 A local media asset manager for creative production — organize, browse, import, export, and play media files with a project-based hierarchy.
 
 Built for artists and studios who work with video, images, EXR sequences, 3D files, and audio, and want a fast way to manage them without cloud services.
