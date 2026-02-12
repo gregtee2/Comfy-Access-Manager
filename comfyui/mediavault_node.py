@@ -72,7 +72,7 @@ try:
         url = f"{MEDIAVAULT_URL}{path}"
         try:
             req = urllib.request.Request(url, headers={"Content-Type": "application/json"})
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=3) as resp:
                 return json.loads(resp.read().decode())
         except Exception as e:
             global _mv_alive, _mv_last_check
@@ -135,7 +135,7 @@ try:
         url = f"{MEDIAVAULT_URL}/api/assets/{asset_id}/thumbnail"
         try:
             req = urllib.request.Request(url)
-            with urllib.request.urlopen(req, timeout=10) as resp:
+            with urllib.request.urlopen(req, timeout=3) as resp:
                 data = resp.read()
                 ct = resp.headers.get("Content-Type", "image/jpeg")
                 return web.Response(body=data, content_type=ct)
@@ -165,7 +165,7 @@ def mv_api(path, method="GET", data=None):
         req = urllib.request.Request(url, headers=headers, method=method)
 
     try:
-        with urllib.request.urlopen(req, timeout=10) as resp:
+        with urllib.request.urlopen(req, timeout=3) as resp:
             return json.loads(resp.read().decode())
     except urllib.error.URLError as e:
         global _mv_alive, _mv_last_check
@@ -278,20 +278,15 @@ class LoadFromMediaVault:
 
     @classmethod
     def INPUT_TYPES(cls):
-        projects = get_projects()
-        sequences = get_sequences()
-        shots = get_shots()
-        roles = get_roles()
-        assets = get_assets()
-
+        # Static defaults — NEVER call API here (blocks ComfyUI startup)
+        # The JS extension (mediavault_dynamic.js) populates dropdowns live
         return {
             "required": {
-                "project": (list(projects.keys()), {"default": list(projects.keys())[0]}),
-                "sequence": (list(sequences.keys()), {"default": "* (All Sequences)"}),
-                "shot": (list(shots.keys()), {"default": "* (All Shots)"}),
-
-                "role": (list(roles.keys()), {"default": "* (All Roles)"}),
-                "asset": (list(assets.keys()), {"default": list(assets.keys())[0]}),
+                "project": (["(Load MediaVault...)"], {"default": "(Load MediaVault...)"}),
+                "sequence": (["* (All Sequences)"], {"default": "* (All Sequences)"}),
+                "shot": (["* (All Shots)"], {"default": "* (All Shots)"}),
+                "role": (["* (All Roles)"], {"default": "* (All Roles)"}),
+                "asset": (["(Select project first)"], {"default": "(Select project first)"}),
             },
             "optional": {
                 "workflow_id": ("STRING", {"default": "default", "multiline": False}),
@@ -411,18 +406,15 @@ class SaveToMediaVault:
 
     @classmethod
     def INPUT_TYPES(cls):
-        projects = get_projects()
-        sequences = get_sequences()
-        shots = get_shots()
-        roles = get_roles()
-
+        # Static defaults — NEVER call API here (blocks ComfyUI startup)
+        # The JS extension (mediavault_dynamic.js) populates dropdowns live
         return {
             "required": {
                 "images": ("IMAGE",),
-                "project": (list(projects.keys()), {"default": list(projects.keys())[0]}),
-                "sequence": (list(sequences.keys()), {"default": "* (All Sequences)"}),
-                "shot": (list(shots.keys()), {"default": "* (All Shots)"}),
-                "role": (list(roles.keys()), {"default": "* (All Roles)"}),
+                "project": (["(Load MediaVault...)"], {"default": "(Load MediaVault...)"}),
+                "sequence": (["* (All Sequences)"], {"default": "* (All Sequences)"}),
+                "shot": (["* (All Shots)"], {"default": "* (All Shots)"}),
+                "role": (["* (All Roles)"], {"default": "* (All Roles)"}),
                 "custom_name": ("STRING", {"default": "", "multiline": False}),
             },
             "optional": {
@@ -612,19 +604,15 @@ class LoadVideoFromMediaVault:
 
     @classmethod
     def INPUT_TYPES(cls):
-        projects = get_projects()
-        sequences = get_sequences()
-        shots = get_shots()
-        roles = get_roles()
-        assets = get_assets()
-
+        # Static defaults — NEVER call API here (blocks ComfyUI startup)
+        # The JS extension (mediavault_dynamic.js) populates dropdowns live
         return {
             "required": {
-                "project": (list(projects.keys()), {"default": list(projects.keys())[0]}),
-                "sequence": (list(sequences.keys()), {"default": "* (All Sequences)"}),
-                "shot": (list(shots.keys()), {"default": "* (All Shots)"}),
-                "role": (list(roles.keys()), {"default": "* (All Roles)"}),
-                "asset": (list(assets.keys()), {"default": list(assets.keys())[0]}),
+                "project": (["(Load MediaVault...)"], {"default": "(Load MediaVault...)"}),
+                "sequence": (["* (All Sequences)"], {"default": "* (All Sequences)"}),
+                "shot": (["* (All Shots)"], {"default": "* (All Shots)"}),
+                "role": (["* (All Roles)"], {"default": "* (All Roles)"}),
+                "asset": (["(Select project first)"], {"default": "(Select project first)"}),
             },
             "optional": {
                 "frame_start": ("INT", {"default": 0, "min": 0, "max": 999999, "step": 1}),
