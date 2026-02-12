@@ -10,8 +10,12 @@ import { app } from "../../../scripts/app.js";
 const MV_NODES = [
     "LoadFromMediaVault",
     "LoadVideoFrameFromMediaVault",
+    "LoadVideoFromMediaVault",
     "SaveToMediaVault",
 ];
+
+// Nodes that should show an asset thumbnail preview
+const PREVIEW_NODES = ["LoadFromMediaVault", "LoadVideoFrameFromMediaVault", "LoadVideoFromMediaVault"];
 
 // ── helpers ──────────────────────────────────────────────
 function findWidget(node, name) {
@@ -130,10 +134,21 @@ async function refreshAssets(node, projId, seqId, shotId, roleId) {
     if (roleId && roleId !== "0") url += `&role_id=${roleId}`;
 
     const assets = await mvFetch(url);
+
+    // Store asset ID map for preview lookups
+    node._mvAssetMap = {};
+    for (const a of assets) {
+        node._mvAssetMap[a.vault_name] = a.id;
+    }
+
     const names = assets.map(a => a.vault_name);
     if (names.length === 0) names.push("No assets found");
 
     updateComboWidget(assetW, names, true);
+
+    // Update thumbnail preview
+    updateNodePreview(node);
+
     node.setDirtyCanvas?.(true);
 }
 
@@ -151,6 +166,117 @@ async function resolveId(endpoint, displayName) {
         if (label === displayName) return String(item.id);
     }
     return "0";
+}
+
+// ── Asset Preview ───────────────────────────────────────
+
+/**
+ * Custom widget that draws a thumbnail preview of the selected asset
+ * directly on the node canvas. Integrates with LiteGraph's widget
+ * layout system so the node auto-resizes to fit.
+ */
+function addPreviewWidget(node) {
+    const widget = {
+        name: "mv_preview",
+        type: "MEDIAVAULT_PREVIEW",
+        value: "",
+        options: { serialize: false },
+        draw(ctx, _node, widgetWidth, y, widgetHeight) {
+            if (!_node._mvPreviewReady || !_node._mvPreviewImg) return;
+            const img = _node._mvPreviewImg;
+            const pad = 6;
+            const maxW = widgetWidth - pad * 2;
+            const aspect = img.naturalHeight / img.naturalWidth;
+            const maxH = 250;
+            let dw = maxW, dh = maxW * aspect;
+            if (dh > maxH) { dh = maxH; dw = maxH / aspect; }
+            const offsetX = pad + (maxW - dw) / 2;
+
+            // Dark background
+            ctx.fillStyle = "#1a1a1a";
+            ctx.roundRect
+                ? (ctx.beginPath(), ctx.roundRect(pad, y + 4, maxW, dh + 2, 4), ctx.fill())
+                : ctx.fillRect(pad, y + 4, maxW, dh + 2);
+
+            // Draw image centered
+            ctx.drawImage(img, offsetX, y + 5, dw, dh);
+
+            // Subtle border
+            ctx.strokeStyle = "#555";
+            ctx.lineWidth = 1;
+            ctx.strokeRect(pad, y + 4, maxW, dh + 2);
+        },
+        computeSize(width) {
+            if (!node._mvPreviewReady || !node._mvPreviewImg) return [width, 4];
+            const img = node._mvPreviewImg;
+            const pad = 6;
+            const maxW = width - pad * 2;
+            const aspect = img.naturalHeight / img.naturalWidth;
+            const maxH = 250;
+            let dh = Math.min(maxW * aspect, maxH);
+            return [width, dh + 12];
+        },
+    };
+    node.widgets = node.widgets || [];
+    node.widgets.push(widget);
+    return widget;
+}
+
+/**
+ * Load a thumbnail preview for the currently-selected asset.
+ * Uses the node._mvAssetMap to resolve vault_name → asset id,
+ * then fetches the thumbnail through the ComfyUI proxy route.
+ */
+function updateNodePreview(node) {
+    if (!PREVIEW_NODES.includes(node.comfyClass)) return;
+
+    const assetW = findWidget(node, "asset");
+    if (!assetW) return;
+
+    const assetName = assetW.value;
+    const assetId = node._mvAssetMap?.[assetName];
+
+    if (!assetId || assetName === "No assets found") {
+        node._mvPreviewReady = false;
+        node.setDirtyCanvas?.(true);
+        return;
+    }
+
+    // Create the Image element once, reuse on subsequent calls
+    if (!node._mvPreviewImg) {
+        node._mvPreviewImg = new Image();
+        node._mvPreviewImg.crossOrigin = "anonymous";
+        node._mvPreviewImg.onload = () => {
+            node._mvPreviewReady = true;
+            // Resize the node to fit the preview
+            const sz = node.computeSize();
+            if (node.size[1] < sz[1]) node.setSize(sz);
+            node.setDirtyCanvas?.(true, true);
+        };
+        node._mvPreviewImg.onerror = () => {
+            node._mvPreviewReady = false;
+            node.setDirtyCanvas?.(true);
+        };
+    }
+
+    node._mvPreviewReady = false;
+    node._mvPreviewImg.src = `/mediavault/thumbnail/${assetId}?t=${Date.now()}`;
+}
+
+/**
+ * For saved workflows: resolve the current asset name to an ID
+ * (we don't have the map yet because refreshAssets hasn't run).
+ */
+async function resolveAssetIdAndPreview(node) {
+    const assetW = findWidget(node, "asset");
+    if (!assetW || !assetW.value || assetW.value === "No assets found") return;
+
+    const assets = await mvFetch("/mediavault/assets");
+    node._mvAssetMap = {};
+    for (const a of assets) {
+        node._mvAssetMap[a.vault_name] = a.id;
+    }
+    updateNodePreview(node);
 }
 
 // ── Auto-sync Save node from Load node ──────────────────
@@ -225,6 +351,30 @@ app.registerExtension({
                 if (originalCb) originalCb.call(this, v);
                 cascadeUpdate(node, wName);
             };
+        }
+
+        // ── Asset preview for Load nodes ──
+        if (PREVIEW_NODES.includes(node.comfyClass)) {
+            addPreviewWidget(node);
+
+            // Hook asset widget so changing the selection updates the preview
+            const assetWidget = findWidget(node, "asset");
+            if (assetWidget) {
+                const origAssetCb = assetWidget.callback;
+                assetWidget.callback = function (v) {
+                    if (origAssetCb) origAssetCb.call(this, v);
+                    updateNodePreview(node);
+                };
+            }
+
+            // Saved-workflow recovery: resolve asset name → ID for preview
+            setTimeout(() => {
+                if (!node._mvAssetMap || Object.keys(node._mvAssetMap).length === 0) {
+                    resolveAssetIdAndPreview(node);
+                } else {
+                    updateNodePreview(node);
+                }
+            }, 1500);
         }
 
         // Also add a manual Refresh button so the user can force re-query

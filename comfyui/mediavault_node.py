@@ -92,6 +92,21 @@ try:
         data = _proxy_mv(path)
         return web.json_response(data or [])
 
+    @PromptServer.instance.routes.get("/mediavault/thumbnail/{asset_id}")
+    async def mv_thumbnail(request):
+        """Proxy thumbnail image from MediaVault (avoids CORS)."""
+        asset_id = request.match_info["asset_id"]
+        url = f"{MEDIAVAULT_URL}/api/assets/{asset_id}/thumbnail"
+        try:
+            req = urllib.request.Request(url)
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                data = resp.read()
+                ct = resp.headers.get("Content-Type", "image/jpeg")
+                return web.Response(body=data, content_type=ct)
+        except Exception as e:
+            print(f"[MediaVault] thumbnail proxy error: {e}")
+            return web.Response(status=404, text="Not found")
+
     print("[MediaVault] ✓ Dynamic dropdown routes registered on ComfyUI server")
 
 except ImportError:
