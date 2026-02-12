@@ -1,22 +1,43 @@
 /**
  * MediaVault - Naming Convention Engine
- * Transforms random filenames into structured production names
- * 
+ * Follows ShotGrid / Flow Production Tracking naming conventions.
+ * The folder structure encodes the full hierarchy (Project/Sequence/Shot/)
+ * so filenames only need the most-specific identifier + step + version.
+ *
  * Template tokens:
- *   {project}   → Project code (e.g. "HERO")
- *   {sequence}  → Sequence code (e.g. "SQ010")
- *   {shot}      → Shot code (e.g. "SH020")
+ *   {project}   → Show/project code (e.g. "AP1")
+ *   {sequence}  → Sequence code (e.g. "EDA")
+ *   {shot}      → Shot code (e.g. "EDA1500") — already embeds sequence prefix
+ *   {step}      → Pipeline step / role (e.g. "comp", "plate", "edit")
+ *   {version}   → Version number, 3-digit zero-padded (e.g. "001")
  *   {take}      → Take number zero-padded (e.g. "T01")
  *   {type}      → Media type (e.g. "video", "image")
  *   {date}      → Date YYYYMMDD
  *   {original}  → Original filename (without extension)
  *   {counter}   → Auto-incrementing counter
+ *
+ * ShotGrid standard examples:
+ *   EDA1500_comp_v001.exr           (shot + step + version)
+ *   EDA_plate_v003.dpx              (sequence-level, no shot)
+ *   AP1_edit_v001.mov               (project-level, no seq/shot)
  */
 
 const path = require('path');
 
-const DEFAULT_TEMPLATE = '{project}_{sequence}_{shot}_{take}_{counter}';
+// ── ShotGrid-style templates (primary) ──
+// Folder path already contains project/sequence, so filenames start at the most specific level
+const SHOTGRID_FULL = '{shot}_{step}_v{version}';                        // EDA1500_comp_v001
+const SHOTGRID_SEQ  = '{sequence}_{step}_v{version}';                    // EDA_plate_v003
+const SHOTGRID_PROJ = '{project}_{step}_v{version}';                     // AP1_edit_v001
+
+// ── Legacy fallback templates (no role/step selected) ──
+const DEFAULT_TEMPLATE = '{shot}_{take}_{counter}';
 const SIMPLE_TEMPLATE = '{project}_{type}_{counter}';
+
+// Keep old aliases for backward compat
+const ROLE_SHOT_TEMPLATE = SHOTGRID_FULL;
+const ROLE_SEQ_TEMPLATE = SHOTGRID_SEQ;
+const ROLE_PROJECT_TEMPLATE = SHOTGRID_PROJ;
 
 /**
  * Generate a vault-friendly structured filename
@@ -39,7 +60,9 @@ function generateVaultName(params) {
         projectCode,
         sequenceCode,
         shotCode,
+        roleCode,
         takeNumber = 1,
+        version = 1,
         mediaType = 'media',
         counter = 1,
         template,
@@ -55,15 +78,22 @@ function generateVaultName(params) {
         return { vaultName: `${sanitized}${ext}`, ext };
     }
 
-    // Pick template based on available info
+    // Pick template: ShotGrid convention when step/role is known, legacy otherwise
+    // Priority: explicit template > ShotGrid (step-based) > legacy fallback
     let tmpl = template;
     if (!tmpl) {
-        if (sequenceCode && shotCode) {
-            tmpl = DEFAULT_TEMPLATE;  // DD_SQ010_SH020_T01_v001
+        if (roleCode && sequenceCode && shotCode) {
+            tmpl = SHOTGRID_FULL;             // EDA1500_comp_v001
+        } else if (roleCode && sequenceCode) {
+            tmpl = SHOTGRID_SEQ;              // EDA_comp_v001
+        } else if (roleCode) {
+            tmpl = SHOTGRID_PROJ;             // AP1_comp_v001
+        } else if (sequenceCode && shotCode) {
+            tmpl = DEFAULT_TEMPLATE;          // EDA1500_T01_0001
         } else if (sequenceCode) {
-            tmpl = '{project}_{sequence}_{type}_{counter}';  // DD_REF_image_0001
+            tmpl = '{sequence}_{type}_{counter}';
         } else {
-            tmpl = SIMPLE_TEMPLATE;   // DD_image_0001_v001
+            tmpl = SIMPLE_TEMPLATE;
         }
     }
 
@@ -71,7 +101,10 @@ function generateVaultName(params) {
         project: projectCode || 'UNSET',
         sequence: sequenceCode || '',
         shot: shotCode || '',
+        step: roleCode ? roleCode.toLowerCase() : '',
+        role: roleCode ? roleCode.toLowerCase() : '',   // alias for {step}
         take: `T${String(takeNumber).padStart(2, '0')}`,
+        version: String(version).padStart(3, '0'),       // ShotGrid uses 3 digits
         type: mediaType,
         date: new Date().toISOString().slice(0, 10).replace(/-/g, ''),
         original: sanitizeFilename(originalBase),

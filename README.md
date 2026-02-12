@@ -18,7 +18,11 @@ Built for artists and studios who work with video, images, EXR sequences, 3D fil
 - Built-in **file browser** for selecting files from anywhere on your system
 - Assign **Project, Sequence, Shot, Role, and Take number** during import
 - **Live rename preview** before importing — see exactly what files will be named
-- **Copy or Move** originals (keep originals checkbox)
+- **Three import modes**:
+  - **Move** — Files are moved into the vault; originals are removed
+  - **Copy** — Files are copied into the vault; originals stay at source
+  - **Register in Place** — Files stay where they are; only a database reference is created (ideal for network drives, large files)
+- **ShotGrid naming convention**: Files are auto-renamed following industry-standard patterns (e.g., `EDA1500_comp_v001.exr` — the folder path encodes Project/Sequence, so filenames start at the most specific level)
 - **Drag-and-drop** files directly onto the browser for quick import
 - Progress bar for batch imports
 
@@ -52,10 +56,17 @@ Built for artists and studios who work with video, images, EXR sequences, 3D fil
 - Also supports any custom external player (set the path in Settings)
 
 ### ComfyUI Integration
-- Point DMV at your **ComfyUI output folder**
-- New ComfyUI-generated files auto-appear in the import queue
-- Optional auto-watch mode monitors the folder continuously
-- Includes a custom ComfyUI node (`comfyui/mediavault_node.py`) for direct integration
+- **3 custom ComfyUI nodes** for direct vault integration:
+  - **LoadFromMediaVault** — Load an image from the vault by hierarchy selection
+  - **LoadVideoFrameFromMediaVault** — Load a specific video frame by frame number
+  - **SaveToMediaVault** — Save ComfyUI output back into the vault with proper naming
+- **Auto-populate Save from Load** — When you add a SaveToMediaVault node, it automatically copies the Project/Sequence/Shot from an existing Load node in your workflow so you don't have to set them twice
+- **📂 Copy from Load Node** button — Manually re-sync Save node fields from the Load node at any time
+- **Dynamic cascading dropdowns**: Project → Sequence → Shot → Role → Asset
+- **🔄 Refresh button** on each node re-queries the vault — including new **projects and roles** — without restarting ComfyUI
+- **3-tier asset resolution**: ComfyUI mapping → exact vault name match → fuzzy search
+- Point DMV at your **ComfyUI output folder** for auto-import of generated files
+- Setup: junction link `custom_nodes\mediavault` → `C:\MediaVault\comfyui`
 
 ### Watch Folders
 - Set up **watched directories** that are monitored for new files
@@ -64,7 +75,8 @@ Built for artists and studios who work with video, images, EXR sequences, 3D fil
 
 ### Settings & Customization
 - **Vault root path**: Choose where all media files are stored
-- **Naming template**: Customize how imported files are named using tokens (`{project}`, `{sequence}`, `{shot}`, `{take}`, `{type}`, `{date}`, `{original}`, `{counter}`)
+- **Naming template**: Customize how imported files are named using tokens (`{project}`, `{sequence}`, `{shot}`, `{step}`, `{version}`, `{take}`, `{type}`, `{date}`, `{original}`, `{counter}`)
+- Follows **ShotGrid/Flow Production Tracking** naming conventions
 - **Thumbnail size**: 100–800px
 - **Auto-generate thumbnails** on import toggle
 - **Migrate vault**: Move all files to a new location with one click
@@ -192,8 +204,11 @@ Inside a project:
 3. Select files to import (click to select, Ctrl/Cmd+click for multi-select)
 4. Choose the **Project**, **Sequence**, **Shot**, and **Role** from the dropdowns
 5. Set a **Take number** and optional **Custom name**
-6. Check the **rename preview** to see what files will be named
-7. Click **Import & Rename**
+6. Choose the **Import Mode**: Move (default), Copy, or Register in Place
+7. Check the **rename preview** to see what files will be named
+8. Click **Import & Rename**
+
+> **Register in Place** is ideal for large files or network drives — files stay where they are and only a database reference is created. These assets are marked as "linked" and protected from accidental deletion.
 
 **Option B — Drag & Drop:**
 - Drag files directly onto the browser view to start a quick import
@@ -230,7 +245,7 @@ Access settings from the **Settings** tab:
 | Setting | Description |
 |---------|-------------|
 | **Vault Root Path** | Where all media files are stored. Changing this offers to migrate existing files. |
-| **Naming Template** | How imported files are named. Tokens: `{project}`, `{sequence}`, `{shot}`, `{take}`, `{type}`, `{date}`, `{original}`, `{counter}` |
+| **Naming Template** | How imported files are named. Tokens: `{project}`, `{sequence}`, `{shot}`, `{step}`, `{version}`, `{take}`, `{type}`, `{date}`, `{original}`, `{counter}`. Follows ShotGrid/Flow naming conventions. |
 | **Default Player** | Browser (built-in), mrViewer2, or a custom player path |
 | **Thumbnail Size** | Size of grid thumbnails (100–800px) |
 | **Auto-generate Thumbnails** | Generate thumbnails automatically on import |
@@ -247,7 +262,7 @@ Access settings from the **Settings** tab:
 |-----------|-----------|
 | **Backend** | Node.js + Express |
 | **Database** | sql.js (WASM SQLite — no native compilation needed) |
-| **Frontend** | Vanilla JavaScript (ES6 modules), HTML, CSS |
+| **Frontend** | Vanilla JavaScript (ES6 modules), HTML, CSS (no build step) |
 | **Thumbnails** | Sharp (images), FFmpeg (video) |
 | **Transcode/Export** | FFmpeg with NVENC GPU acceleration |
 | **File Watching** | Chokidar |
@@ -265,35 +280,43 @@ Digital-Media-Vault/
 │   ├── server.js              # Express server (port 7700)
 │   ├── database.js            # sql.js SQLite wrapper
 │   ├── routes/
-│   │   ├── projectRoutes.js   # Project CRUD
-│   │   ├── assetRoutes.js     # Asset management, streaming, mrViewer2
+│   │   ├── projectRoutes.js   # Project + Sequence + Shot CRUD
+│   │   ├── assetRoutes.js     # Asset import, browse, streaming, delete
 │   │   ├── exportRoutes.js    # FFmpeg transcode/export
-│   │   ├── roleRoutes.js      # Role management
-│   │   ├── settingsRoutes.js  # Settings API
-│   │   └── comfyuiRoutes.js   # ComfyUI integration
+│   │   ├── roleRoutes.js      # Role CRUD
+│   │   ├── settingsRoutes.js  # Settings API + vault setup
+│   │   ├── comfyuiRoutes.js   # ComfyUI integration endpoints
+│   │   └── flowRoutes.js      # Flow/ShotGrid sync (planned)
 │   ├── services/
 │   │   ├── ThumbnailService.js  # Thumbnail generation (Sharp + FFmpeg)
 │   │   ├── MediaInfoService.js  # Metadata extraction (FFprobe)
 │   │   ├── FileService.js       # File operations
-│   │   └── WatcherService.js    # Folder watching (Chokidar)
+│   │   ├── WatcherService.js    # Folder watching (Chokidar)
+│   │   └── FlowService.js       # Flow/ShotGrid API client (planned)
 │   └── utils/
+│       ├── naming.js          # ShotGrid naming engine
 │       └── mediaTypes.js      # File extension → media type mapping
 ├── public/
 │   ├── index.html             # Single-page app shell
-│   ├── css/styles.css         # Dark theme UI
+│   ├── css/styles.css         # Neutral gray theme for VFX work
 │   └── js/                    # Frontend ES6 modules
 │       ├── main.js            # Entry point, tab switching
-│       ├── browser.js         # Asset browser, grid/list views
-│       ├── import.js          # File browser, import flow
+│       ├── browser.js         # Asset browser, grid/list views, tree nav
+│       ├── import.js          # File browser, import flow, rename preview
 │       ├── export.js          # Export modal
 │       ├── player.js          # Media player modal
-│       ├── settings.js        # Settings tab
+│       ├── settings.js        # Settings tab, roles
 │       ├── api.js             # API client
 │       ├── state.js           # Global state
 │       └── utils.js           # Shared utilities
 ├── comfyui/
-│   ├── mediavault_node.py     # Custom ComfyUI node
-│   └── __init__.py
+│   ├── mediavault_node.py     # 3 custom ComfyUI nodes
+│   ├── __init__.py
+│   └── js/
+│       └── mediavault_dynamic.js  # Dynamic cascading dropdowns
+├── data/
+│   └── mediavault.db          # SQLite database (auto-created)
+├── thumbnails/                # Generated thumbnails
 ├── start.bat                  # Windows launcher
 ├── start.sh                   # macOS/Linux launcher
 └── package.json
@@ -304,10 +327,11 @@ Digital-Media-Vault/
 ## Troubleshooting
 
 ### "FFmpeg not found"
-DMV needs FFmpeg for video thumbnails, transcoding, and export. Install it and make sure it's in your system PATH:
-- **Windows**: Download from [ffmpeg.org](https://ffmpeg.org/download.html), extract, and add the `bin/` folder to your PATH environment variable
-- **macOS**: `brew install ffmpeg`
-- **Linux**: `sudo apt install ffmpeg`
+FFmpeg is **automatically installed** by `install.bat` (Windows) or `install.sh` (Mac/Linux) — you should not need to install it manually. If you still see this error:
+- **Windows**: Re-run `install.bat` — it downloads a portable FFmpeg to `tools/ffmpeg/` and DMV finds it automatically
+- **macOS**: Re-run `./install.sh` — it installs FFmpeg via Homebrew
+- **Linux**: Re-run `./install.sh` — it installs FFmpeg via apt
+- If you prefer a manual install, download from [ffmpeg.org](https://ffmpeg.org/download.html) and add the `bin/` folder to your system PATH
 
 ### Port 7700 Already in Use
 The Windows `start.bat` automatically clears port 7700 before starting. On Mac/Linux, find and kill the process:
@@ -324,6 +348,8 @@ Some professional codecs (ProRes, DNxHR) can't play directly in a web browser. D
 - For **videos**: FFmpeg is required — verify with `ffmpeg -version`
 
 ### mrViewer2 Not Detected
+On Windows, `install.bat` offers to **download and install mrViewer2** for you during setup. If you skipped it or need to reinstall, re-run `install.bat`.
+
 DMV auto-discovers mrViewer2 in standard install locations:
 - **Windows**: `C:\Program Files\vmrv2-*\bin\mrv2.exe`
 - **macOS**: `/Applications/mrv2*.app`
@@ -343,6 +369,50 @@ npm start
 ```
 
 The database is created automatically at `data/mediavault.db` on first run. Thumbnails are generated in the `thumbnails/` directory.
+
+---
+
+## Naming Convention
+
+DMV follows **ShotGrid/Flow Production Tracking** naming standards. The folder structure encodes the full hierarchy (Project/Sequence/Shot/), so filenames start at the most specific level — no redundant project or sequence prefixes.
+
+Files are automatically renamed on import based on context:
+
+| Context | Template | Example |
+|---------|----------|--------|
+| Shot + Role | `{shot}_{step}_v{version}` | `EDA1500_comp_v001.exr` |
+| Sequence + Role | `{sequence}_{step}_v{version}` | `EDA_plate_v003.dpx` |
+| Project + Role | `{project}_{step}_v{version}` | `AP1_edit_v001.mov` |
+| Legacy (no role) | `{shot}_{take}_{counter}` | `EDA1500_T01_0001.mov` |
+
+### Available Tokens
+
+| Token | Description | Example |
+|-------|-------------|--------|
+| `{project}` | Project code | `AP1` |
+| `{sequence}` | Sequence code | `EDA` |
+| `{shot}` | Shot code | `EDA1500` |
+| `{step}` | Role/pipeline step (lowercase) | `comp` |
+| `{version}` | 3-digit zero-padded version | `001` |
+| `{take}` | Take number | `T01` |
+| `{type}` | Media type | `video` |
+| `{date}` | Date YYYYMMDD | `20260211` |
+| `{original}` | Original filename | `render_v5` |
+| `{counter}` | Auto-increment counter | `0001` |
+
+Version numbers auto-increment — if `v001` exists, the next import becomes `v002`.
+
+---
+
+## UI Help System
+
+The interface includes contextual help throughout:
+
+- **Help icons** (?) next to form labels explain what each field does
+- **Tooltips** on all buttons and controls describe their function on hover
+- **Info hints** below complex settings provide usage guidance
+
+Hover over any **?** icon or button to see a description.
 
 ---
 

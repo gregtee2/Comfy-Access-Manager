@@ -509,6 +509,7 @@ function renderAssets() {
                     <img src="/api/assets/${a.id}/thumbnail" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                     <div class="thumb-placeholder" style="display:none">${typeIcon(a.media_type)}</div>
                     <span class="asset-type-badge ${a.media_type}">${a.media_type}</span>
+                    ${a.is_linked ? '<span class="asset-link-badge" title="Linked – file remains at original location">🔗</span>' : ''}
                     ${a.role_name ? `<span class="asset-role-badge" style="background:${a.role_color || '#666'}">${a.role_icon || '🎭'} ${esc(a.role_code)}</span>` : ''}
                     ${a.duration ? `<span class="asset-duration">${formatDuration(a.duration)}</span>` : ''}
                 </div>
@@ -533,7 +534,7 @@ function renderAssets() {
                 <div class="row-thumb">
                     <img src="/api/assets/${a.id}/thumbnail" onerror="this.outerHTML='<span>${typeIcon(a.media_type)}</span>'">
                 </div>
-                <div class="row-name">${esc(a.vault_name)}</div>
+                <div class="row-name">${a.is_linked ? '🔗 ' : ''}${esc(a.vault_name)}</div>
                 <div class="row-role">${a.role_name ? `<span class="role-tag" style="background:${a.role_color || '#666'}">${esc(a.role_code)}</span>` : ''}</div>
                 <div class="row-type">${a.media_type}</div>
                 <div class="row-size">${formatSize(a.file_size)}</div>
@@ -1206,6 +1207,84 @@ function hideFileDropOverlay() {
 }
 
 // ═══════════════════════════════════════════
+//  AUTO-REFRESH (poll for new assets)
+// ═══════════════════════════════════════════
+
+let _pollTimer = null;
+let _lastPollCount = null;
+let _lastPollLatest = null;
+const POLL_INTERVAL = 5000; // 5 seconds
+
+/**
+ * Manual refresh: re-fetch assets for the current project view.
+ * Also resets the poll baseline so we don't double-trigger.
+ */
+export async function refreshAssets() {
+    if (!state.currentProject) return;
+    await loadProjectAssets(state.currentProject.id);
+    // Update poll baseline
+    try {
+        const info = await api(`/api/assets/poll?project_id=${state.currentProject.id}`);
+        _lastPollCount = info.count;
+        _lastPollLatest = info.latest;
+    } catch {}
+    showToast('Assets refreshed', 'success');
+}
+
+/**
+ * Start polling for new assets. Only polls when the tab is visible
+ * and a project is currently open.
+ */
+function startAssetPoll() {
+    stopAssetPoll();
+    _pollTimer = setInterval(async () => {
+        if (document.hidden) return;           // Tab not visible
+        if (!state.currentProject) return;     // No project open
+
+        try {
+            const info = await api(`/api/assets/poll?project_id=${state.currentProject.id}`);
+            const changed = (_lastPollCount !== null && info.count !== _lastPollCount)
+                         || (_lastPollLatest !== null && info.latest !== _lastPollLatest);
+            _lastPollCount = info.count;
+            _lastPollLatest = info.latest;
+
+            if (changed) {
+                await loadProjectAssets(state.currentProject.id);
+                loadTree();  // Update counts in the tree too
+            }
+        } catch {}
+    }, POLL_INTERVAL);
+}
+
+function stopAssetPoll() {
+    if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
+    _lastPollCount = null;
+    _lastPollLatest = null;
+}
+
+// Start polling when a project is opened, stop when leaving
+const _origOpenProject = openProject;
+async function openProjectWithPoll(id) {
+    await _origOpenProject(id);
+    startAssetPoll();
+}
+// Re-assign the wrapped version
+window.addEventListener('DOMContentLoaded', () => {
+    // Defer so the original openProject reference is set first
+    setTimeout(() => startAssetPoll(), 2000);
+});
+
+// Stop poll when leaving the browser tab (switching to projects/import/settings)
+const _origSwitchTab = window.switchTab;
+if (_origSwitchTab) {
+    window.switchTab = function(tab) {
+        if (tab !== 'browser') stopAssetPoll();
+        else startAssetPoll();
+        return _origSwitchTab(tab);
+    };
+}
+
+// ═══════════════════════════════════════════
 //  EXPOSE ON WINDOW (for HTML onclick handlers)
 // ═══════════════════════════════════════════
 
@@ -1247,3 +1326,4 @@ window.onSeqDragLeave = onSeqDragLeave;
 window.onShotDrop = onShotDrop;
 window.onSeqDrop = onSeqDrop;
 window.showContextMenu = showContextMenu;
+window.refreshAssets = refreshAssets;

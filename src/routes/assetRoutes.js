@@ -23,6 +23,26 @@ const upload = multer({
 
 
 // ═══════════════════════════════════════════
+//  POLL (lightweight check for new assets)
+// ═══════════════════════════════════════════
+
+// GET /api/assets/poll — Return total asset count + latest timestamp for auto-refresh
+router.get('/poll', (req, res) => {
+    const { project_id } = req.query;
+    const db = getDb();
+
+    let query = 'SELECT COUNT(*) as count, MAX(created_at) as latest FROM assets';
+    const params = [];
+    if (project_id) {
+        query += ' WHERE project_id = ?';
+        params.push(project_id);
+    }
+
+    const row = db.prepare(query).get(...params);
+    res.json({ count: row.count || 0, latest: row.latest || null });
+});
+
+// ═══════════════════════════════════════════
 //  LIST / SEARCH ASSETS
 // ═══════════════════════════════════════════
 
@@ -104,7 +124,7 @@ router.get('/browse', (req, res) => {
 // ═══════════════════════════════════════════
 
 router.post('/preview-name', (req, res) => {
-    const { originalName, projectCode, sequenceCode, shotCode, takeNumber, customName, template } = req.body;
+    const { originalName, projectCode, sequenceCode, shotCode, roleCode, takeNumber, customName, template } = req.body;
 
     if (!originalName || !projectCode) {
         return res.status(400).json({ error: 'originalName and projectCode required' });
@@ -117,6 +137,7 @@ router.post('/preview-name', (req, res) => {
         projectCode,
         sequenceCode,
         shotCode,
+        roleCode,
         takeNumber,
         mediaType,
         customName,
@@ -166,12 +187,15 @@ router.post('/import', async (req, res) => {
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(project_id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
-    let sequence = null, shot = null;
+    let sequence = null, shot = null, role = null;
     if (sequence_id) sequence = db.prepare('SELECT * FROM sequences WHERE id = ?').get(sequence_id);
     if (shot_id) shot = db.prepare('SELECT * FROM shots WHERE id = ?').get(shot_id);
+    if (role_id) role = db.prepare('SELECT * FROM roles WHERE id = ?').get(role_id);
 
     const results = [];
     const errors = [];
+
+    const registerInPlace = !!req.body.register_in_place;
 
     for (let i = 0; i < files.length; i++) {
         const filePath = files[i];
@@ -190,20 +214,48 @@ router.post('/import', async (req, res) => {
             const originalName = path.basename(filePath);
             const { type: mediaType } = detectMediaType(originalName);
 
-            // Import (move) file into vault
-            const imported = FileService.importFile(filePath, {
-                projectCode: project.code,
-                sequenceCode: sequence?.code,
-                shotCode: shot?.code,
-                takeNumber: take_number || (i + 1),
-                customName: files.length === 1 ? custom_name : null,
-                template,
-                counter: i + 1,
-                keepOriginals: !!req.body.keep_originals,
-            });
+            let vaultPath, vaultName, relativePath, finalMediaType;
+
+            if (registerInPlace) {
+                // ── Register in place: don't move/copy, just catalog ──
+                vaultPath = path.resolve(filePath);
+                relativePath = vaultPath;  // Full path since it's outside the vault
+                finalMediaType = mediaType;
+
+                // Still generate a proper ShotGrid vault_name for display
+                const naming = require('../utils/naming');
+                const nameResult = naming.generateVaultName({
+                    originalName,
+                    projectCode: project.code,
+                    sequenceCode: sequence?.code,
+                    shotCode: shot?.code,
+                    roleCode: role?.code,
+                    takeNumber: take_number || (i + 1),
+                    customName: files.length === 1 ? custom_name : null,
+                    counter: i + 1,
+                });
+                vaultName = nameResult.vaultName;
+            } else {
+                // ── Normal import: move or copy into vault ──
+                const imported = FileService.importFile(filePath, {
+                    projectCode: project.code,
+                    sequenceCode: sequence?.code,
+                    shotCode: shot?.code,
+                    roleCode: role?.code,
+                    takeNumber: take_number || (i + 1),
+                    customName: files.length === 1 ? custom_name : null,
+                    template,
+                    counter: i + 1,
+                    keepOriginals: !!req.body.keep_originals,
+                });
+                vaultPath = imported.vaultPath;
+                vaultName = imported.vaultName;
+                relativePath = imported.relativePath;
+                finalMediaType = imported.mediaType;
+            }
 
             // Get media metadata
-            const info = await MediaInfoService.probe(imported.vaultPath);
+            const info = await MediaInfoService.probe(vaultPath);
 
             // Insert into database
             const result = db.prepare(`
@@ -212,23 +264,24 @@ router.post('/import', async (req, res) => {
                     original_name, vault_name, file_path, relative_path,
                     media_type, file_ext, file_size,
                     width, height, duration, fps, codec,
-                    take_number, version
-                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                    take_number, version, is_linked
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
             `).run(
                 project.id,
                 sequence?.id || null,
                 shot?.id || null,
                 role_id || null,
                 originalName,
-                imported.vaultName,
-                imported.vaultPath,
-                imported.relativePath,
-                imported.mediaType,
+                vaultName,
+                vaultPath,
+                relativePath,
+                finalMediaType,
                 path.extname(originalName).toLowerCase(),
                 info.fileSize || 0,
                 info.width, info.height, info.duration, info.fps, info.codec,
                 take_number || (i + 1),
-                1
+                1,
+                registerInPlace ? 1 : 0
             );
 
             const assetId = result.lastInsertRowid;
@@ -237,7 +290,7 @@ router.post('/import', async (req, res) => {
             const autoThumb = getSetting('auto_thumbnail') !== 'false';
             if (autoThumb) {
                 try {
-                    const thumbPath = await ThumbnailService.generate(imported.vaultPath, assetId);
+                    const thumbPath = await ThumbnailService.generate(vaultPath, assetId);
                     if (thumbPath) {
                         db.prepare('UPDATE assets SET thumbnail_path = ? WHERE id = ?')
                             .run(thumbPath, assetId);
@@ -249,7 +302,7 @@ router.post('/import', async (req, res) => {
 
             logActivity('asset_imported', 'asset', assetId, {
                 original: originalName,
-                vault: imported.vaultName,
+                vault: vaultName,
                 project: project.name,
             });
 
@@ -353,12 +406,12 @@ router.put('/:id', (req, res) => {
     const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
     if (!asset) return res.status(404).json({ error: 'Asset not found' });
 
-    const { notes, tags, starred, take_number, sequence_id, shot_id } = req.body;
+    const { notes, tags, starred, take_number, sequence_id, shot_id, role_id } = req.body;
 
     db.prepare(`
         UPDATE assets SET 
             notes = ?, tags = ?, starred = ?, take_number = ?,
-            sequence_id = ?, shot_id = ?,
+            sequence_id = ?, shot_id = ?, role_id = ?,
             updated_at = datetime('now')
         WHERE id = ?
     `).run(
@@ -368,6 +421,7 @@ router.put('/:id', (req, res) => {
         take_number ?? asset.take_number,
         sequence_id !== undefined ? sequence_id : asset.sequence_id,
         shot_id !== undefined ? shot_id : asset.shot_id,
+        role_id !== undefined ? role_id : asset.role_id,
         asset.id
     );
 
@@ -419,7 +473,8 @@ router.delete('/:id', (req, res) => {
 
     const deleteFile = req.query.delete_file !== 'false'; // Default: delete physical file
 
-    if (deleteFile && fs.existsSync(asset.file_path)) {
+    // Never delete the physical file for linked/referenced assets
+    if (deleteFile && !asset.is_linked && fs.existsSync(asset.file_path)) {
         fs.unlinkSync(asset.file_path);
     }
 
@@ -432,10 +487,10 @@ router.delete('/:id', (req, res) => {
     res.json({ success: true });
 });
 
-// POST /api/assets/bulk-assign — Move assets to a sequence (and optionally shot)
+// POST /api/assets/bulk-assign — Move assets to a sequence (and optionally shot + role)
 router.post('/bulk-assign', (req, res) => {
     const db = getDb();
-    const { ids, sequence_id, shot_id } = req.body;
+    const { ids, sequence_id, shot_id, role_id } = req.body;
 
     if (!Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ error: 'ids array required' });
@@ -499,12 +554,13 @@ router.post('/bulk-assign', (req, res) => {
             // Update database — include project_id for cross-project moves
             db.prepare(`
                 UPDATE assets 
-                SET project_id = ?, sequence_id = ?, shot_id = ?, file_path = ?, relative_path = ?, updated_at = datetime('now')
+                SET project_id = ?, sequence_id = ?, shot_id = ?, role_id = COALESCE(?, role_id), file_path = ?, relative_path = ?, updated_at = datetime('now')
                 WHERE id = ?
             `).run(
                 targetProjectId,
                 sequence_id || null,
                 shot_id || null,
+                role_id || null,
                 newPath,
                 relativePath,
                 id
@@ -562,7 +618,8 @@ router.post('/bulk-delete', (req, res) => {
             const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(id);
             if (!asset) { errors.push({ id, error: 'Not found' }); continue; }
 
-            if (delete_files && fs.existsSync(asset.file_path)) {
+            // Never delete physical file for linked/referenced assets
+            if (delete_files && !asset.is_linked && fs.existsSync(asset.file_path)) {
                 fs.unlinkSync(asset.file_path);
             }
             ThumbnailService.deleteThumb(asset.id);

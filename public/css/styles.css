@@ -764,6 +764,13 @@ label {
 .asset-type-badge.image { color: var(--image-color); }
 .asset-type-badge.audio { color: var(--audio-color); }
 .asset-type-badge.exr { color: var(--exr-color); }
+.asset-link-badge {
+    position: absolute; top: 6px; left: auto; right: 36px;
+    background: rgba(0,0,0,0.7);
+    padding: 2px 5px; border-radius: 4px;
+    font-size: 0.65rem; cursor: help;
+    z-index: 2;
+}
 .asset-duration {
     position: absolute; bottom: 6px; right: 6px;
     background: rgba(0,0,0,0.8);
@@ -1685,4 +1692,138 @@ label:has(input[type="checkbox"]) {
 
 .ctx-muted {
     color: var(--text-muted);
+}
+
+/* ═══════════════════════════════════════════
+   TOOLTIPS — Custom styled tooltips
+   Usage: <span class="has-tip" data-tip="Tooltip text">Label</span>
+          or via title="" for simple native tooltips
+   ═══════════════════════════════════════════ */
+
+/* Custom CSS tooltip (appears above by default) */
+.has-tip {
+    position: relative;
+    cursor: help;
+}
+
+.has-tip::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 6px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 6px 10px;
+    background: #333;
+    color: #ddd;
+    font-size: 0.75rem;
+    line-height: 1.35;
+    border-radius: 4px;
+    white-space: normal;
+    max-width: 280px;
+    width: max-content;
+    text-align: left;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 10000;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+    border: 1px solid #444;
+}
+
+.has-tip::before {
+    content: '';
+    position: absolute;
+    bottom: calc(100% + 2px);
+    left: 50%;
+    transform: translateX(-50%);
+    border: 5px solid transparent;
+    border-top-color: #333;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 10001;
+}
+
+.has-tip:hover::after,
+.has-tip:hover::before {
+    opacity: 1;
+}
+
+/* Tooltip below variant */
+.has-tip.tip-below::after {
+    bottom: auto;
+    top: calc(100% + 6px);
+}
+.has-tip.tip-below::before {
+    bottom: auto;
+    top: calc(100% + 2px);
+    border-top-color: transparent;
+    border-bottom-color: #333;
+}
+
+/* Help icon (? circle) next to labels */
+.help-icon {
+    display: inline-flex;
+    align-items: center;
+    justify-content: center;
+    width: 16px;
+    height: 16px;
+    border-radius: 50%;
+    background: rgba(136,136,136,0.15);
+    color: #888;
+    font-size: 0.65rem;
+    font-weight: bold;
+    cursor: help;
+    margin-left: 5px;
+    vertical-align: middle;
+    position: relative;
+    flex-shrink: 0;
+}
+
+.help-icon::after {
+    content: attr(data-tip);
+    position: absolute;
+    bottom: calc(100% + 8px);
+    left: 50%;
+    transform: translateX(-50%);
+    padding: 8px 12px;
+    background: #333;
+    color: #ddd;
+    font-size: 0.75rem;
+    font-weight: normal;
+    line-height: 1.4;
+    border-radius: 5px;
+    white-space: normal;
+    max-width: 300px;
+    width: max-content;
+    text-align: left;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.2s ease;
+    z-index: 10000;
+    box-shadow: 0 3px 12px rgba(0,0,0,0.4);
+    border: 1px solid #444;
+}
+
+.help-icon:hover::after {
+    opacity: 1;
+}
+
+/* Info banner for first-time users */
+.info-banner {
+    background: rgba(136,136,136,0.08);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 10px 14px;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    line-height: 1.5;
+    margin-bottom: 12px;
+}
+.info-banner strong { color: var(--text); }
+.info-banner code {
+    background: rgba(136,136,136,0.15);
+    padding: 1px 5px;
+    border-radius: 3px;
+    font-size: 0.75rem;
 }

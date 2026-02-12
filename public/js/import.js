@@ -201,7 +201,7 @@ async function onImportProjectChange() {
             const roleSel = document.getElementById('importRole');
             if (roleSel) {
                 roleSel.innerHTML = '<option value="">-- None --</option>' +
-                    roles.map(r => `<option value="${r.id}">${r.icon} ${r.name}</option>`).join('');
+                    roles.map(r => `<option value="${r.id}" data-code="${r.code}">${r.icon} ${r.name}</option>`).join('');
             }
         } catch { /* roles not available */ }
     } else {
@@ -258,6 +258,15 @@ async function updateRenamePreview() {
             shotCode = opt?.textContent?.split(' — ')[0]?.trim() || '';
         }
 
+        // Get role code for naming
+        let roleCode;
+        const roleId = document.getElementById('importRole')?.value;
+        if (roleId) {
+            const roleSel = document.getElementById('importRole');
+            const roleOpt = roleSel.options[roleSel.selectedIndex];
+            roleCode = roleOpt?.dataset?.code;
+        }
+
         const firstFile = state.selectedFiles[0];
         const result = await api('/api/assets/preview-name', {
             method: 'POST',
@@ -266,6 +275,7 @@ async function updateRenamePreview() {
                 projectCode: project.code,
                 sequenceCode: seqCode || undefined,
                 shotCode: shotCode || undefined,
+                roleCode: roleCode || undefined,
                 takeNumber: parseInt(take),
                 customName: customName || undefined,
             },
@@ -303,7 +313,10 @@ async function executeImport() {
     resultDiv.style.display = 'none';
 
     try {
-        const keepOriginals = document.getElementById('importKeepOriginals')?.checked || false;
+        // Determine import mode from radio buttons
+        const importMode = document.querySelector('input[name="importMode"]:checked')?.value || 'move';
+        const keepOriginals = importMode === 'copy';
+        const registerInPlace = importMode === 'register';
 
         const result = await api('/api/assets/import', {
             method: 'POST',
@@ -316,6 +329,7 @@ async function executeImport() {
                 take_number: parseInt(take),
                 custom_name: customName,
                 keep_originals: keepOriginals,
+                register_in_place: registerInPlace,
             },
         });
 

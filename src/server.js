@@ -31,6 +31,7 @@ const settingsRoutes = require('./routes/settingsRoutes');
 const comfyuiRoutes = require('./routes/comfyuiRoutes');
 const roleRoutes = require('./routes/roleRoutes');
 const exportRoutes = require('./routes/exportRoutes');
+const flowRoutes = require('./routes/flowRoutes');
 
 app.use('/api/projects', projectRoutes);
 app.use('/api/assets', assetRoutes);
@@ -38,6 +39,7 @@ app.use('/api/settings', settingsRoutes);
 app.use('/api/comfyui', comfyuiRoutes);
 app.use('/api/roles', roleRoutes);
 app.use('/api/export', exportRoutes);
+app.use('/api/flow', flowRoutes);
 
 // ─── SPA fallback ───
 app.get('*', (req, res) => {

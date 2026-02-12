@@ -61,7 +61,20 @@ class FileService {
         );
         this.ensureDir(vaultDir);
 
-        // Auto-detect counter for unique filename
+        // Build a base pattern for version auto-increment
+        // ShotGrid style: scan for {project}_{seq}_{shot}_{step}_v* in target dir
+        let version = 1;
+        if (opts.roleCode) {
+            const basePattern = [
+                opts.projectCode,
+                opts.sequenceCode,
+                opts.shotCode,
+                opts.roleCode.toLowerCase(),
+            ].filter(Boolean).join('_') + '_v';
+            version = getNextVersion(vaultDir, basePattern);
+        }
+
+        // Auto-detect counter for legacy templates (non-role naming)
         const counter = opts.counter || getNextVersion(vaultDir, '');
 
         // Generate structured name
@@ -70,7 +83,9 @@ class FileService {
             projectCode: opts.projectCode,
             sequenceCode: opts.sequenceCode,
             shotCode: opts.shotCode,
+            roleCode: opts.roleCode,
             takeNumber: opts.takeNumber,
+            version,
             mediaType,
             counter,
             template: opts.template,
@@ -143,6 +158,7 @@ class FileService {
             projectCode: opts.projectCode,
             sequenceCode: opts.sequenceCode,
             shotCode: opts.shotCode,
+            roleCode: opts.roleCode,
             takeNumber: opts.takeNumber,
             version,
             mediaType,

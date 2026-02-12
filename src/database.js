@@ -291,6 +291,32 @@ function runMigrations(wrapper) {
         wrapper.exec('CREATE INDEX IF NOT EXISTS idx_assets_role ON assets(role_id)');
     } catch (_) { /* column already exists */ }
 
+    // ─── Add is_linked column to assets if missing (linked/reference import) ───
+    try {
+        const assetCols2 = [];
+        let stLink = wrapper._rawDb.prepare('PRAGMA table_info(assets)');
+        while (stLink.step()) assetCols2.push(stLink.getAsObject().name);
+        stLink.free();
+        if (!assetCols2.includes('is_linked')) {
+            wrapper.exec('ALTER TABLE assets ADD COLUMN is_linked INTEGER DEFAULT 0');
+        }
+    } catch (_) { /* column already exists */ }
+
+    // ─── Add flow_id columns for Flow Production Tracking integration ───
+    const flowTables = ['projects', 'sequences', 'shots', 'roles'];
+    for (const table of flowTables) {
+        try {
+            const cols = [];
+            let st2 = wrapper._rawDb.prepare(`PRAGMA table_info(${table})`);
+            while (st2.step()) cols.push(st2.getAsObject().name);
+            st2.free();
+            if (!cols.includes('flow_id')) {
+                wrapper.exec(`ALTER TABLE ${table} ADD COLUMN flow_id INTEGER`);
+                wrapper.exec(`CREATE INDEX IF NOT EXISTS idx_${table}_flow_id ON ${table}(flow_id)`);
+            }
+        } catch (_) { /* column already exists */ }
+    }
+
     // ─── Seed default roles if roles table is empty ───
     const roleCount = wrapper.prepare('SELECT COUNT(*) as count FROM roles').get();
     if (roleCount.count === 0) {

@@ -30,9 +30,51 @@ router.get('/projects', (req, res) => {
     res.json(projects);
 });
 
+// GET /api/comfyui/sequences — List sequences (optionally filtered by project)
+router.get('/sequences', (req, res) => {
+    const { project_id } = req.query;
+    const db = getDb();
+
+    let query = `SELECT s.id, s.name, s.code, s.project_id, p.name as project_name
+                 FROM sequences s
+                 LEFT JOIN projects p ON p.id = s.project_id`;
+    const params = [];
+
+    if (project_id) { query += ' WHERE s.project_id = ?'; params.push(project_id); }
+    query += ' ORDER BY s.sort_order, s.name';
+
+    res.json(db.prepare(query).all(...params));
+});
+
+// GET /api/comfyui/shots — List shots (optionally filtered by sequence or project)
+router.get('/shots', (req, res) => {
+    const { project_id, sequence_id } = req.query;
+    const db = getDb();
+
+    let query = `SELECT sh.id, sh.name, sh.code, sh.sequence_id, sh.project_id,
+                        seq.name as sequence_name
+                 FROM shots sh
+                 LEFT JOIN sequences seq ON seq.id = sh.sequence_id
+                 WHERE 1=1`;
+    const params = [];
+
+    if (project_id) { query += ' AND sh.project_id = ?'; params.push(project_id); }
+    if (sequence_id) { query += ' AND sh.sequence_id = ?'; params.push(sequence_id); }
+    query += ' ORDER BY sh.sort_order, sh.name';
+
+    res.json(db.prepare(query).all(...params));
+});
+
+// GET /api/comfyui/roles — List roles
+router.get('/roles', (req, res) => {
+    const db = getDb();
+    const roles = db.prepare('SELECT id, name, code FROM roles ORDER BY sort_order, name').all();
+    res.json(roles);
+});
+
 // GET /api/comfyui/assets — List assets filtered for ComfyUI (images/videos only)
 router.get('/assets', (req, res) => {
-    const { project_id, sequence_id, shot_id, media_type } = req.query;
+    const { project_id, sequence_id, shot_id, role_id, media_type } = req.query;
     const db = getDb();
 
     let query = `SELECT id, vault_name, file_path, media_type, width, height, file_ext 
@@ -42,6 +84,7 @@ router.get('/assets', (req, res) => {
     if (project_id) { query += ' AND project_id = ?'; params.push(project_id); }
     if (sequence_id) { query += ' AND sequence_id = ?'; params.push(sequence_id); }
     if (shot_id) { query += ' AND shot_id = ?'; params.push(shot_id); }
+    if (role_id) { query += ' AND role_id = ?'; params.push(role_id); }
     if (media_type) {
         query += ' AND media_type = ?';
         params.push(media_type);
@@ -137,7 +180,7 @@ router.get('/mapping/:nodeId', (req, res) => {
 
 // POST /api/comfyui/save — Save a ComfyUI output file into the vault
 router.post('/save', async (req, res) => {
-    const { file_path, project_id, sequence_id, shot_id, custom_name, node_id, workflow_id } = req.body;
+    const { file_path, project_id, sequence_id, shot_id, role_id, custom_name, node_id, workflow_id } = req.body;
 
     if (!file_path) return res.status(400).json({ error: 'file_path required' });
     if (!project_id) return res.status(400).json({ error: 'project_id required' });
@@ -151,14 +194,16 @@ router.post('/save', async (req, res) => {
         const originalName = path.basename(file_path);
         const { type: mediaType } = detectMediaType(originalName);
 
-        let sequence = null, shot = null;
+        let sequence = null, shot = null, role = null;
         if (sequence_id) sequence = db.prepare('SELECT * FROM sequences WHERE id = ?').get(sequence_id);
         if (shot_id) shot = db.prepare('SELECT * FROM shots WHERE id = ?').get(shot_id);
+        if (role_id) role = db.prepare('SELECT * FROM roles WHERE id = ?').get(role_id);
 
         const imported = FileService.importFile(file_path, {
             projectCode: project.code,
             sequenceCode: sequence?.code,
             shotCode: shot?.code,
+            roleCode: role?.code,
             customName: custom_name,
         });
 
@@ -166,15 +211,15 @@ router.post('/save', async (req, res) => {
 
         const result = db.prepare(`
             INSERT INTO assets (
-                project_id, sequence_id, shot_id,
+                project_id, sequence_id, shot_id, role_id,
                 original_name, vault_name, file_path, relative_path,
                 media_type, file_ext, file_size,
                 width, height, duration, fps, codec,
                 comfyui_node_id, comfyui_workflow,
                 version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
         `).run(
-            project.id, sequence?.id || null, shot?.id || null,
+            project.id, sequence?.id || null, shot?.id || null, role?.id || null,
             originalName, imported.vaultName, imported.vaultPath, imported.relativePath,
             imported.mediaType, path.extname(originalName).toLowerCase(),
             info.fileSize || 0, info.width, info.height, info.duration, info.fps, info.codec,

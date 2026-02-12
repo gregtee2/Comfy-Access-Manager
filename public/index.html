@@ -25,17 +25,17 @@
     <!-- ═══ TOP BAR ═══ -->
     <header id="topBar">
         <div class="topbar-left">
-            <span class="logo">🗄️ DMV</span>
+            <span class="logo" title="Digital Media Vault — Local Asset Manager">🗄️ DMV</span>
             <nav class="tabs">
-                <button class="tab active" data-tab="projects" onclick="switchTab('projects')">📁 Projects</button>
-                <button class="tab" data-tab="browser" onclick="switchTab('browser')">🔍 Browser</button>
-                <button class="tab" data-tab="import" onclick="switchTab('import')">📥 Import</button>
-                <button class="tab" data-tab="settings" onclick="switchTab('settings')">⚙️ Settings</button>
+                <button class="tab active" data-tab="projects" onclick="switchTab('projects')" title="View and manage all projects">📁 Projects</button>
+                <button class="tab" data-tab="browser" onclick="switchTab('browser')" title="Browse assets with tree navigation, filters, and grid/list views">🔍 Browser</button>
+                <button class="tab" data-tab="import" onclick="switchTab('import')" title="Import media files into the vault with auto-naming">📥 Import</button>
+                <button class="tab" data-tab="settings" onclick="switchTab('settings')" title="Configure vault path, naming, players, roles, and integrations">⚙️ Settings</button>
             </nav>
         </div>
         <div class="topbar-right">
-            <span id="statusIndicator" class="status-dot" title="System status"></span>
-            <span id="assetCount" class="stat">0 assets</span>
+            <span id="statusIndicator" class="status-dot" title="Green = vault configured and running. Yellow = needs setup."></span>
+            <span id="assetCount" class="stat" title="Total assets across all projects">0 assets</span>
         </div>
     </header>
 
@@ -45,8 +45,8 @@
         <!-- ─── PROJECTS TAB ─── -->
         <section id="tab-projects" class="tab-content active">
             <div class="section-header">
-                <h2>Projects</h2>
-                <button class="btn-primary" onclick="showCreateProjectModal()">+ New Project</button>
+                <h2>Projects <span class="help-icon" data-tip="Projects are the top-level containers for your media. Each project can hold Sequences → Shots → Roles, following ShotGrid/Flow conventions.">?</span></h2>
+                <button class="btn-primary" onclick="showCreateProjectModal()" title="Create a new project with name, code, and type">+ New Project</button>
             </div>
             <div id="projectGrid" class="project-grid">
                 <!-- Populated by JS -->
@@ -59,8 +59,8 @@
                 <!-- LEFT: Tree Navigation -->
                 <div id="treePanel" class="tree-panel">
                     <div class="tree-header">
-                        <span>🌳 Tree Navigation</span>
-                        <button class="btn-tiny" onclick="refreshTree()" title="Refresh">↻</button>
+                        <span title="Navigate the project hierarchy: Project → Sequence → Shot → Role">🌳 Tree Navigation</span>
+                        <button class="btn-tiny" onclick="refreshTree()" title="Reload the project tree from the database">↻</button>
                     </div>
                     <div id="treeContainer" class="tree-container">
                         <div class="tree-loading">Loading...</div>
@@ -97,34 +97,35 @@
 
                 <!-- Filter bar -->
                 <div class="filter-bar">
-                    <select id="filterMediaType" onchange="filterAssets()">
+                    <select id="filterMediaType" onchange="filterAssets()" title="Filter assets by media type">
                         <option value="">All Types</option>
                         <option value="video">🎬 Video</option>
                         <option value="image">🖼️ Image</option>
                         <option value="audio">🔊 Audio</option>
                         <option value="exr">✨ EXR/HDR</option>
                     </select>
-                    <select id="filterSequence" onchange="filterAssets()" style="display:none">
+                    <select id="filterSequence" onchange="filterAssets()" style="display:none" title="Filter assets by sequence">
                         <option value="">All Sequences</option>
                     </select>
-                    <input type="text" id="searchInput" placeholder="Search assets..." oninput="filterAssets()">
+                    <input type="text" id="searchInput" placeholder="Search assets..." oninput="filterAssets()" title="Search by filename, vault name, or tags">
+                    <button class="btn-tiny" onclick="refreshAssets()" title="Reload assets from the database">🔄</button>
                     <div class="view-toggle">
-                        <button class="active" onclick="setView('grid')" title="Grid view">▦</button>
-                        <button onclick="setView('list')" title="List view">≡</button>
+                        <button class="active" onclick="setView('grid')" title="Grid view — thumbnails with metadata">▦</button>
+                        <button onclick="setView('list')" title="List view — compact table with columns">≡</button>
                     </div>
                 </div>
 
                 <!-- Selection toolbar (hidden until assets selected) -->
                 <div id="selectionToolbar" class="selection-toolbar" style="display:none">
                     <span id="selectionCount">0 selected</span>
-                    <button class="btn-small" onclick="selectAllAssets()">☑ Select All</button>
-                    <button class="btn-small" onclick="clearAssetSelection()">☐ Deselect All</button>
-                    <button class="btn-small btn-accent" onclick="showMoveToSequenceModal()">📋 Move to Sequence</button>
-                    <button class="btn-small btn-role" onclick="showAssignRoleModal()">🎭 Set Role</button>
-                    <button class="btn-small btn-export" onclick="showExportModal()">📤 Export</button>
-                    <button class="btn-small btn-compare" onclick="openCompareInMrViewer2()">🎬 Compare in mrViewer2</button>
-                    <button class="btn-small btn-danger" onclick="bulkDeleteAssets()">🗑 Delete Selected</button>
-                    <button class="btn-small" onclick="bulkDeleteAssets(true)">🗑 DB Only (keep files)</button>
+                    <button class="btn-small" onclick="selectAllAssets()" title="Select all visible assets">☑ Select All</button>
+                    <button class="btn-small" onclick="clearAssetSelection()" title="Clear selection">☐ Deselect All</button>
+                    <button class="btn-small btn-accent" onclick="showMoveToSequenceModal()" title="Move selected assets to a different sequence/shot">📋 Move to Sequence</button>
+                    <button class="btn-small btn-role" onclick="showAssignRoleModal()" title="Assign a pipeline role (Comp, Light, Anim, etc.) to selected assets">🎭 Set Role</button>
+                    <button class="btn-small btn-export" onclick="showExportModal()" title="Transcode/export selected assets via FFmpeg (GPU-accelerated)">📤 Export</button>
+                    <button class="btn-small btn-compare" onclick="openCompareInMrViewer2()" title="Open two selected assets side-by-side in mrViewer2">🎬 Compare in mrViewer2</button>
+                    <button class="btn-small btn-danger" onclick="bulkDeleteAssets()" title="Delete selected assets from the database AND remove files from disk">🗑 Delete Selected</button>
+                    <button class="btn-small" onclick="bulkDeleteAssets(true)" title="Remove from database only — files stay on disk">🗑 DB Only (keep files)</button>
                 </div>
               </div><!-- /.project-sticky-header -->
 
@@ -146,7 +147,7 @@
         <!-- ─── IMPORT TAB ─── -->
         <section id="tab-import" class="tab-content">
             <div class="section-header">
-                <h2>Import Media</h2>
+                <h2>Import Media <span class="help-icon" data-tip="Browse your filesystem, select files, choose a project/sequence/shot/role, preview the ShotGrid-standard rename, then import. Files are moved, copied, or registered in-place.">?</span></h2>
             </div>
             <div class="import-layout">
                 <!-- File picker panel -->
@@ -167,43 +168,57 @@
                 <!-- Import settings -->
                 <div class="import-settings">
                     <h3>⚙️ Import Settings</h3>
-                    <label>Project</label>
-                    <select id="importProject" onchange="onImportProjectChange()">
+                    <label>Project <span class="help-icon" data-tip="Required. Files are organized under this project in the vault folder hierarchy.">?</span></label>
+                    <select id="importProject" onchange="onImportProjectChange()" title="Choose the target project">
                         <option value="">-- Select Project --</option>
                     </select>
 
                     <div id="importShotFields" style="display:none">
-                        <label>Sequence</label>
-                        <select id="importSequence" onchange="onImportSequenceChange()">
+                        <label>Sequence <span class="help-icon" data-tip="A sequence groups related shots (e.g., SQ010, ACT1). Optional — leave blank for project-level assets.">?</span></label>
+                        <select id="importSequence" onchange="onImportSequenceChange()" title="Optional — group assets by sequence">
                             <option value="">-- None --</option>
                         </select>
 
-                        <label>Shot</label>
-                        <select id="importShot">
+                        <label>Shot <span class="help-icon" data-tip="A shot within the sequence (e.g., SH0010). This is where assets get their ShotGrid-standard name.">?</span></label>
+                        <select id="importShot" title="Optional — assign to a specific shot">
                             <option value="">-- None --</option>
                         </select>
 
-                        <label>Role</label>
-                        <select id="importRole">
+                        <label>Role <span class="help-icon" data-tip="Pipeline step / department (Comp, Light, Anim, FX, etc.). Drives the '{step}' token in naming. Manage roles in Settings.">?</span></label>
+                        <select id="importRole" title="Optional — categorize by pipeline role">
                             <option value="">-- None --</option>
                         </select>
 
-                        <label>Take #</label>
-                        <input type="number" id="importTake" value="1" min="1">
+                        <label>Take # <span class="help-icon" data-tip="Take number for this import batch. Increments the version counter: v001, v002, etc.">?</span></label>
+                        <input type="number" id="importTake" value="1" min="1" title="Take/version number">
                     </div>
 
-                    <label>Custom Name (optional)</label>
-                    <input type="text" id="importCustomName" placeholder="Leave blank for auto-naming">
+                    <label>Custom Name (optional) <span class="help-icon" data-tip="Override the auto-generated ShotGrid name. Leave blank to use the standard naming template.">?</span></label>
+                    <input type="text" id="importCustomName" placeholder="Leave blank for auto-naming" title="Custom filename override — leave blank for ShotGrid auto-naming">
 
                     <div class="rename-preview">
                         <h4>📝 Name Preview</h4>
                         <div id="renamePreview" class="preview-box">Select files and project to preview...</div>
                     </div>
 
-                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:8px 0;">
-                        <input type="checkbox" id="importKeepOriginals">
-                        <span>📋 Keep originals (copy instead of move)</span>
-                    </label>
+                    <div class="import-mode-group" style="margin:12px 0; display:flex; flex-direction:column; gap:6px;">
+                        <label style="font-size:0.85em; color:#aaa; margin-bottom:2px;">Import Mode <span class="help-icon" data-tip="Move = relocates files into the vault folder. Copy = duplicates files (originals stay). Register = just adds to database, files don't move.">?</span></label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;" title="Moves files from source into the vault folder structure. Original files are removed.">
+                            <input type="radio" name="importMode" value="move" checked>
+                            <span>📦 Move into vault (default)</span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;" title="Copies files into the vault, keeping the originals at their source location.">
+                            <input type="radio" name="importMode" value="copy">
+                            <span>📋 Copy into vault (keep originals)</span>
+                        </label>
+                        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;" title="Files stay at their current location. Only a database reference is created. Good for network drives or large files.">
+                            <input type="radio" name="importMode" value="register">
+                            <span>📍 Register in place (files stay where they are)</span>
+                        </label>
+                        <div id="registerWarning" style="display:none; font-size:0.8em; color:#ffaa00; margin-left:24px;">⚠️ Files remain on their current drive/network. If moved or deleted externally, MediaVault will show broken references.</div>
+                    </div>
+                    <!-- Hidden checkbox kept for backward compat -->
+                    <input type="checkbox" id="importKeepOriginals" style="display:none">
 
                     <button class="btn-primary btn-large" onclick="executeImport()" id="importBtn" disabled>
                         📥 Import & Rename
@@ -225,7 +240,7 @@
             <div class="settings-grid">
                 <div class="settings-section">
                     <h3>🗄️ Vault</h3>
-                    <label>Vault Root Path</label>
+                    <label>Vault Root Path <span class="help-icon" data-tip="The root folder where all imported media is stored. Changing this will offer to migrate existing files to the new location.">?</span></label>
                     <div class="input-row">
                         <input type="text" id="settingVaultRoot" placeholder="C:\MediaVault">
                         <button class="btn-browse" onclick="openFolderPicker('settingVaultRoot')" title="Browse...">📁</button>
@@ -243,15 +258,15 @@
                         </div>
                     </div>
 
-                    <label>Naming Template</label>
-                    <input type="text" id="settingNamingTemplate" placeholder="{project}_{type}_{counter}">
-                    <p class="hint">Tokens: {project}, {sequence}, {shot}, {take}, {type}, {date}, {original}, {counter}</p>
+                    <label>Naming Template <span class="help-icon" data-tip="Controls how imported files are auto-renamed. Uses ShotGrid/Flow conventions by default. The template is auto-selected based on which import fields you fill in.">?</span></label>
+                    <input type="text" id="settingNamingTemplate" placeholder="{project}_{type}_{counter}" title="Naming template with token placeholders">
+                    <p class="hint">Tokens: <code>{project}</code>, <code>{sequence}</code>, <code>{shot}</code>, <code>{step}</code> (role), <code>{version}</code>, <code>{take}</code>, <code>{type}</code>, <code>{date}</code>, <code>{original}</code>, <code>{counter}</code></p>
                 </div>
 
                 <div class="settings-section">
                     <h3>🎬 External Player</h3>
-                    <label>Default Player</label>
-                    <select id="settingDefaultPlayer" class="setting-select">
+                    <label>Default Player <span class="help-icon" data-tip="Choose how media files open when clicked. 'Browser' uses the built-in player. mrViewer2 supports EXR, ProRes, HDR, and professional formats.">?</span></label>
+                    <select id="settingDefaultPlayer" class="setting-select" title="Player used when clicking an asset">
                         <option value="browser">Browser (built-in)</option>
                         <option value="mrviewer2">mrViewer2</option>
                         <option value="custom">Custom...</option>
@@ -271,8 +286,8 @@
                 </div>
 
                 <div class="settings-section">
-                    <h3>🎨 ComfyUI Integration</h3>
-                    <label>ComfyUI Output Path</label>
+                    <h3>🎨 ComfyUI Integration <span class="help-icon" data-tip="Connect to ComfyUI for AI-generated content. The custom node lets you load assets directly into ComfyUI workflows and save outputs back to the vault.">?</span></h3>
+                    <label>ComfyUI Output Path <span class="help-icon" data-tip="Point this to your ComfyUI output folder. New files can be auto-detected for import.">?</span></label>
                     <div class="input-row">
                         <input type="text" id="settingComfyPath" placeholder="C:\ComfyUI_windows_portable\ComfyUI\output">
                         <button class="btn-browse" onclick="openFolderPicker('settingComfyPath')" title="Browse...">📁</button>
@@ -283,7 +298,41 @@
                 </div>
 
                 <div class="settings-section">
-                    <h3>🎭 Roles</h3>
+                    <h3>🔀 Flow Production Tracking <span class="help-icon" data-tip="Sync your project structure from Autodesk Flow (ShotGrid). Projects, sequences, shots, and pipeline steps are imported and kept in sync.">?</span></h3>
+                    <p class="hint">Connect to Autodesk Flow (formerly ShotGrid) to sync projects, sequences, shots, and pipeline steps.</p>
+                    <label>Site URL</label>
+                    <input type="text" id="settingFlowSite" placeholder="https://mysite.shotgrid.autodesk.com">
+                    <label>Script Name</label>
+                    <input type="text" id="settingFlowScriptName" placeholder="mediavault_sync">
+                    <label>API Key</label>
+                    <div class="input-row">
+                        <input type="password" id="settingFlowApiKey" placeholder="••••••••••••••••••••">
+                        <button onclick="saveSettings()">Save</button>
+                    </div>
+                    <div class="input-row" style="margin-top:8px; gap:6px;">
+                        <button id="flowTestBtn" onclick="testFlowConnection()">🔌 Test Connection</button>
+                        <button id="flowSyncBtn" onclick="showFlowSyncPanel()" disabled>🔄 Sync from Flow</button>
+                    </div>
+                    <div id="flowStatus" style="margin-top:6px;font-size:0.82rem;"></div>
+                    <div id="flowSyncPanel" style="display:none; margin-top:10px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px;">
+                        <h4 style="margin:0 0 8px 0;font-size:0.9rem;">Sync Options</h4>
+                        <div style="display:flex;flex-direction:column;gap:6px;">
+                            <button onclick="flowSyncProjects()">📁 Sync Projects</button>
+                            <button onclick="flowSyncSteps()">🎭 Sync Pipeline Steps → Roles</button>
+                            <div id="flowProjectSyncRow" style="display:none;">
+                                <label style="font-size:0.82rem;">Select project for full sync:</label>
+                                <div class="input-row" style="margin-top:4px;">
+                                    <select id="flowProjectSelect" class="setting-select"></select>
+                                    <button onclick="flowFullSync()">🔄 Full Sync</button>
+                                </div>
+                            </div>
+                        </div>
+                        <div id="flowSyncLog" style="margin-top:8px;font-size:0.82rem;color:var(--text-dim);max-height:150px;overflow-y:auto;"></div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>🎭 Roles <span class="help-icon" data-tip="Roles are pipeline steps (Comp, Light, Anim, FX, etc.) — they drive the '{step}' token in ShotGrid naming and help categorize assets within shots.">?</span></h3>
                     <p class="hint">Roles categorize assets under shots (e.g., Comp, Light, Anim, FX). Assign roles during import or in the browser.</p>
                     <div id="rolesList" class="roles-list"></div>
                     <div class="input-row" style="margin-top:8px;">
@@ -295,7 +344,7 @@
                 </div>
 
                 <div class="settings-section">
-                    <h3>👁️ Watch Folders</h3>
+                    <h3>👁️ Watch Folders <span class="help-icon" data-tip="Monitored directories that trigger notifications when new files appear. Great for render farm outputs or shared drives.">?</span></h3>
                     <div id="watchFolderList" class="watch-list"></div>
                     <div class="input-row">
                         <input type="text" id="newWatchPath" placeholder="Folder path to watch...">
@@ -379,5 +428,14 @@
     </div>
 
     <script type="module" src="/js/main.js"></script>
+    <script>
+        // Toggle warning when Register-in-place radio is selected
+        document.querySelectorAll('input[name="importMode"]').forEach(r => {
+            r.addEventListener('change', () => {
+                const w = document.getElementById('registerWarning');
+                if (w) w.style.display = r.value === 'register' && r.checked ? 'block' : 'none';
+            });
+        });
+    </script>
 </body>
 </html>
