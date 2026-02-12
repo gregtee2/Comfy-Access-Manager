@@ -1,4 +1,4 @@
-/**
+﻿/**
  * DMV — Browser Module
  * Projects, tree navigation, asset grid, selection, drag-drop, sequences/shots CRUD.
  */
@@ -169,7 +169,7 @@ function renderTree() {
                             ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                             ondrop="event.stopPropagation();onShotDrop(event, ${seq.id}, ${shot.id})">
                             <span class="tree-toggle" onclick="event.stopPropagation();treeToggle('${shKey}')">${shHasRoles ? (shOpen ? '▼' : '▶') : '  '}</span>
-                            <span class="tree-icon">🎯</span>
+                            <span class="tree-icon">🎬</span>
                             <span class="tree-label">${esc(shot.name)}</span>
                             <span class="tree-count">${shot.asset_count}</span>
                         </div>`;
@@ -368,7 +368,7 @@ function renderProjectDetail(project) {
                           ondblclick="event.stopPropagation();renameShot(${s.id}, ${sh.id}, '${esc(sh.name).replace(/'/g, "\\'")}')"
                           ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                           ondrop="event.stopPropagation();onShotDrop(event, ${s.id}, ${sh.id})"
-                          >🎯 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span></span>${roleHtml}`;
+                          >🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span></span>${roleHtml}`;
                 }).join('')}
                     <span class="shot-chip shot-add" onclick="event.stopPropagation();showAddShotModal(${s.id})">+ Shot</span>
                 </div>`;
