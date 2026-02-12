@@ -11,7 +11,7 @@ const { spawn } = require('child_process');
 const { getDb, getSetting, logActivity } = require('../database');
 const MediaInfoService = require('./MediaInfoService');
 const ThumbnailService = require('./ThumbnailService');
-const { generateVaultName, getVaultDirectory } = require('../utils/naming');
+const { generateVaultName, getVaultDirectory, resolveCollision } = require('../utils/naming');
 const { detectMediaType } = require('../utils/mediaTypes');
 
 const resolvedFFmpeg = ThumbnailService.findFFmpeg() || 'ffmpeg';
@@ -218,14 +218,11 @@ class TranscodeService {
             outputVaultName = `${sourceBase}${outputExt}`;
             outputPath = path.join(outputDir, outputVaultName);
 
-            // Handle collision — find next clean suffix (_02, _03, etc.)
+            // Handle collision — version-aware (v002→v003) or suffix fallback (_02, _03)
             if (fs.existsSync(outputPath)) {
-                let suffix = 2;
-                while (fs.existsSync(path.join(outputDir, `${sourceBase}_${String(suffix).padStart(2, '0')}${outputExt}`))) {
-                    suffix++;
-                }
-                outputPath = path.join(outputDir, `${sourceBase}_${String(suffix).padStart(2, '0')}${outputExt}`);
-                outputVaultName = path.basename(outputPath);
+                const resolved = resolveCollision(outputDir, outputVaultName);
+                outputPath = path.join(outputDir, resolved);
+                outputVaultName = resolved;
             }
         }
 

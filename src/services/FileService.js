@@ -6,7 +6,7 @@
 const fs = require('fs');
 const path = require('path');
 const { getSetting } = require('../database');
-const { generateVaultName, getVaultDirectory, getNextVersion } = require('../utils/naming');
+const { generateVaultName, getVaultDirectory, getNextVersion, resolveCollision } = require('../utils/naming');
 const { detectMediaType, getExtension } = require('../utils/mediaTypes');
 
 class FileService {
@@ -94,16 +94,11 @@ class FileService {
 
         const destPath = path.join(vaultDir, vaultName);
 
-        // Handle name collision — find next clean suffix (_02, _03, etc.)
+        // Handle name collision — version-aware (v002→v003) or suffix fallback (_02, _03)
         let finalPath = destPath;
         if (fs.existsSync(destPath)) {
-            const ext = getExtension(vaultName);
-            const base = path.basename(vaultName, ext);
-            let suffix = 2;
-            while (fs.existsSync(path.join(vaultDir, `${base}_${String(suffix).padStart(2, '0')}${ext}`))) {
-                suffix++;
-            }
-            finalPath = path.join(vaultDir, `${base}_${String(suffix).padStart(2, '0')}${ext}`);
+            const resolved = resolveCollision(vaultDir, vaultName);
+            finalPath = path.join(vaultDir, resolved);
         }
 
         // Move or copy file into vault
@@ -173,16 +168,11 @@ class FileService {
 
         const destPath = path.join(vaultDir, vaultName);
 
-        // Handle name collision — find next clean suffix (_02, _03, etc.)
+        // Handle name collision — version-aware (v002→v003) or suffix fallback (_02, _03)
         let finalPath = destPath;
         if (fs.existsSync(destPath)) {
-            const ext = getExtension(vaultName);
-            const base = path.basename(vaultName, ext);
-            let suffix = 2;
-            while (fs.existsSync(path.join(vaultDir, `${base}_${String(suffix).padStart(2, '0')}${ext}`))) {
-                suffix++;
-            }
-            finalPath = path.join(vaultDir, `${base}_${String(suffix).padStart(2, '0')}${ext}`);
+            const resolved = resolveCollision(vaultDir, vaultName);
+            finalPath = path.join(vaultDir, resolved);
         }
 
         fs.copyFileSync(sourcePath, finalPath);

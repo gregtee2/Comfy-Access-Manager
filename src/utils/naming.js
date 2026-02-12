@@ -233,11 +233,51 @@ function makeShotCode(num, pad = 3) {
     return `SH${String(num * 10).padStart(pad, '0')}`;
 }
 
+/**
+ * Resolve a filename collision in a version-aware way.
+ * If the filename contains _v### (ShotGrid versioning), increment the version
+ * number (v002 → v003 → v004) instead of appending a dumb suffix.
+ * Falls back to _02/_03 suffixes for non-versioned files.
+ *
+ * @param {string} directory - Directory the file lives in
+ * @param {string} filename - The colliding filename (e.g. "EDA1500_ai_v002.mp4")
+ * @returns {string} Resolved filename that doesn't collide
+ */
+function resolveCollision(directory, filename) {
+    const fs = require('fs');
+    const ext = path.extname(filename);
+    const base = path.basename(filename, ext);
+
+    // Check for ShotGrid version pattern: _v### at end of base name
+    const versionMatch = base.match(/^(.+_v)(\d{2,})$/);
+
+    if (versionMatch) {
+        // Version-aware: increment version number
+        const prefix = versionMatch[1];          // "EDA1500_ai_v"
+        let ver = parseInt(versionMatch[2], 10); // 2
+        const padding = versionMatch[2].length;  // 3 (for "002")
+
+        do {
+            ver++;
+        } while (fs.existsSync(path.join(directory, `${prefix}${String(ver).padStart(padding, '0')}${ext}`)));
+
+        return `${prefix}${String(ver).padStart(padding, '0')}${ext}`;
+    }
+
+    // Non-versioned fallback: append _02, _03, etc.
+    let suffix = 2;
+    while (fs.existsSync(path.join(directory, `${base}_${String(suffix).padStart(2, '0')}${ext}`))) {
+        suffix++;
+    }
+    return `${base}_${String(suffix).padStart(2, '0')}${ext}`;
+}
+
 module.exports = {
     generateVaultName,
     parseStructuredName,
     getNextVersion,
     getVaultDirectory,
+    resolveCollision,
     sanitizeFilename,
     makeSequenceCode,
     makeShotCode,
