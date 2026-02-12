@@ -134,6 +134,8 @@ body {
 .btn-sm:hover { background: var(--bg-card-hover); color: var(--text); border-color: var(--accent); }
 .btn-danger { border-color: var(--danger); color: var(--danger); }
 .btn-danger:hover { background: rgba(255,107,107,0.1); }
+.btn-subtle { color: var(--text-muted); opacity: 0.6; }
+.btn-subtle:hover { color: var(--danger); opacity: 1; border-color: var(--danger); background: rgba(255,107,107,0.08); }
 
 /* ─── Inputs ─── */
 input[type="text"], input[type="number"], input[type="password"], select, textarea {
@@ -451,6 +453,9 @@ label {
     border-style: dashed; color: var(--text-dim);
 }
 .shot-add:hover { color: var(--accent); border-color: var(--accent); }
+
+/* ─── Delete × button on active chips ─── */
+/* (Removed — right-click context menus replace these) */
 
 /* ─── Tree: Roles Level ─── */
 .tree-indent-3 { padding-left: 60px; }
@@ -1709,6 +1714,15 @@ label:has(input[type="checkbox"]) {
     height: 1px;
     margin: 4px 8px;
     background: var(--border);
+}
+
+.ctx-header {
+    padding: 6px 14px;
+    font-size: 0.8rem;
+    font-weight: 600;
+    color: var(--text-muted);
+    white-space: nowrap;
+    user-select: none;
 }
 
 .ctx-danger {

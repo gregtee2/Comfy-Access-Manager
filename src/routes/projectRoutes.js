@@ -246,8 +246,20 @@ router.put('/:projectId/sequences/:seqId', (req, res) => {
 // DELETE /api/projects/:projectId/sequences/:seqId
 router.delete('/:projectId/sequences/:seqId', (req, res) => {
     const db = getDb();
-    db.prepare('DELETE FROM sequences WHERE id = ? AND project_id = ?')
-        .run(req.params.seqId, req.params.projectId);
+    const seq = db.prepare('SELECT * FROM sequences WHERE id = ? AND project_id = ?')
+        .get(req.params.seqId, req.params.projectId);
+    if (!seq) return res.status(404).json({ error: 'Sequence not found' });
+
+    // Unassign assets from all shots in this sequence, and from the sequence itself
+    const shotIds = db.prepare('SELECT id FROM shots WHERE sequence_id = ?').all(seq.id).map(s => s.id);
+    if (shotIds.length > 0) {
+        db.prepare(`UPDATE assets SET shot_id = NULL WHERE shot_id IN (${shotIds.join(',')})`).run();
+    }
+    db.prepare('UPDATE assets SET sequence_id = NULL WHERE sequence_id = ?').run(seq.id);
+    db.prepare('DELETE FROM shots WHERE sequence_id = ?').run(seq.id);
+    db.prepare('DELETE FROM sequences WHERE id = ?').run(seq.id);
+
+    logActivity('sequence_deleted', 'sequence', seq.id, { name: seq.name, code: seq.code, shotsDeleted: shotIds.length });
     res.json({ success: true });
 });
 
@@ -316,7 +328,15 @@ router.put('/:projectId/sequences/:seqId/shots/:shotId', (req, res) => {
 // DELETE /api/projects/:projectId/sequences/:seqId/shots/:shotId
 router.delete('/:projectId/sequences/:seqId/shots/:shotId', (req, res) => {
     const db = getDb();
-    db.prepare('DELETE FROM shots WHERE id = ?').run(req.params.shotId);
+    const shot = db.prepare('SELECT * FROM shots WHERE id = ? AND sequence_id = ?')
+        .get(req.params.shotId, req.params.seqId);
+    if (!shot) return res.status(404).json({ error: 'Shot not found' });
+
+    // Unassign assets from this shot (don't delete them)
+    db.prepare('UPDATE assets SET shot_id = NULL WHERE shot_id = ?').run(shot.id);
+    db.prepare('DELETE FROM shots WHERE id = ?').run(shot.id);
+
+    logActivity('shot_deleted', 'shot', shot.id, { name: shot.name, code: shot.code });
     res.json({ success: true });
 });
 

@@ -135,7 +135,8 @@ function renderTree() {
         const hasChildren = project.sequences.length > 0;
         const icon = project.type === 'shot_based' ? '🎬' : '📁';
 
-        html += `<div class="tree-node ${isActive ? 'tree-active' : ''}" onclick="treeSelectProject(${project.id})">
+        html += `<div class="tree-node ${isActive ? 'tree-active' : ''}" onclick="treeSelectProject(${project.id})"
+            oncontextmenu="treeSelectProject(${project.id});showProjectContextMenu(event)">
             <span class="tree-toggle" onclick="event.stopPropagation();treeToggle('${pKey}')">${hasChildren ? (isOpen ? '▼' : '▶') : '  '}</span>
             <span class="tree-icon">${icon}</span>
             <span class="tree-label">${esc(project.name)}</span>
@@ -150,7 +151,7 @@ function renderTree() {
                 const sHasChildren = seq.shots.length > 0;
 
                 html += `<div class="tree-node tree-indent-1 ${sActive ? 'tree-active' : ''}" onclick="treeSelectSequence(${project.id}, ${seq.id})"
-                    ondblclick="event.stopPropagation();renameSequence(${seq.id}, '${esc(seq.name).replace(/'/g, "\\'")}')"
+                    oncontextmenu="showSeqContextMenu(event, ${seq.id}, '${esc(seq.name).replace(/'/g, "\\'")}')"
                     ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                     ondrop="onSeqDrop(event, ${seq.id}, ${project.id})">
                     <span class="tree-toggle" onclick="event.stopPropagation();treeToggle('${sKey}')">${sHasChildren ? (sOpen ? '▼' : '▶') : '  '}</span>
@@ -166,6 +167,7 @@ function renderTree() {
                         const shActive = state.currentShot?.id === shot.id && !state.currentRole;
                         const shHasRoles = shot.roles && shot.roles.length > 0;
                         html += `<div class="tree-node tree-indent-2 ${shActive ? 'tree-active' : ''}" onclick="treeSelectShot(${project.id}, ${seq.id}, ${shot.id})"
+                            oncontextmenu="showShotContextMenu(event, ${seq.id}, ${shot.id}, '${esc(shot.name).replace(/'/g, "\\'")}')"
                             ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                             ondrop="event.stopPropagation();onShotDrop(event, ${seq.id}, ${shot.id})">
                             <span class="tree-toggle" onclick="event.stopPropagation();treeToggle('${shKey}')">${shHasRoles ? (shOpen ? '▼' : '▶') : '  '}</span>
@@ -365,7 +367,7 @@ function renderProjectDetail(project) {
                     return `
                     <span class="shot-chip ${isShActive ? 'active' : ''}" 
                           onclick="event.stopPropagation();selectShot(${s.id}, ${sh.id})"
-                          ondblclick="event.stopPropagation();renameShot(${s.id}, ${sh.id}, '${esc(sh.name).replace(/'/g, "\\'")}')"
+                          oncontextmenu="event.stopPropagation();showShotContextMenu(event, ${s.id}, ${sh.id}, '${esc(sh.name).replace(/'/g, "\\'")}')"
                           ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                           ondrop="event.stopPropagation();onShotDrop(event, ${s.id}, ${sh.id})"
                           >🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span></span>${roleHtml}`;
@@ -380,7 +382,7 @@ function renderProjectDetail(project) {
             return `
             <div class="sequence-chip ${isActive ? 'active' : ''}" 
                  onclick="selectSequence(${s.id})"
-                 ondblclick="event.stopPropagation();renameSequence(${s.id}, '${esc(s.name).replace(/'/g, "\\'")}')"
+                 oncontextmenu="showSeqContextMenu(event, ${s.id}, '${esc(s.name).replace(/'/g, "\\'")}')"
                  ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                  ondrop="onSeqDrop(event, ${s.id})">
                 📋 ${esc(s.name)} <span style="opacity:.5;font-size:.8em">${esc(s.code)}</span>
@@ -1032,9 +1034,189 @@ async function createShot() {
     }
 }
 
+// ═══════════════════════════════════════════
+//  HIERARCHY RIGHT-CLICK CONTEXT MENUS
+// ═══════════════════════════════════════════
+
+function dismissHierarchyMenu() {
+    const menu = document.getElementById('hierarchyContextMenu');
+    if (menu) menu.remove();
+    document.removeEventListener('keydown', onHierMenuKeydown);
+}
+
+function onHierMenuKeydown(e) {
+    if (e.key === 'Escape') dismissHierarchyMenu();
+}
+
+function positionContextMenu(menu, event) {
+    document.body.appendChild(menu);
+    menu.style.left = event.clientX + 'px';
+    menu.style.top = event.clientY + 'px';
+
+    requestAnimationFrame(() => {
+        const mRect = menu.getBoundingClientRect();
+        let x = event.clientX, y = event.clientY;
+        if (x + mRect.width > window.innerWidth) x = window.innerWidth - mRect.width - 8;
+        if (y + mRect.height > window.innerHeight) y = window.innerHeight - mRect.height - 8;
+        menu.style.left = x + 'px';
+        menu.style.top = y + 'px';
+    });
+
+    setTimeout(() => {
+        document.addEventListener('click', dismissHierarchyMenu, { once: true });
+        document.addEventListener('contextmenu', dismissHierarchyMenu, { once: true });
+    }, 0);
+    document.addEventListener('keydown', onHierMenuKeydown);
+}
+
+function showShotContextMenu(event, seqId, shotId, shotName) {
+    event.preventDefault();
+    event.stopPropagation();
+    dismissHierarchyMenu();
+    dismissContextMenu(); // dismiss asset menu if open
+
+    const menu = document.createElement('div');
+    menu.id = 'hierarchyContextMenu';
+    menu.className = 'context-menu';
+
+    menu.innerHTML = `
+        <div class="ctx-header">🎬 ${esc(shotName)}</div>
+        <div class="ctx-separator"></div>
+        <div class="ctx-item" data-action="select">👆 Select Shot</div>
+        <div class="ctx-item" data-action="rename">✏️ Rename</div>
+        <div class="ctx-separator"></div>
+        <div class="ctx-item ctx-danger" data-action="delete">🗑 Delete Shot</div>
+    `;
+
+    menu.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-action]');
+        if (!item) return;
+        dismissHierarchyMenu();
+
+        switch (item.dataset.action) {
+            case 'select': selectShot(seqId, shotId); break;
+            case 'rename': renameShot(seqId, shotId, shotName); break;
+            case 'delete': deleteShot(seqId, shotId, shotName); break;
+        }
+    });
+
+    positionContextMenu(menu, event);
+}
+
+function showSeqContextMenu(event, seqId, seqName) {
+    event.preventDefault();
+    event.stopPropagation();
+    dismissHierarchyMenu();
+    dismissContextMenu();
+
+    const menu = document.createElement('div');
+    menu.id = 'hierarchyContextMenu';
+    menu.className = 'context-menu';
+
+    const seq = state.currentProject?.sequences?.find(s => s.id === seqId);
+    const shotCount = seq?.shots?.length || 0;
+
+    menu.innerHTML = `
+        <div class="ctx-header">📋 ${esc(seqName)}</div>
+        <div class="ctx-separator"></div>
+        <div class="ctx-item" data-action="select">👆 Select Sequence</div>
+        <div class="ctx-item" data-action="rename">✏️ Rename</div>
+        <div class="ctx-item" data-action="addShot">➕ Add Shot</div>
+        <div class="ctx-separator"></div>
+        <div class="ctx-item ctx-danger" data-action="delete">🗑 Delete Sequence${shotCount > 0 ? ` (${shotCount} shots)` : ''}</div>
+    `;
+
+    menu.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-action]');
+        if (!item) return;
+        dismissHierarchyMenu();
+
+        switch (item.dataset.action) {
+            case 'select': selectSequence(seqId); break;
+            case 'rename': renameSequence(seqId, seqName); break;
+            case 'addShot': showAddShotModal(seqId); break;
+            case 'delete': deleteSequence(seqId, seqName); break;
+        }
+    });
+
+    positionContextMenu(menu, event);
+}
+
+function showProjectContextMenu(event) {
+    event.preventDefault();
+    event.stopPropagation();
+    dismissHierarchyMenu();
+    dismissContextMenu();
+
+    if (!state.currentProject) return;
+    const project = state.currentProject;
+
+    const menu = document.createElement('div');
+    menu.id = 'hierarchyContextMenu';
+    menu.className = 'context-menu';
+
+    const seqCount = project.sequences?.length || 0;
+
+    menu.innerHTML = `
+        <div class="ctx-header">${project.type === 'shot_based' ? '🎬' : '📁'} ${esc(project.name)}</div>
+        <div class="ctx-separator"></div>
+        <div class="ctx-item" data-action="addSeq">➕ Add Sequence</div>
+        <div class="ctx-separator"></div>
+        <div class="ctx-item ctx-danger" data-action="delete">🗑 Delete Project${seqCount > 0 ? ` (${seqCount} sequences)` : ''}</div>
+    `;
+
+    menu.addEventListener('click', (e) => {
+        const item = e.target.closest('[data-action]');
+        if (!item) return;
+        dismissHierarchyMenu();
+
+        switch (item.dataset.action) {
+            case 'addSeq': showAddSequenceModal(); break;
+            case 'delete': deleteCurrentProject(); break;
+        }
+    });
+
+    positionContextMenu(menu, event);
+}
+
+async function deleteShot(seqId, shotId, shotName) {
+    if (!state.currentProject) return;
+    if (!confirm(`Delete shot "${shotName}"? Assets in this shot will become unassigned (not deleted).`)) return;
+    const projectId = state.currentProject.id;
+    try {
+        await api(`/api/projects/${projectId}/sequences/${seqId}/shots/${shotId}`, { method: 'DELETE' });
+        state.currentShot = null;
+        const proj = await api(`/api/projects/${projectId}`);
+        state.currentProject = proj;
+        renderProjectDetail(proj);
+        loadProjectAssets(projectId);
+        await loadTree();
+    } catch (err) {
+        alert('❌ Delete shot failed: ' + err.message);
+    }
+}
+
+async function deleteSequence(seqId, seqName) {
+    if (!state.currentProject) return;
+    if (!confirm(`Delete sequence "${seqName}" and all its shots? Assets will become unassigned (not deleted).`)) return;
+    const projectId = state.currentProject.id;
+    try {
+        await api(`/api/projects/${projectId}/sequences/${seqId}`, { method: 'DELETE' });
+        state.currentSequence = null;
+        state.currentShot = null;
+        const proj = await api(`/api/projects/${projectId}`);
+        state.currentProject = proj;
+        renderProjectDetail(proj);
+        loadProjectAssets(projectId);
+        await loadTree();
+    } catch (err) {
+        alert('❌ Delete sequence failed: ' + err.message);
+    }
+}
+
 async function deleteCurrentProject() {
     if (!state.currentProject) return;
-    if (!confirm(`Delete "${state.currentProject.name}" and ALL its assets? This cannot be undone!`)) return;
+    if (!confirm(`⚠️ DELETE ENTIRE PROJECT "${state.currentProject.name}"?\n\nThis will delete ALL sequences, shots, and assets!\n\nThis cannot be undone!`)) return;
 
     try {
         await api(`/api/projects/${state.currentProject.id}`, { method: 'DELETE' });
@@ -1411,6 +1593,8 @@ window.createSequence = createSequence;
 window.showAddShotModal = showAddShotModal;
 window.createShot = createShot;
 window.deleteCurrentProject = deleteCurrentProject;
+window.deleteShot = deleteShot;
+window.deleteSequence = deleteSequence;
 window.toggleStar = toggleStar;
 window.renameSequence = renameSequence;
 window.onAssetDragStart = onAssetDragStart;
@@ -1419,4 +1603,7 @@ window.onSeqDragLeave = onSeqDragLeave;
 window.onShotDrop = onShotDrop;
 window.onSeqDrop = onSeqDrop;
 window.showContextMenu = showContextMenu;
+window.showShotContextMenu = showShotContextMenu;
+window.showSeqContextMenu = showSeqContextMenu;
+window.showProjectContextMenu = showProjectContextMenu;
 window.refreshAssets = refreshAssets;
