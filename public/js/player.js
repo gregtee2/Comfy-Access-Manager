@@ -1110,6 +1110,13 @@ async function _buildCacheWebCodecs(videoSrc, fps, onProgress, ac) {
                 return;
             }
 
+            // OffscreenCanvas for CPU-backed bitmap materialization
+            // VideoFrame bitmaps may live in GPU memory; drawing through canvas
+            // ensures they're CPU-resident so later drawImage calls don't stall on GPU readback
+            const matCanvas = new OffscreenCanvas(w, h);
+            const matCtx = matCanvas.getContext('2d');
+            const cacheStartTime = performance.now();
+
             decoder = new VideoDecoder({
                 output: (frame) => {
                     if (ac.signal.aborted) { frame.close(); return; }
@@ -1119,14 +1126,16 @@ async function _buildCacheWebCodecs(videoSrc, fps, onProgress, ac) {
                         totalFrames - 1
                     );
 
-                    const p = createImageBitmap(frame).then(bmp => {
+                    // Materialize to CPU: draw VideoFrame → OffscreenCanvas → ImageBitmap
+                    // This prevents GPU-backed textures that stall drawImage under GPU contention
+                    matCtx.drawImage(frame, 0, 0);
+                    frame.close();
+                    const p = createImageBitmap(matCanvas).then(bmp => {
                         if (ac.signal.aborted) { bmp.close(); return; }
                         frames[frameIdx] = bmp;
                         captured++;
                         if (onProgress && captured % 10 === 0) onProgress(captured, totalFrames);
-                    }).catch(() => {}).finally(() => {
-                        frame.close();
-                    });
+                    }).catch(() => {});
                     pendingBitmaps.push(p);
                 },
                 error: (e) => {
@@ -1160,6 +1169,9 @@ async function _buildCacheWebCodecs(videoSrc, fps, onProgress, ac) {
                         _fillFrameGaps(frames);
                         if (onProgress) onProgress(totalFrames, totalFrames);
 
+                        const elapsed = ((performance.now() - cacheStartTime) / 1000).toFixed(1);
+                        const gaps = frames.filter(f => !f).length;
+                        console.log(`[FrameCache] ✅ WebCodecs complete: ${totalFrames} frames in ${elapsed}s (${gaps} gaps filled), codec: ${track.codec}, ${w}×${h}`);
                         try { decoder.close(); } catch {}
                         resolve({ frames, fps, duration, width: w, height: h, ready: true });
                     }).catch(() => resolve(null));
@@ -1209,6 +1221,7 @@ function _getCodecDescription(trak) {
  * Final fallback within this: seek-per-frame (slow but universal).
  */
 async function _buildCacheRVFC(videoSrc, fps, onProgress, ac) {
+    console.log('[FrameCache] Using RVFC fallback path');
     return new Promise((resolve) => {
         const extractor = document.createElement('video');
         extractor.muted = true;
