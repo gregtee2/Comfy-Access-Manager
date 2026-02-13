@@ -131,7 +131,7 @@ export async function showExportModal(singleId = null) {
 
             <label>Destination</label>
             <div class="export-dest-row">
-                <input type="text" id="exportDest" placeholder="Leave empty for vault/exports/" value="">
+                <input type="text" id="exportDest" placeholder="Leave empty → vault/Exports/ folder" value="">
                 <button class="btn-browse" onclick="browseExportDest()" title="Browse...">📁</button>
             </div>
         </div>
@@ -185,7 +185,7 @@ function updateExportPreview() {
     // Show folder structure preview
     const folderEl = document.getElementById('exportFolderPreview');
     if (folderEl) {
-        const parts = ['exports'];
+        const parts = ['Exports'];
         if (hierarchy.project_code)  parts.push(hierarchy.project_code);
         if (hierarchy.sequence_name) parts.push(hierarchy.sequence_name);
         if (hierarchy.shot_name)     parts.push(hierarchy.shot_name);

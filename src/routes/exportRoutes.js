@@ -151,7 +151,7 @@ router.post('/start', (req, res) => {
     let destDir = destination;
     if (!destDir) {
         const vaultRoot = getSetting('vault_root');
-        destDir = vaultRoot ? path.join(vaultRoot, 'exports') : path.join(__dirname, '..', '..', 'data', 'exports');
+        destDir = vaultRoot ? path.join(vaultRoot, 'Exports') : path.join(__dirname, '..', '..', 'Exports');
     }
     if (!fs.existsSync(destDir)) {
         fs.mkdirSync(destDir, { recursive: true });
