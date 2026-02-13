@@ -1431,6 +1431,52 @@ router.get('/viewer-status', (req, res) => {
     });
 });
 
+// GET /api/assets/:id/compare-targets — Get sibling assets in the same shot, grouped by role
+// Used by "Compare To →" context menu to show versions by role
+router.get('/:id/compare-targets', (req, res) => {
+    const db = getDb();
+    const asset = db.prepare('SELECT id, shot_id, project_id, role_id FROM assets WHERE id = ?').get(req.params.id);
+    if (!asset) return res.status(404).json({ error: 'Asset not found' });
+    if (!asset.shot_id) return res.json({ roles: [] }); // No shot context → nothing to compare
+
+    // Get all assets in the same shot (excluding the current one), with role info
+    const siblings = db.prepare(`
+        SELECT a.id, a.vault_name, a.version, a.file_ext, a.media_type, a.file_size,
+               a.role_id, r.name AS role_name, r.code AS role_code, r.icon AS role_icon, r.color AS role_color,
+               r.sort_order AS role_sort
+        FROM assets a
+        LEFT JOIN roles r ON a.role_id = r.id
+        WHERE a.shot_id = ? AND a.project_id = ? AND a.id != ?
+        ORDER BY r.sort_order ASC, r.name ASC, a.version DESC
+    `).all(asset.shot_id, asset.project_id, asset.id);
+
+    // Group by role
+    const roleMap = new Map();
+    for (const s of siblings) {
+        const key = s.role_id || 0; // 0 = unassigned
+        if (!roleMap.has(key)) {
+            roleMap.set(key, {
+                id: s.role_id,
+                name: s.role_name || 'Unassigned',
+                code: s.role_code || '',
+                icon: s.role_icon || '📁',
+                color: s.role_color || '#888888',
+                assets: []
+            });
+        }
+        roleMap.get(key).assets.push({
+            id: s.id,
+            vault_name: s.vault_name,
+            version: s.version,
+            file_ext: s.file_ext,
+            media_type: s.media_type,
+            file_size: s.file_size
+        });
+    }
+
+    res.json({ roles: [...roleMap.values()] });
+});
+
 // POST /api/assets/open-compare — Open multiple files in external viewer for A/B compare
 // Accepts optional `viewer` body param: 'mrviewer2' (default) or 'rv'
 // Accepts optional `mode` body param: 'compare' (default) or 'files' (just load all, no compare)

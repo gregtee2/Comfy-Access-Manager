@@ -2298,6 +2298,33 @@ label:has(input[type="checkbox"]) {
 .ctx-sub-item:hover {
     background: var(--bg-card-hover);
 }
+
+/* Nested submenu (e.g. Compare To → Role → Versions) */
+.ctx-sub-item.ctx-item-parent {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+}
+.ctx-sub-item.ctx-item-parent::after {
+    content: '\25B8';
+    margin-left: 12px;
+    font-size: 0.7rem;
+    opacity: 0.5;
+}
+.ctx-sub-item.ctx-item-parent > .ctx-submenu {
+    display: none;
+    position: absolute;
+    left: 100%;
+    top: -4px;
+}
+.ctx-sub-item.ctx-item-parent:hover > .ctx-submenu {
+    display: block;
+}
+.ctx-loading {
+    color: var(--text-muted);
+    pointer-events: none;
+    font-style: italic;
+}
 .ctx-sub-ext {
     font-weight: 600;
 }
