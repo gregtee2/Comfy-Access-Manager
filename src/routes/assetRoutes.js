@@ -985,7 +985,7 @@ function getMimeType(filename) {
 }
 
 // ═══════════════════════════════════════════
-//  mrViewer2 helpers
+//  External Viewer helpers (mrViewer2 + RV)
 // ═══════════════════════════════════════════
 
 function findMrViewer2() {
@@ -1037,6 +1037,118 @@ function findMrViewer2() {
         }
     }
     return null;
+}
+
+/**
+ * Find RV (Autodesk/ShotGrid media viewer) executable on this machine.
+ * Checks standard install locations per platform.
+ */
+function findRV() {
+    const isWin = process.platform === 'win32';
+    const isMac = process.platform === 'darwin';
+
+    if (isWin) {
+        // Windows: check Program Files for RV installations
+        const searchDirs = ['C:\\Program Files', 'C:\\Program Files (x86)'];
+        const folderPrefixes = ['Autodesk\\RV', 'Shotgun\\RV', 'ShotGrid\\RV', 'Shotgun RV', 'RV'];
+        for (const base of searchDirs) {
+            for (const prefix of folderPrefixes) {
+                const dir = path.join(base, prefix);
+                // Exact match
+                const exe = path.join(dir, 'bin', 'rv.exe');
+                if (fs.existsSync(exe)) return exe;
+            }
+            // Scan for versioned folders like "Autodesk/RV-2024.0.1"
+            try {
+                const autodesk = path.join(base, 'Autodesk');
+                if (fs.existsSync(autodesk)) {
+                    const dirs = fs.readdirSync(autodesk).filter(d => d.startsWith('RV'));
+                    for (const d of dirs) {
+                        const exe = path.join(autodesk, d, 'bin', 'rv.exe');
+                        if (fs.existsSync(exe)) return exe;
+                    }
+                }
+            } catch (e) { /* ignore */ }
+            try {
+                const shotgun = path.join(base, 'Shotgun');
+                if (fs.existsSync(shotgun)) {
+                    const dirs = fs.readdirSync(shotgun).filter(d => d.startsWith('RV'));
+                    for (const d of dirs) {
+                        const exe = path.join(shotgun, d, 'bin', 'rv.exe');
+                        if (fs.existsSync(exe)) return exe;
+                    }
+                }
+            } catch (e) { /* ignore */ }
+        }
+    } else if (isMac) {
+        // macOS: check /Applications for RV.app bundles
+        const candidates = [
+            '/Applications/RV.app/Contents/MacOS/RV',
+            '/Applications/Autodesk/RV.app/Contents/MacOS/RV',
+        ];
+        for (const c of candidates) {
+            if (fs.existsSync(c)) return c;
+        }
+        try {
+            const dirs = fs.readdirSync('/Applications').filter(d =>
+                d.startsWith('RV') && d.endsWith('.app')
+            );
+            for (const d of dirs) {
+                const exe = path.join('/Applications', d, 'Contents', 'MacOS', 'RV');
+                if (fs.existsSync(exe)) return exe;
+            }
+        } catch (e) { /* ignore */ }
+    } else {
+        // Linux: check common install locations
+        const candidates = [
+            '/usr/local/rv/bin/rv',
+            '/opt/rv/bin/rv',
+            '/usr/local/bin/rv',
+            '/usr/bin/rv',
+        ];
+        for (const c of candidates) {
+            if (fs.existsSync(c)) return c;
+        }
+        // Scan /opt for versioned RV installs (e.g. /opt/rv-2024.0.1/)
+        try {
+            const dirs = fs.readdirSync('/opt').filter(d => d.startsWith('rv'));
+            for (const d of dirs) {
+                const exe = path.join('/opt', d, 'bin', 'rv');
+                if (fs.existsSync(exe)) return exe;
+            }
+        } catch (e) { /* ignore */ }
+    }
+    return null;
+}
+
+/**
+ * Launch file(s) in RV.
+ * RV compare modes: -compare (A/B), -wipe (wipe), -tile (side by side)
+ */
+function launchInRV(exePath, filePaths, compareArgs) {
+    const { execFile, execSync, spawnSync } = require('child_process');
+    const cwd = path.dirname(exePath);
+
+    // Kill existing RV instance so we reuse the window slot
+    try {
+        if (process.platform === 'win32') {
+            execSync('taskkill /F /IM rv.exe', { windowsHide: true, stdio: 'ignore' });
+        } else {
+            execSync('pkill -x RV || pkill -x rv || true', { stdio: 'ignore' });
+        }
+    } catch (e) { /* not running, that's fine */ }
+
+    // Wait for process to fully die
+    if (process.platform === 'win32') {
+        spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Start-Sleep -Milliseconds 300'], { windowsHide: true });
+    } else {
+        spawnSync('sleep', ['0.3']);
+    }
+
+    const args = [...filePaths];
+    if (compareArgs) args.push(...compareArgs);
+    execFile(exePath, args, { cwd });
+    console.log(`[RV] Launched: ${filePaths.length} file(s)${compareArgs ? ' (' + compareArgs[0].replace('-', '') + ' mode)' : ''}`);
 }
 
 /**
@@ -1242,10 +1354,19 @@ function launchInMrv2(exePath, filePaths, compareArgs) {
     }
 }
 
-// POST /api/assets/open-compare — Open multiple files in mrViewer2 for A/B compare
+// GET /api/assets/viewer-status — Which external viewers are installed
+router.get('/viewer-status', (req, res) => {
+    res.json({
+        mrviewer2: !!findMrViewer2(),
+        rv: !!findRV(),
+    });
+});
+
+// POST /api/assets/open-compare — Open multiple files in external viewer for A/B compare
+// Accepts optional `viewer` body param: 'mrviewer2' (default) or 'rv'
 router.post('/open-compare', (req, res) => {
     const db = getDb();
-    const { ids } = req.body || {};
+    const { ids, viewer } = req.body || {};
     if (!ids || !Array.isArray(ids) || ids.length < 1) {
         return res.status(400).json({ error: 'Provide an array of asset ids' });
     }
@@ -1262,21 +1383,32 @@ router.post('/open-compare', (req, res) => {
         return res.status(404).json({ error: 'No valid files found' });
     }
 
-    const exePath = findMrViewer2();
-    if (!exePath) {
-        return res.status(404).json({ error: 'mrViewer2 not found. Install from https://mrv2.sourceforge.io/' });
+    if (viewer === 'rv') {
+        // RV compare mode
+        const exePath = findRV();
+        if (!exePath) {
+            return res.status(404).json({ error: 'RV not found. Install Autodesk RV / ShotGrid RV.' });
+        }
+        // RV: all files then -wipe flag
+        const compareArgs = filePaths.length >= 2 ? ['-wipe'] : null;
+        launchInRV(exePath, filePaths, compareArgs);
+        console.log(`[RV] Compare: ${filePaths.length} files`);
+        res.json({ success: true, count: filePaths.length, viewer: 'rv' });
+    } else {
+        // mrViewer2 compare mode (default)
+        const exePath = findMrViewer2();
+        if (!exePath) {
+            return res.status(404).json({ error: 'mrViewer2 not found. Install from https://mrv2.sourceforge.io/' });
+        }
+        let compareArgs = null;
+        if (filePaths.length >= 2) {
+            const bFile = filePaths.pop();
+            compareArgs = ['-compare', bFile, '-compareMode', 'Wipe'];
+        }
+        launchInMrv2(exePath, filePaths, compareArgs);
+        console.log(`[mrViewer2] Compare: ${filePaths.length + (compareArgs ? 1 : 0)} files`);
+        res.json({ success: true, count: filePaths.length + (compareArgs ? 1 : 0), viewer: 'mrviewer2' });
     }
-
-    // For compare: first file is A, second is B with wipe mode
-    let compareArgs = null;
-    if (filePaths.length >= 2) {
-        const bFile = filePaths.pop();
-        compareArgs = ['-compare', bFile, '-compareMode', 'Wipe'];
-    }
-    launchInMrv2(exePath, filePaths, compareArgs);
-
-    console.log(`[mrViewer2] Compare: ${filePaths.length + (compareArgs ? 1 : 0)} files`);
-    res.json({ success: true, count: filePaths.length + (compareArgs ? 1 : 0) });
 });
 
 // POST /api/assets/:id/open-external — Open file in external player
@@ -1289,6 +1421,7 @@ router.post('/:id/open-external', (req, res) => {
 
     const { player, customPath } = req.body || {};
     let exePath = null;
+    let playerName = '';
 
     if (player === 'custom' && customPath) {
         if (fs.existsSync(customPath)) {
@@ -1296,19 +1429,26 @@ router.post('/:id/open-external', (req, res) => {
         } else {
             return res.status(404).json({ error: `Custom player not found at: ${customPath}` });
         }
-        // Custom player — just launch normally
         const { execFile } = require('child_process');
         execFile(exePath, [asset.file_path], { cwd: path.dirname(exePath) });
+        playerName = path.basename(exePath);
+    } else if (player === 'rv') {
+        exePath = findRV();
+        if (!exePath) {
+            return res.status(404).json({ error: 'RV not found. Install Autodesk RV / ShotGrid RV.' });
+        }
+        launchInRV(exePath, [asset.file_path]);
+        playerName = 'RV';
     } else {
-        // mrViewer2 — reuse running instance
+        // mrViewer2 (default)
         exePath = findMrViewer2();
         if (!exePath) {
             return res.status(404).json({ error: 'mrViewer2 not found. Install from https://mrv2.sourceforge.io/' });
         }
         launchInMrv2(exePath, [asset.file_path]);
+        playerName = 'mrViewer2';
     }
 
-    const playerName = player === 'custom' ? path.basename(exePath) : 'mrViewer2';
     console.log(`[${playerName}] Launched: ${asset.vault_name}`);
     res.json({ success: true, path: asset.file_path, player: playerName });
 });

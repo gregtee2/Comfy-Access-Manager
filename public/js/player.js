@@ -143,6 +143,7 @@ function renderPlayer() {
         parts.push(`<span>📄 Originally: ${esc(asset.original_name)}</span>`);
     }
     parts.push(`<button class="player-mrv2-btn" onclick="openInMrViewer2(${asset.id})" title="Open in mrViewer2">🎬 mrViewer2</button>`);
+    parts.push(`<button class="player-mrv2-btn" onclick="openInRV(${asset.id})" title="Open in RV (ShotGrid)">🎬 RV</button>`);
     meta.innerHTML = parts.join('');
 }
 
@@ -183,12 +184,39 @@ async function openCompareInMrViewer2() {
     try {
         const res = await api('/api/assets/open-compare', {
             method: 'POST',
-            body: { ids: state.selectedAssets }
+            body: { ids: state.selectedAssets, viewer: 'mrviewer2' }
         });
         showToast(`Loaded ${res.count} clips in mrViewer2 — use Panel → Compare → Wipe`);
         window.blur();
     } catch (err) {
         showToast('Failed to launch compare: ' + err.message, 5000);
+    }
+}
+
+async function openInRV(assetId) {
+    try {
+        await api(`/api/assets/${assetId}/open-external`, { method: 'POST', body: { player: 'rv' } });
+        showToast('Launched in RV');
+        window.blur();
+    } catch (err) {
+        showToast('Failed to launch RV: ' + err.message, 5000);
+    }
+}
+
+async function openCompareInRV() {
+    if (state.selectedAssets.length < 2) {
+        showToast('Select at least 2 clips to compare (Ctrl-click or Shift-click)', 4000);
+        return;
+    }
+    try {
+        const res = await api('/api/assets/open-compare', {
+            method: 'POST',
+            body: { ids: state.selectedAssets, viewer: 'rv' }
+        });
+        showToast(`Loaded ${res.count} clips in RV — wipe mode`);
+        window.blur();
+    } catch (err) {
+        showToast('Failed to launch RV compare: ' + err.message, 5000);
     }
 }
 
@@ -383,6 +411,8 @@ window.playerNext = playerNext;
 window.openInExternalPlayer = openInExternalPlayer;
 window.openInMrViewer2 = openInMrViewer2;
 window.openCompareInMrViewer2 = openCompareInMrViewer2;
+window.openInRV = openInRV;
+window.openCompareInRV = openCompareInRV;
 window.openRoleCompare = openRoleCompare;
 window.setCompareMode = setCompareMode;
 window.setCompareActive = setCompareActive;

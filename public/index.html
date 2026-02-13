@@ -289,17 +289,18 @@
 
                 <div class="settings-section">
                     <h3>🎬 External Player</h3>
-                    <label>Default Player <span class="help-icon" data-tip="Choose how media files open when clicked. 'Browser' uses the built-in player. mrViewer2 supports EXR, ProRes, HDR, and professional formats.">?</span></label>
+                    <label>Default Player <span class="help-icon" data-tip="Choose how media files open when clicked. 'Browser' uses the built-in player. mrViewer2 and RV support EXR, ProRes, HDR, and professional formats.">?</span></label>
                     <select id="settingDefaultPlayer" class="setting-select" title="Player used when clicking an asset">
                         <option value="browser">Browser (built-in)</option>
                         <option value="mrviewer2">mrViewer2</option>
+                        <option value="rv">RV (ShotGrid)</option>
                         <option value="custom">Custom...</option>
                     </select>
                     <div id="customPlayerRow" class="input-row" style="display:none; margin-top:6px;">
                         <input type="text" id="settingCustomPlayerPath" placeholder="C:\\path\\to\\player.exe">
                         <button onclick="saveSettings()">Save</button>
                     </div>
-                    <p class="hint">Files will open in this player when clicked. mrViewer2 supports EXR, ProRes, and all common formats.</p>
+                    <p class="hint">Files will open in this player when clicked. mrViewer2 and RV both support EXR, ProRes, and professional formats. RV also opens from right-click → "🎬 RV".</p>
                 </div>
 
                 <div class="settings-section">

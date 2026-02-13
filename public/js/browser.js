@@ -703,6 +703,7 @@ async function showContextMenu(event, assetIdx) {
             const ext = (asset.file_ext || '').toLowerCase();
             html += `<div class="ctx-item" data-action="play">▶️ Play ${ext}</div>`;
             html += `<div class="ctx-item" data-action="mrv2">🎬 mrViewer2 ${ext}</div>`;
+            html += `<div class="ctx-item" data-action="rv">🎬 RV ${ext}</div>`;
         } else {
             // Multiple formats — show sub-menus
             html += `<div class="ctx-item ctx-item-parent">▶️ Play`;
@@ -720,6 +721,14 @@ async function showContextMenu(event, assetIdx) {
                 html += `<div class="ctx-sub-item" data-mrv2-id="${f.id}"><span class="ctx-sub-ext">${ext}</span><span class="ctx-sub-size">${fmtSize(f.file_size)}</span></div>`;
             }
             html += `</div></div>`;
+
+            html += `<div class="ctx-item ctx-item-parent">🎬 RV`;
+            html += `<div class="ctx-submenu">`;
+            for (const f of formats) {
+                const ext = (f.file_ext || '').toLowerCase();
+                html += `<div class="ctx-sub-item" data-rv-id="${f.id}"><span class="ctx-sub-ext">${ext}</span><span class="ctx-sub-size">${fmtSize(f.file_size)}</span></div>`;
+            }
+            html += `</div></div>`;
         }
         html += `<div class="ctx-item" data-action="star">${asset.starred ? '☆' : '⭐'} ${asset.starred ? 'Unstar' : 'Star'}</div>`;
         html += `<div class="ctx-separator"></div>`;
@@ -731,7 +740,8 @@ async function showContextMenu(event, assetIdx) {
     html += `<div class="ctx-item" data-action="export">📤 Export${!isSingle ? ` (${count})` : ''}</div>`;
 
     if (count >= 2) {
-        html += `<div class="ctx-item" data-action="compare">🎬 Compare in mrViewer2 (${count})</div>`;
+        html += `<div class="ctx-item" data-action="compare-mrv2">🎬 Compare in mrViewer2 (${count})</div>`;
+        html += `<div class="ctx-item" data-action="compare-rv">🎬 Compare in RV (${count})</div>`;
     }
 
     html += `<div class="ctx-separator"></div>`;
@@ -749,25 +759,29 @@ async function showContextMenu(event, assetIdx) {
 
     // Wire up click handlers
     menu.addEventListener('click', (e) => {
-        const item = e.target.closest('[data-action], [data-play-id], [data-mrv2-id]');
+        const item = e.target.closest('[data-action], [data-play-id], [data-mrv2-id], [data-rv-id]');
         if (!item) return;
         dismissContextMenu();
 
         const action = item.dataset.action;
         const playId = item.dataset.playId;
         const mrv2Id = item.dataset.mrv2Id;
+        const rvId = item.dataset.rvId;
 
         if (playId) { window.openPlayerById?.(parseInt(playId)); return; }
         if (mrv2Id) { window.openInMrViewer2?.(parseInt(mrv2Id)); return; }
+        if (rvId) { window.openInRV?.(parseInt(rvId)); return; }
 
         switch (action) {
             case 'play': openPlayer(assetIdx); break;
             case 'mrv2': window.openInMrViewer2?.(asset.id); break;
+            case 'rv': window.openInRV?.(asset.id); break;
             case 'star': toggleStar(asset.id); break;
             case 'move': showMoveToSequenceModal(); break;
             case 'role': showAssignRoleModal(); break;
             case 'export': window.showExportModal?.(); break;
-            case 'compare': window.openCompareInMrViewer2?.(); break;
+            case 'compare-mrv2': window.openCompareInMrViewer2?.(); break;
+            case 'compare-rv': window.openCompareInRV?.(); break;
             case 'selectAll': selectAllAssets(); break;
             case 'deselectAll': clearAssetSelection(); break;
             case 'delete': bulkDeleteAssets(); break;
