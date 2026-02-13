@@ -231,6 +231,21 @@ async function updateRenamePreview() {
     const preview = document.getElementById('renamePreview');
     const projectId = document.getElementById('importProject').value;
     const customName = document.getElementById('importCustomName')?.value?.trim();
+    const keepOriginal = document.getElementById('keepOriginalNames')?.checked;
+
+    // Toggle naming options visibility
+    const namingOpts = document.getElementById('namingOptions');
+    if (namingOpts) namingOpts.style.display = keepOriginal ? 'none' : '';
+
+    if (keepOriginal) {
+        if (state.selectedFiles.length) {
+            const first = state.selectedFiles[0];
+            let txt = `${first.name}  →  ${first.name} (unchanged)`;
+            if (state.selectedFiles.length > 1) txt += `\n  ... and ${state.selectedFiles.length - 1} more files`;
+            preview.textContent = txt;
+        }
+        return;
+    }
 
     if (!state.selectedFiles.length || !projectId) {
         preview.textContent = 'Select files and project to preview...';
@@ -343,6 +358,7 @@ async function executeImport() {
                 take_number: parseInt(take),
                 custom_name: customName,
                 keep_originals: keepOriginals,
+                keep_original_names: !!document.getElementById('keepOriginalNames')?.checked,
                 register_in_place: registerInPlace,
                 generate_derivatives: generateDerivatives,
                 derivative_formats: derivativeFormats,
@@ -388,7 +404,7 @@ async function executeImport() {
     }
 
     btn.disabled = false;
-    btn.textContent = '📥 Import & Rename';
+    btn.textContent = document.getElementById('keepOriginalNames')?.checked ? '📥 Import' : '📥 Import & Rename';
     setTimeout(() => { progress.style.display = 'none'; }, 2000);
 }
 
@@ -458,6 +474,14 @@ function importToProject() {
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('importCustomName')?.addEventListener('input', updateRenamePreview);
     document.getElementById('importTake')?.addEventListener('input', updateRenamePreview);
+
+    // Keep original filenames toggle
+    document.getElementById('keepOriginalNames')?.addEventListener('change', () => {
+        const btn = document.getElementById('importBtn');
+        const keepOrig = document.getElementById('keepOriginalNames').checked;
+        btn.textContent = keepOrig ? '📥 Import' : '📥 Import & Rename';
+        updateRenamePreview();
+    });
 
     // Derivative checkbox toggle
     const derivCb = document.getElementById('generateDerivatives');

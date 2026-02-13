@@ -203,6 +203,7 @@ router.post('/import', async (req, res) => {
     const derivativeJobIds = [];
 
     const registerInPlace = !!req.body.register_in_place;
+    const keepOriginalNames = !!req.body.keep_original_names;
     const generateDerivatives = !!req.body.generate_derivatives;
     const derivativeFormats = Array.isArray(req.body.derivative_formats) ? req.body.derivative_formats : [];
     const derivativeFps = parseInt(req.body.derivative_fps) || 24;
@@ -225,21 +226,28 @@ router.post('/import', async (req, res) => {
             const seqOriginalName = `${seq.baseName}${seq.ext}`;
             const { type: mediaType } = detectMediaType(seqOriginalName);
 
-            const naming = require('../utils/naming');
-            const nameResult = naming.generateVaultName({
-                originalName: seqOriginalName,
-                projectCode: project.code,
-                sequenceCode: sequence?.code,
-                shotCode: shot?.code,
-                roleCode: role?.code,
-                takeNumber: take_number || 1,
-                mediaType,
-                customName: custom_name || null,
-                counter: 1,
-            });
-            // Base name without extension: "EDA1500_comp_v001"
-            const vaultBaseName = path.basename(nameResult.vaultName, nameResult.ext);
-            const vaultExt = nameResult.ext;  // ".exr"
+            let vaultBaseName, vaultExt;
+            if (keepOriginalNames) {
+                // Keep original sequence naming
+                vaultBaseName = seq.baseName;
+                vaultExt = seq.ext;
+            } else {
+                const naming = require('../utils/naming');
+                const nameResult = naming.generateVaultName({
+                    originalName: seqOriginalName,
+                    projectCode: project.code,
+                    sequenceCode: sequence?.code,
+                    shotCode: shot?.code,
+                    roleCode: role?.code,
+                    takeNumber: take_number || 1,
+                    mediaType,
+                    customName: custom_name || null,
+                    counter: 1,
+                });
+                // Base name without extension: "EDA1500_comp_v001"
+                vaultBaseName = path.basename(nameResult.vaultName, nameResult.ext);
+                vaultExt = nameResult.ext;  // ".exr"
+            }
 
             let firstFramePath, framePatternString, totalSize = 0;
 
@@ -398,18 +406,22 @@ router.post('/import', async (req, res) => {
                 relativePath = vaultPath;
                 finalMediaType = mediaType;
 
-                const naming = require('../utils/naming');
-                const nameResult = naming.generateVaultName({
-                    originalName,
-                    projectCode: project.code,
-                    sequenceCode: sequence?.code,
-                    shotCode: shot?.code,
-                    roleCode: role?.code,
-                    takeNumber: take_number || (i + 1),
-                    customName: singles.length === 1 && !detectedSeqs.length ? custom_name : null,
-                    counter: i + 1,
-                });
-                vaultName = nameResult.vaultName;
+                if (keepOriginalNames) {
+                    vaultName = originalName;
+                } else {
+                    const naming = require('../utils/naming');
+                    const nameResult = naming.generateVaultName({
+                        originalName,
+                        projectCode: project.code,
+                        sequenceCode: sequence?.code,
+                        shotCode: shot?.code,
+                        roleCode: role?.code,
+                        takeNumber: take_number || (i + 1),
+                        customName: singles.length === 1 && !detectedSeqs.length ? custom_name : null,
+                        counter: i + 1,
+                    });
+                    vaultName = nameResult.vaultName;
+                }
             } else {
                 const imported = FileService.importFile(filePath, {
                     projectCode: project.code,
@@ -421,6 +433,7 @@ router.post('/import', async (req, res) => {
                     template,
                     counter: i + 1,
                     keepOriginals: !!req.body.keep_originals,
+                    keepOriginalName: keepOriginalNames,
                 });
                 vaultPath = imported.vaultPath;
                 vaultName = imported.vaultName;

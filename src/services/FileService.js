@@ -83,20 +83,26 @@ class FileService {
         // Auto-detect counter for legacy templates (non-role naming)
         const counter = opts.counter || getNextVersion(vaultDir, '');
 
-        // Generate structured name
-        const { vaultName } = generateVaultName({
-            originalName,
-            projectCode: opts.projectCode,
-            sequenceCode: opts.sequenceCode,
-            shotCode: opts.shotCode,
-            roleCode: opts.roleCode,
-            takeNumber: opts.takeNumber,
-            version,
-            mediaType,
-            counter,
-            template: opts.template,
-            customName: opts.customName,
-        });
+        // Generate structured name (or keep original)
+        let vaultName;
+        if (opts.keepOriginalName) {
+            vaultName = originalName;
+        } else {
+            const result = generateVaultName({
+                originalName,
+                projectCode: opts.projectCode,
+                sequenceCode: opts.sequenceCode,
+                shotCode: opts.shotCode,
+                roleCode: opts.roleCode,
+                takeNumber: opts.takeNumber,
+                version,
+                mediaType,
+                counter,
+                template: opts.template,
+                customName: opts.customName,
+            });
+            vaultName = result.vaultName;
+        }
 
         const destPath = path.join(vaultDir, vaultName);
 

@@ -193,12 +193,19 @@
                         <input type="number" id="importTake" value="1" min="1" title="Take/version number">
                     </div>
 
-                    <label>Custom Name (optional) <span class="help-icon" data-tip="Override the auto-generated ShotGrid name. Leave blank to use the standard naming template.">?</span></label>
-                    <input type="text" id="importCustomName" placeholder="Leave blank for auto-naming" title="Custom filename override — leave blank for ShotGrid auto-naming">
+                    <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:8px 0 4px 0;">
+                        <input type="checkbox" id="keepOriginalNames">
+                        <span>📎 Keep original filenames <span class="help-icon" data-tip="Import files without renaming — the original filename is preserved as-is. Files are still organized into the vault folder structure.">?</span></span>
+                    </label>
 
-                    <div class="rename-preview">
-                        <h4>📝 Name Preview</h4>
-                        <div id="renamePreview" class="preview-box">Select files and project to preview...</div>
+                    <div id="namingOptions">
+                        <label>Custom Name (optional) <span class="help-icon" data-tip="Override the auto-generated ShotGrid name. Leave blank to use the standard naming template.">?</span></label>
+                        <input type="text" id="importCustomName" placeholder="Leave blank for auto-naming" title="Custom filename override — leave blank for ShotGrid auto-naming">
+
+                        <div class="rename-preview">
+                            <h4>📝 Name Preview</h4>
+                            <div id="renamePreview" class="preview-box">Select files and project to preview...</div>
+                        </div>
                     </div>
 
                     <div class="import-mode-group" style="margin:12px 0; display:flex; flex-direction:column; gap:8px;">
