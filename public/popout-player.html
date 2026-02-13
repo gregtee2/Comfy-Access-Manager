@@ -185,9 +185,9 @@
             <span class="bar-meta" id="barMeta"></span>
         </div>
         <div class="bar-center">
-            <button class="nav-btn" id="btnPrev" title="Previous (PageUp / ←)">◀</button>
+            <button class="nav-btn" id="btnPrev" title="Previous clip (PageUp)">◀</button>
             <span class="bar-index" id="barIndex">—</span>
-            <button class="nav-btn" id="btnNext" title="Next (PageDown / →)">▶</button>
+            <button class="nav-btn" id="btnNext" title="Next clip (PageDown)">▶</button>
         </div>
         <div class="bar-right">
             <button class="bar-btn" id="btnOverlays" title="Toggle HUD overlays">👁 HUD</button>
@@ -301,11 +301,16 @@
 
         if (asset.media_type === 'video') {
             const videoUrl = needsTranscode ? `${origin}/api/assets/${asset.id}/stream` : fileUrl;
-            content.innerHTML = `<video controls autoplay loop src="${videoUrl}" style="max-width:100%;max-height:100%;object-fit:contain;"></video>`;
+            content.innerHTML = `<video autoplay loop src="${videoUrl}" style="max-width:100%;max-height:100%;object-fit:contain;cursor:pointer;"></video>`;
             // Start frame counter after video loads
             const video = content.querySelector('video');
             if (video) {
                 video.addEventListener('loadedmetadata', () => startFrameCounter(video, asset));
+                // Click to toggle play/pause (replaces native controls)
+                video.addEventListener('click', (e) => {
+                    e.preventDefault();
+                    video.paused ? video.play() : video.pause();
+                });
             }
         } else if (asset.media_type === 'image' || asset.media_type === 'exr') {
             content.innerHTML = `<img src="${fileUrl}" alt="${esc(asset.vault_name)}" style="max-width:100%;max-height:100%;object-fit:contain;">`;
@@ -466,12 +471,34 @@
     });
 
     // ═══════════════════════════════════════
-    //  KEYBOARD
+    //  KEYBOARD — matches main player behavior:
+    //    Arrow Left/Right = frame step (video) or prev/next (image)
+    //    PageUp/PageDown = always prev/next clip
+    //    Space = toggle play/pause
+    //    J/L = frame step (alternate keys)
     // ═══════════════════════════════════════
     document.addEventListener('keydown', (e) => {
+        const video = document.querySelector('#mediaContent video');
+
         switch (e.key) {
-            case 'ArrowRight': case 'PageDown': goNext(); break;
-            case 'ArrowLeft': case 'PageUp': goPrev(); break;
+            case 'ArrowRight':
+                e.preventDefault();
+                if (video) { frameStep(video, 1); }
+                else { goNext(); }
+                break;
+            case 'ArrowLeft':
+                e.preventDefault();
+                if (video) { frameStep(video, -1); }
+                else { goPrev(); }
+                break;
+            case 'l': case 'L':
+                if (video) { e.preventDefault(); frameStep(video, 1); }
+                break;
+            case 'j': case 'J':
+                if (video) { e.preventDefault(); frameStep(video, -1); }
+                break;
+            case 'PageDown': goNext(); break;
+            case 'PageUp': goPrev(); break;
             case 'f': case 'F': togglePresentation(); break;
             case 'F11': e.preventDefault(); togglePresentation(); break;
             case 'Escape':
@@ -479,17 +506,24 @@
                 break;
             case ' ':
                 e.preventDefault();
-                const video = document.querySelector('#mediaContent video');
                 if (video) video.paused ? video.play() : video.pause();
                 break;
             case 'h': case 'H':
-                // Toggle HUD visibility in presentation mode
                 if (isPresentation) {
                     document.body.classList.toggle('hud-hidden');
                 }
                 break;
         }
     });
+
+    /** Step video by one frame (±delta) */
+    function frameStep(video, delta) {
+        video.pause();
+        const asset = assets[currentIndex];
+        const fps = asset?.fps || 24;
+        const frameDur = 1 / fps;
+        video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + delta * frameDur));
+    }
 
     // ═══════════════════════════════════════
     //  HINT TOAST
