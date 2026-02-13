@@ -69,7 +69,7 @@ export function openPlayer(index) {
 }
 
 function closePlayer() {
-    destroyFrameCache();
+    destroyAllCaches();
     destroyCachedPlayback();
     document.getElementById('playerModal').style.display = 'none';
     document.removeEventListener('keydown', playerKeyHandler);
@@ -215,7 +215,9 @@ function playerPrev() {
 }
 
 function renderPlayer() {
-    destroyFrameCache();
+    // Abort current build but keep pool intact for instant clip switching
+    if (frameCacheAbort) { frameCacheAbort.abort(); frameCacheAbort = null; }
+    frameCache = null;
     destroyCachedPlayback();
     const asset = state.playerAssets[state.playerIndex];
     if (!asset) return;
@@ -911,15 +913,58 @@ function openPlayerDirect() {
 //  CUSTOM VIDEO TRANSPORT CONTROLS + FRAME CACHE
 // ═══════════════════════════════════════════
 
-// Global frame cache state (cleared on asset change)
+// Active frame cache pointer (points to an entry in the pool)
 let frameCache = null;  // { frames: ImageBitmap[], fps, duration, width, height, ready }
-let frameCacheAbort = null;  // AbortController to cancel caching
+let frameCacheAbort = null;  // AbortController for current clip's cache build
 
+// ─── Multi-Clip Cache Pool (RV-style pre-buffering) ───
+const frameCachePool = new Map();  // Map<assetId, { frames, fps, duration, width, height, ready }>
+const precacheAborts = new Map();  // Map<assetId, AbortController>
+const MAX_POOL_SIZE = 5;           // Max clips to keep cached in memory
+
+/** Clear active cache pointer + abort current build (pool entries preserved) */
 function destroyFrameCache() {
     if (frameCacheAbort) { frameCacheAbort.abort(); frameCacheAbort = null; }
-    if (frameCache?.frames) {
-        for (const bmp of frameCache.frames) { if (bmp) bmp.close(); }
+    frameCache = null;  // Don't close bitmaps — they live in the pool
+}
+
+/** Close all ImageBitmaps in a cache entry (handles gap-fill shared refs) */
+function _closeCacheEntry(entry) {
+    if (!entry?.frames) return;
+    const unique = new Set(entry.frames.filter(Boolean));
+    for (const bmp of unique) { try { bmp.close(); } catch {} }
+}
+
+/** Remove a specific clip from the cache pool and free its memory */
+function evictFromPool(assetId) {
+    const entry = frameCachePool.get(assetId);
+    if (entry) { _closeCacheEntry(entry); frameCachePool.delete(assetId); }
+    const ac = precacheAborts.get(assetId);
+    if (ac) { ac.abort(); precacheAborts.delete(assetId); }
+}
+
+/** Evict furthest-from-current clips when pool exceeds MAX_POOL_SIZE */
+function evictOldCaches(keepAssetId) {
+    if (frameCachePool.size <= MAX_POOL_SIZE) return;
+    const currentIdx = state.playerAssets?.findIndex(a => a.id === keepAssetId) ?? -1;
+    const ids = [...frameCachePool.keys()].filter(id => id !== keepAssetId);
+    ids.sort((a, b) => {
+        const aIdx = state.playerAssets?.findIndex(x => x.id === a) ?? 999;
+        const bIdx = state.playerAssets?.findIndex(x => x.id === b) ?? 999;
+        return Math.abs(bIdx - currentIdx) - Math.abs(aIdx - currentIdx);
+    });
+    while (frameCachePool.size > MAX_POOL_SIZE && ids.length) {
+        evictFromPool(ids.shift());
     }
+}
+
+/** Destroy ALL caches (pool + active) — call on player close */
+function destroyAllCaches() {
+    for (const [, ac] of precacheAborts) ac.abort();
+    precacheAborts.clear();
+    if (frameCacheAbort) { frameCacheAbort.abort(); frameCacheAbort = null; }
+    for (const [, entry] of frameCachePool) _closeCacheEntry(entry);
+    frameCachePool.clear();
     frameCache = null;
 }
 
@@ -961,11 +1006,9 @@ function showCachedFrame(timePos, canvas, ctx, videoEl) {
  * to capture every decoded frame sequentially (GPU-accelerated, no redundant seeking).
  * Like RV/DJV: sequential decode is 10-20x faster than seek-per-frame.
  */
-async function buildFrameCache(videoSrc, fps, onProgress) {
-    destroyFrameCache();
-
-    const ac = new AbortController();
-    frameCacheAbort = ac;
+async function buildFrameCache(videoSrc, fps, onProgress, externalAbort) {
+    const ac = externalAbort || new AbortController();
+    if (!externalAbort) frameCacheAbort = ac;  // Only track global for active clip builds
 
     return new Promise((resolve) => {
         const extractor = document.createElement('video');
@@ -1050,10 +1093,10 @@ async function buildFrameCache(videoSrc, fps, onProgress) {
                     // Fill any gaps with nearest neighbor (some frames may have been skipped at high speed)
                     _fillFrameGaps(frames);
 
-                    frameCache = { frames, fps, duration, width: w, height: h, ready: true };
+                    const result = { frames, fps, duration, width: w, height: h, ready: true };
                     if (onProgress) onProgress(totalFrames, totalFrames);
                     extractor.src = ''; // Release video resource
-                    resolve(frameCache);
+                    resolve(result);
                 });
             } else {
                 // ─── Fallback: seek per frame (slow but universal) ───
@@ -1073,10 +1116,10 @@ async function buildFrameCache(videoSrc, fps, onProgress) {
                         if (onProgress && captured % 5 === 0) onProgress(captured, totalFrames);
                     }
                     if (ac.signal.aborted) { resolve(null); return; }
-                    frameCache = { frames, fps, duration, width: w, height: h, ready: true };
+                    const result = { frames, fps, duration, width: w, height: h, ready: true };
                     if (onProgress) onProgress(totalFrames, totalFrames);
                     extractor.src = '';
-                    resolve(frameCache);
+                    resolve(result);
                 })();
             }
         });
@@ -1098,6 +1141,54 @@ function _fillFrameGaps(frames) {
     for (let i = frames.length - 1; i >= 0; i--) {
         if (frames[i]) lastGood = frames[i];
         else if (lastGood) frames[i] = lastGood;
+    }
+}
+
+/**
+ * Pre-cache adjacent clips (next + prev) so clip switching is instant.
+ * Runs serially in the background after the current clip finishes caching.
+ */
+async function precacheAdjacent(currentAssetId) {
+    const idx = state.playerAssets?.findIndex(a => a.id === currentAssetId) ?? -1;
+    if (idx < 0 || !state.playerAssets) return;
+
+    // Determine which adjacent clips to pre-cache
+    const adjacentIds = new Set();
+    if (idx + 1 < state.playerAssets.length) adjacentIds.add(state.playerAssets[idx + 1].id);
+    if (idx - 1 >= 0) adjacentIds.add(state.playerAssets[idx - 1].id);
+
+    // Cancel precaches for clips that are no longer adjacent
+    for (const [id, ac] of precacheAborts) {
+        if (!adjacentIds.has(id)) { ac.abort(); precacheAborts.delete(id); }
+    }
+
+    const browserCodecs = new Set(['h264', 'h265', 'hevc', 'vp8', 'vp9', 'av1', 'avc', 'avc1']);
+
+    for (const adjId of adjacentIds) {
+        if (frameCachePool.has(adjId)) continue;    // Already cached
+        if (precacheAborts.has(adjId)) continue;    // Already being cached
+
+        const asset = state.playerAssets.find(a => a.id === adjId);
+        if (!asset || asset.media_type !== 'video') continue;
+
+        const needsTranscode = asset.codec && !browserCodecs.has(asset.codec.toLowerCase());
+        const videoUrl = needsTranscode
+            ? `/api/assets/${asset.id}/stream`
+            : `/api/assets/${asset.id}/file`;
+        const clipFps = asset.fps || 24;
+
+        const ac = new AbortController();
+        precacheAborts.set(adjId, ac);
+
+        try {
+            const cache = await buildFrameCache(videoUrl, clipFps, null, ac);
+            if (cache && !ac.signal.aborted) {
+                frameCachePool.set(adjId, cache);
+                evictOldCaches(currentAssetId);
+            }
+        } catch { /* ignore precache failures */ }
+
+        precacheAborts.delete(adjId);
     }
 }
 
@@ -1267,9 +1358,13 @@ function initTransportControls(container, fps) {
         useCache = true;
         video.pause();
 
-        // Capture video display rect BEFORE hiding it (hidden elements return 0×0)
-        const videoRect = video.getBoundingClientRect();
-        scrubCanvas._cachedRect = videoRect;
+        // Capture display rect — prefer video, fallback to container (pre-cache hit case)
+        let rect = video.getBoundingClientRect();
+        if (!rect.width || !rect.height) {
+            const cont = video.parentElement || document.getElementById('playerContent');
+            rect = cont.getBoundingClientRect();
+        }
+        scrubCanvas._cachedRect = rect;
 
         video.style.visibility = 'hidden';
         scrubCanvas.style.display = 'block';
@@ -1404,26 +1499,46 @@ function initTransportControls(container, fps) {
 
     // Start frame caching in background after video loads
     video.addEventListener('loadedmetadata', () => {
+        const currentAssetId = state.playerAssets?.[state.playerIndex]?.id;
         const totalFrames = Math.ceil(video.duration * fps);
+
+        // ─── Pool HIT: instant activation (pre-cached by adjacent clip pre-fetch) ───
+        if (currentAssetId && frameCachePool.has(currentAssetId)) {
+            frameCache = frameCachePool.get(currentAssetId);
+            if (cacheBar) cacheBar.style.display = 'none';
+            activateCache();
+            precacheAdjacent(currentAssetId);
+            return;
+        }
+
+        // ─── Pool MISS: build cache for this clip ───
         if (totalFrames > 1800) {
             if (cacheBar) { cacheBar.title = 'Clip too long for frame cache (>60s)'; cacheFill.style.width = '0%'; }
             return;
         }
         if (cacheBar) { cacheBar.style.display = ''; }
-        buildFrameCache(video.src, fps, (done, total) => {
+
+        const cachePromise = buildFrameCache(video.src, fps, (done, total) => {
             if (done === -1) {
                 if (cacheBar) cacheBar.style.display = 'none';
                 return;
             }
             if (cacheFill) cacheFill.style.width = ((done / total) * 100) + '%';
-            if (done >= total) {
-                // Cache complete — switch to cached playback engine
-                activateCache();
-                if (cacheBar) {
-                    setTimeout(() => { cacheBar.style.opacity = '0'; }, 500);
-                    setTimeout(() => { cacheBar.style.display = 'none'; }, 1000);
-                }
+        });
+
+        cachePromise.then(result => {
+            if (!result) return;
+            frameCache = result;
+            if (currentAssetId) {
+                frameCachePool.set(currentAssetId, result);
+                evictOldCaches(currentAssetId);
             }
+            activateCache();
+            if (cacheBar) {
+                setTimeout(() => { cacheBar.style.opacity = '0'; }, 500);
+                setTimeout(() => { cacheBar.style.display = 'none'; }, 1000);
+            }
+            if (currentAssetId) precacheAdjacent(currentAssetId);
         });
     }, { once: true });
 }
