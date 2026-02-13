@@ -96,9 +96,10 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
             curl -L -o tools/mrv2-installer.dmg \
                 "https://sourceforge.net/projects/mrv2/files/latest/download" \
                 --user-agent "Mozilla/5.0 (Macintosh; Intel Mac OS X 10_15_7)" \
-                --progress-bar
+                --progress-bar --max-redirs 10
 
-            if [ -f tools/mrv2-installer.dmg ] && [ -s tools/mrv2-installer.dmg ]; then
+            # Verify we got a real disk image, not an HTML redirect page
+            if [ -f tools/mrv2-installer.dmg ] && [ -s tools/mrv2-installer.dmg ] && ! file tools/mrv2-installer.dmg | grep -q "HTML"; then
                 echo "         Mounting disk image..."
                 MOUNT_OUTPUT=$(hdiutil attach tools/mrv2-installer.dmg -nobrowse 2>&1)
                 VOLUME=$(echo "$MOUNT_OUTPUT" | grep "/Volumes/" | awk -F'\t' '{print $NF}' | head -1)
@@ -127,8 +128,11 @@ if [[ "$OSTYPE" == "darwin"* ]]; then
                 fi
                 rm -f tools/mrv2-installer.dmg 2>/dev/null
             else
-                echo "         Download failed."
-                echo "         Install manually from: https://mrv2.sourceforge.io/"
+                echo "         Auto-download failed (SourceForge redirect issue)."
+                echo "         Download manually from: https://mrv2.sourceforge.io/"
+                echo "         Then drag the app into /Applications/ and run:"
+                echo "           xattr -cr /Applications/mrv2*.app"
+                rm -f tools/mrv2-installer.dmg 2>/dev/null
             fi
         else
             echo "         Skipping. You can install later from: https://mrv2.sourceforge.io/"
