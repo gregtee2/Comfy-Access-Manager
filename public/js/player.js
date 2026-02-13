@@ -1054,14 +1054,19 @@ async function _buildCacheWebCodecs(videoSrc, fps, onProgress, ac) {
         };
         ac.signal.addEventListener('abort', onAbort, { once: true });
 
-        file.onReady = (info) => {
+        file.onReady = async (info) => {
             if (ac.signal.aborted) return;
 
             const track = info.videoTracks?.[0];
             if (!track) { resolve(null); return; }
 
-            w = track.track_width;
-            h = track.track_height;
+            // Use coded dimensions from video sample entry, falling back to track dimensions
+            const trak = file.getTrackById(track.id);
+            const sampleEntry = trak?.mdia?.minf?.stbl?.stsd?.entries?.[0];
+            w = sampleEntry?.width || track.track_width || track.video?.width || 0;
+            h = sampleEntry?.height || track.track_height || track.video?.height || 0;
+            if (!w || !h) { console.warn('[FrameCache] Could not determine video dimensions'); resolve(null); return; }
+
             duration = info.duration / info.timescale;
             totalFrames = Math.ceil(duration * fps);
             totalSamplesExpected = track.nb_samples;
@@ -1076,7 +1081,34 @@ async function _buildCacheWebCodecs(videoSrc, fps, onProgress, ac) {
             frames = new Array(totalFrames).fill(null);
 
             // Extract codec description (avcC / hvcC / vpcC / av1C box)
-            const description = _getCodecDescription(file, track);
+            const description = _getCodecDescription(trak);
+
+            // Build config and validate with isConfigSupported() before calling configure()
+            let config = {
+                codec: track.codec,
+                codedWidth: w,
+                codedHeight: h,
+                hardwareAcceleration: 'prefer-hardware'
+            };
+            if (description) config.description = description;
+
+            // Check if config is supported; if not, retry without HW accel and/or description
+            let supported = await VideoDecoder.isConfigSupported(config).catch(() => ({ supported: false }));
+            if (!supported.supported) {
+                console.warn('[FrameCache] Config rejected with HW accel, trying without. codec:', track.codec, 'dims:', w, 'x', h);
+                config.hardwareAcceleration = 'no-preference';
+                supported = await VideoDecoder.isConfigSupported(config).catch(() => ({ supported: false }));
+            }
+            if (!supported.supported && description) {
+                console.warn('[FrameCache] Config rejected with description, trying without');
+                delete config.description;
+                supported = await VideoDecoder.isConfigSupported(config).catch(() => ({ supported: false }));
+            }
+            if (!supported.supported) {
+                console.warn('[FrameCache] Codec not supported by WebCodecs:', track.codec);
+                resolve(null);
+                return;
+            }
 
             decoder = new VideoDecoder({
                 output: (frame) => {
@@ -1103,14 +1135,7 @@ async function _buildCacheWebCodecs(videoSrc, fps, onProgress, ac) {
                 }
             });
 
-            const config = {
-                codec: track.codec,
-                codedWidth: w,
-                codedHeight: h,
-                hardwareAcceleration: 'prefer-hardware'
-            };
-            if (description) config.description = description;
-            decoder.configure(config);
+            decoder.configure(supported.config || config);
 
             // Set up sample handler BEFORE starting extraction
             file.onSamples = (trackId, ref, samples) => {
@@ -1158,12 +1183,11 @@ async function _buildCacheWebCodecs(videoSrc, fps, onProgress, ac) {
 }
 
 /**
- * Extract codec-specific description (SPS/PPS for H.264, etc.) from mp4box track.
+ * Extract codec-specific description (SPS/PPS for H.264, etc.) from mp4box trak box.
  * Required by VideoDecoder.configure() for proper initialization.
  */
-function _getCodecDescription(file, track) {
+function _getCodecDescription(trak) {
     try {
-        const trak = file.getTrackById(track.id);
         for (const entry of trak.mdia.minf.stbl.stsd.entries) {
             const box = entry.avcC || entry.hvcC || entry.vpcC || entry.av1C;
             if (box) {
