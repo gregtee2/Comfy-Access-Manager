@@ -1333,26 +1333,53 @@ function launchInMrv2(exePath, filePaths, compareArgs) {
     }
 
     const args = [];
-    // Use -s (single/still) for image files to prevent mrv2 from scanning
-    // for version sequences (its version_regex:_v matches our _vNNN vault
-    // naming, causing "Cannot open" errors or black frames)
-    const imageExts = ['.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff', '.bmp', '.tga', '.hdr', '.webp', '.gif'];
+    // mrv2's version_regex matches _v in our vault names (e.g. _v001) and tries
+    // to expand into a frame sequence → "Cannot open" errors.
+    // -s (single/still) prevents this, but only works with 1-2 files.
+    // For 3+ images: create temp hard links with _v renamed to -v to break
+    // the regex, so mrv2 loads them individually without sequence detection.
+    const imageExts = ['.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff', '.bmp', '.tga', '.hdr', '.webp', '.gif', '.dpx'];
     const allFiles = [...filePaths];
-    // If comparing, the B file is inside compareArgs at index 1 (e.g. ['-compare', 'fileB', ...])
     if (compareArgs) {
         const bFile = compareArgs[1];
         if (bFile) allFiles.push(bFile);
     }
     const allImages = allFiles.every(f => imageExts.includes(path.extname(f).toLowerCase()));
-    // -s (single/still) prevents mrv2 sequence detection on _vNNN names,
-    // but it also prevents loading multiple files. Only use for single file + wipe (2 files).
+
     if (allImages && allFiles.length <= 2) {
+        // 1-2 images: -s flag works perfectly
         args.push('-s');
+        args.push(...filePaths);
+        if (compareArgs) args.push(...compareArgs);
+    } else if (allImages && allFiles.length > 2) {
+        // 3+ images: create temp copies with sanitized names to bypass version detection
+        const os = require('os');
+        const tmpDir = path.join(os.tmpdir(), `dmv-mrv2-${Date.now()}`);
+        fs.mkdirSync(tmpDir, { recursive: true });
+        for (let i = 0; i < allFiles.length; i++) {
+            const fp = allFiles[i];
+            // Replace _v (followed by digits) with -v to break mrv2 version regex
+            // Prefix with index to avoid name collisions from different folders
+            const safeName = `${i}_${path.basename(fp).replace(/_v(\d+)/g, '-v$1')}`;
+            const dest = path.join(tmpDir, safeName);
+            try {
+                fs.linkSync(fp, dest);  // Hard link: instant, zero disk space (same volume)
+            } catch {
+                fs.copyFileSync(fp, dest);  // Fallback: copy (cross-drive or permission issue)
+            }
+            args.push(dest);
+        }
+        // Clean up temp dir after 60 seconds (mrv2 will have loaded by then)
+        setTimeout(() => {
+            try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
+        }, 60000);
+    } else {
+        // Non-image files (video, etc.) — pass as-is, mrv2 handles them fine
+        args.push(...filePaths);
+        if (compareArgs) args.push(...compareArgs);
     }
-    args.push(...filePaths);
-    if (compareArgs) args.push(...compareArgs);
     execFile(exePath, args, { cwd });
-    console.log(`[mrViewer2] Launched: ${filePaths.length} file(s)${args.includes('-s') ? ' (single/still mode)' : ''}`);
+    console.log(`[mrViewer2] Launched: ${allFiles.length} file(s)${args.includes('-s') ? ' (single/still)' : allImages && allFiles.length > 2 ? ' (sanitized names)' : ''}`);
 
     // Restore window to previous position/monitor after it opens
     if (savedRect) {
