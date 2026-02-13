@@ -1187,6 +1187,11 @@ async function _buildCacheWebCodecs(videoSrc, fps, onProgress, ac) {
 
             file.setExtractionOptions(track.id);
             file.start();
+            // Flush AFTER start — must happen after onSamples is set and extraction started.
+            // appendBuffer() triggers onReady synchronously, but onReady is async (has awaits).
+            // If flush() runs in the outer scope, it completes before start() is called,
+            // and mp4box has nothing left to process → onSamples never fires.
+            file.flush();
         };
 
         file.onError = (e) => {
@@ -1194,12 +1199,13 @@ async function _buildCacheWebCodecs(videoSrc, fps, onProgress, ac) {
             resolve(null);
         };
 
-        // Feed entire buffer to mp4box
+        // Feed buffer to mp4box — triggers onReady synchronously during appendBuffer.
+        // NOTE: Do NOT call file.flush() here — onReady is async (has awaits),
+        // so flush must happen inside onReady after start() to ensure onSamples fires.
         console.log('[FrameCache] WC: feeding buffer to mp4box...');
         buffer.fileStart = 0;
         file.appendBuffer(buffer);
-        file.flush();
-        console.log('[FrameCache] WC: mp4box buffer fed + flushed');
+        console.log('[FrameCache] WC: appendBuffer complete');
     });
 }
 
