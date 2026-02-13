@@ -617,6 +617,18 @@ function handleAssetDblClick(event, assetIdx) {
 }
 window.handleAssetDblClick = handleAssetDblClick;
 
+/** Open built-in player directly, bypassing default_player setting */
+function openPlayerBuiltIn(assetIdx) {
+    state.playerAssets = state.assets;
+    state.playerIndex = assetIdx;
+    if (window.openPlayerDirect) {
+        window.openPlayerDirect();
+    } else {
+        openPlayer(assetIdx);
+    }
+}
+window.openPlayerBuiltIn = openPlayerBuiltIn;
+
 function toggleAssetSelection(assetId) {
     const idx = state.selectedAssets.indexOf(assetId);
     if (idx >= 0) {
@@ -721,7 +733,6 @@ async function showContextMenu(event, assetIdx) {
             html += `<div class="ctx-item" data-action="play">▶️ Play ${ext}</div>`;
             html += `<div class="ctx-item" data-action="mrv2">🎬 mrViewer2 ${ext}</div>`;
             html += `<div class="ctx-item" data-action="rv">🎬 RV ${ext}</div>`;
-            html += `<div class="ctx-item" data-action="review">📋 Review (overlays)</div>`;
         } else {
             // Multiple formats — show sub-menus
             html += `<div class="ctx-item ctx-item-parent">▶️ Play`;
@@ -794,7 +805,7 @@ async function showContextMenu(event, assetIdx) {
         if (rvId) { window.openInRV?.(parseInt(rvId)); return; }
 
         switch (action) {
-            case 'play': openPlayer(assetIdx); break;
+            case 'play': openPlayerBuiltIn(assetIdx); break;
             case 'mrv2': window.openInMrViewer2?.(asset.id); break;
             case 'rv': window.openInRV?.(asset.id); break;
             case 'review': window.openReviewInMrv2?.(asset.id); break;

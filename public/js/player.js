@@ -135,6 +135,38 @@ function playerKeyHandler(e) {
         const video = document.querySelector('#playerContent video');
         if (video) video.paused ? video.play() : video.pause();
     }
+    // Frame stepping: , = prev frame, . = next frame
+    if (e.key === ',' || e.key === '<') {
+        e.preventDefault();
+        const video = document.querySelector('#playerContent video');
+        if (video) {
+            video.pause();
+            const fps = parseFloat(document.querySelector('.player-transport')?.dataset.fps) || 24;
+            video.currentTime = Math.max(0, video.currentTime - (1 / fps));
+        }
+    }
+    if (e.key === '.' || e.key === '>') {
+        e.preventDefault();
+        const video = document.querySelector('#playerContent video');
+        if (video) {
+            video.pause();
+            const fps = parseFloat(document.querySelector('.player-transport')?.dataset.fps) || 24;
+            video.currentTime = Math.min(video.duration || 0, video.currentTime + (1 / fps));
+        }
+    }
+    // J/K/L shuttle: J = rewind, K = pause, L = play
+    if (e.key === 'j' || e.key === 'J') {
+        const video = document.querySelector('#playerContent video');
+        if (video) { video.playbackRate = Math.max(0.25, (video.playbackRate || 1) - 0.5); video.play(); }
+    }
+    if (e.key === 'k' || e.key === 'K') {
+        const video = document.querySelector('#playerContent video');
+        if (video) { video.pause(); video.playbackRate = 1; }
+    }
+    if (e.key === 'l') {
+        const video = document.querySelector('#playerContent video');
+        if (video) { video.playbackRate = Math.min(4, (video.playbackRate || 1) + 0.5); video.play(); }
+    }
 }
 
 function playerNext() {
@@ -167,10 +199,24 @@ function renderPlayer() {
 
     if (asset.media_type === 'video') {
         const videoUrl = needsTranscode ? `/api/assets/${asset.id}/stream` : fileUrl;
+        const fps = asset.fps || 24;
         content.innerHTML = `
             ${needsTranscode ? '<div style="text-align:center;color:var(--accent);font-size:0.75rem;margin-bottom:6px;">⚡ Transcoding from ' + esc(asset.codec) + ' — may take a moment to start</div>' : ''}
-            <video controls autoplay loop src="${videoUrl}" style="max-width:100%;max-height:70vh;"></video>
+            <video autoplay loop src="${videoUrl}" style="max-width:100%;max-height:calc(70vh - 44px);cursor:pointer;"></video>
+            <div class="player-transport" data-fps="${fps}">
+                <button class="pt-btn pt-play" title="Play/Pause (Space)">⏸</button>
+                <button class="pt-btn pt-prev-frame" title="Previous frame (,)">⏮</button>
+                <div class="pt-scrub-wrap">
+                    <input type="range" class="pt-scrub" min="0" max="1000" value="0" step="1">
+                    <div class="pt-scrub-fill" style="width:0%"></div>
+                </div>
+                <button class="pt-btn pt-next-frame" title="Next frame (.)">⏭</button>
+                <span class="pt-time">00:00 / 00:00</span>
+                <span class="pt-frame-counter"></span>
+                <button class="pt-btn pt-loop active" title="Loop (L)">🔁</button>
+            </div>
         `;
+        initTransportControls(content, fps);
     } else if (asset.media_type === 'image' || asset.media_type === 'exr') {
         content.innerHTML = `<img src="${fileUrl}" alt="${esc(asset.vault_name)}">`;
     } else if (asset.media_type === 'audio') {
@@ -825,6 +871,117 @@ function openPlayerDirect() {
     renderPlayer();
     document.getElementById('playerModal').style.display = 'flex';
     document.addEventListener('keydown', playerKeyHandler);
+}
+
+// ═══════════════════════════════════════════
+//  CUSTOM VIDEO TRANSPORT CONTROLS
+// ═══════════════════════════════════════════
+
+function initTransportControls(container, fps) {
+    const video = container.querySelector('video');
+    const transport = container.querySelector('.player-transport');
+    if (!video || !transport) return;
+
+    const scrub = transport.querySelector('.pt-scrub');
+    const fill = transport.querySelector('.pt-scrub-fill');
+    const playBtn = transport.querySelector('.pt-play');
+    const prevBtn = transport.querySelector('.pt-prev-frame');
+    const nextBtn = transport.querySelector('.pt-next-frame');
+    const loopBtn = transport.querySelector('.pt-loop');
+    const timeEl = transport.querySelector('.pt-time');
+    const frameEl = transport.querySelector('.pt-frame-counter');
+
+    let isScrubbing = false;
+    const frameDuration = 1 / fps;
+
+    // Format seconds → MM:SS or HH:MM:SS
+    function fmtTime(sec) {
+        if (!isFinite(sec)) return '00:00';
+        const h = Math.floor(sec / 3600);
+        const m = Math.floor((sec % 3600) / 60);
+        const s = Math.floor(sec % 60);
+        return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
+    }
+
+    // Update UI from video state
+    function updateTransport() {
+        if (!video.duration || !isFinite(video.duration)) return;
+        const pct = (video.currentTime / video.duration) * 100;
+        if (!isScrubbing) {
+            scrub.value = (video.currentTime / video.duration) * 1000;
+            fill.style.width = pct + '%';
+        }
+        timeEl.textContent = `${fmtTime(video.currentTime)} / ${fmtTime(video.duration)}`;
+        const currentFrame = Math.floor(video.currentTime * fps);
+        const totalFrames = Math.floor(video.duration * fps);
+        frameEl.textContent = `F ${currentFrame} / ${totalFrames}`;
+        playBtn.textContent = video.paused ? '▶' : '⏸';
+    }
+
+    // Update loop on timeupdate (smooth display during playback)
+    video.addEventListener('timeupdate', updateTransport);
+    video.addEventListener('loadedmetadata', updateTransport);
+    video.addEventListener('play', () => { playBtn.textContent = '⏸'; });
+    video.addEventListener('pause', () => { playBtn.textContent = '▶'; });
+
+    // Real-time scrubbing: seek on every input event (as slider drags)
+    scrub.addEventListener('input', () => {
+        isScrubbing = true;
+        if (video.duration && isFinite(video.duration)) {
+            const seekTo = (scrub.value / 1000) * video.duration;
+            video.currentTime = seekTo;
+            fill.style.width = ((seekTo / video.duration) * 100) + '%';
+            timeEl.textContent = `${fmtTime(seekTo)} / ${fmtTime(video.duration)}`;
+            const currentFrame = Math.floor(seekTo * fps);
+            const totalFrames = Math.floor(video.duration * fps);
+            frameEl.textContent = `F ${currentFrame} / ${totalFrames}`;
+        }
+    });
+
+    // Pause video while scrubbing for instant frame display
+    let wasPlaying = false;
+    scrub.addEventListener('mousedown', () => {
+        wasPlaying = !video.paused;
+        if (wasPlaying) video.pause();
+        isScrubbing = true;
+    });
+    scrub.addEventListener('mouseup', () => {
+        isScrubbing = false;
+        if (wasPlaying) video.play();
+    });
+    // Touch support
+    scrub.addEventListener('touchstart', () => {
+        wasPlaying = !video.paused;
+        if (wasPlaying) video.pause();
+        isScrubbing = true;
+    }, { passive: true });
+    scrub.addEventListener('touchend', () => {
+        isScrubbing = false;
+        if (wasPlaying) video.play();
+    });
+
+    // Click video to toggle play/pause
+    video.addEventListener('click', () => {
+        video.paused ? video.play() : video.pause();
+    });
+
+    // Buttons
+    playBtn.addEventListener('click', () => { video.paused ? video.play() : video.pause(); });
+    prevBtn.addEventListener('click', () => {
+        video.pause();
+        video.currentTime = Math.max(0, video.currentTime - frameDuration);
+    });
+    nextBtn.addEventListener('click', () => {
+        video.pause();
+        video.currentTime = Math.min(video.duration, video.currentTime + frameDuration);
+    });
+    loopBtn.addEventListener('click', () => {
+        video.loop = !video.loop;
+        loopBtn.classList.toggle('active', video.loop);
+    });
+
+    // Pointer events to prevent node drag in player
+    transport.addEventListener('pointerdown', (e) => e.stopPropagation());
 }
 
 // ═══════════════════════════════════════════
