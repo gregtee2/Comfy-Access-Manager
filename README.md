@@ -55,7 +55,8 @@ Built for artists and studios who work with video, images, EXR sequences, 3D fil
 
 ### External Player Support
 - **mrViewer2** integration for professional playback (EXR, ProRes, HDR, etc.)
-- **Player comparison**: Select two assets and compare side-by-side in mrViewer2
+- **RV (ShotGrid)** support — launch assets in Autodesk RV / OpenRV
+- **Player comparison**: Select two assets and compare side-by-side in mrViewer2 or RV
 - Customizable keyboard shortcuts for mrViewer2 hotkeys
 - Also supports any custom external player (set the path in Settings)
 
@@ -119,14 +120,31 @@ install.bat
 start.bat
 ```
 
-### macOS / Linux
+### macOS
 
 ```bash
-# 1. Clone the repository (Git comes pre-installed on most Macs; Linux install.sh will install it)
+# 1. Clone the repository (Git comes pre-installed on most Macs)
 git clone https://github.com/gregtee2/Digital-Media-Vault.git
 cd Digital-Media-Vault
 
-# 2. Run the one-click installer (handles Homebrew, Node.js, Git, FFmpeg, npm packages)
+# 2. Double-click install.command in Finder
+#    (or from Terminal: chmod +x install.sh && ./install.sh)
+#    Installs: Homebrew, Node.js, Git, FFmpeg, npm packages, mrViewer2
+
+# 3. Double-click start.command in Finder to launch
+#    (or from Terminal: ./start.sh)
+```
+
+> **macOS Gatekeeper**: The first time you double-click a `.command` file, macOS may say it can't be opened. Just **right-click → Open** instead — this only happens once per file.
+
+### Linux
+
+```bash
+# 1. Clone the repository
+git clone https://github.com/gregtee2/Digital-Media-Vault.git
+cd Digital-Media-Vault
+
+# 2. Run the installer (handles Node.js, Git, FFmpeg, npm packages)
 chmod +x install.sh start.sh
 ./install.sh
 
@@ -219,7 +237,7 @@ Access settings from the **Settings** tab:
 |---------|-------------|
 | **Vault Root Path** | Where all media files are stored. Changing this offers to migrate existing files. |
 | **Naming Template** | How imported files are named. Tokens: `{project}`, `{sequence}`, `{shot}`, `{step}`, `{version}`, `{take}`, `{type}`, `{date}`, `{original}`, `{counter}`. Follows ShotGrid/Flow naming conventions. |
-| **Default Player** | Browser (built-in), mrViewer2, or a custom player path |
+| **Default Player** | Browser (built-in), mrViewer2, RV (ShotGrid), or a custom player path |
 | **Thumbnail Size** | Size of grid thumbnails (100–800px) |
 | **Auto-generate Thumbnails** | Generate thumbnails automatically on import |
 | **ComfyUI Output Path** | Point to your ComfyUI output folder for auto-import |
@@ -290,8 +308,12 @@ Digital-Media-Vault/
 ├── data/
 │   └── mediavault.db          # SQLite database (auto-created)
 ├── thumbnails/                # Generated thumbnails
+├── install.bat                # Windows installer (1-click)
+├── install.sh                 # macOS/Linux installer
+├── install.command            # macOS double-click installer wrapper
 ├── start.bat                  # Windows launcher
 ├── start.sh                   # macOS/Linux launcher
+├── start.command              # macOS double-click launcher wrapper
 └── package.json
 ```
 
@@ -307,10 +329,14 @@ FFmpeg is **automatically installed** by `install.bat` (Windows) or `install.sh`
 - If you prefer a manual install, download from [ffmpeg.org](https://ffmpeg.org/download.html) and add the `bin/` folder to your system PATH
 
 ### Port 7700 Already in Use
-The Windows `start.bat` automatically clears port 7700 before starting. On Mac/Linux, find and kill the process:
+Both `start.bat` (Windows) and `start.sh` / `start.command` (Mac/Linux) automatically clear port 7700 before starting. If you still have issues, manually kill the process:
 ```bash
+# Mac/Linux
 lsof -i :7700
 kill -9 <PID>
+
+# Windows (PowerShell)
+Get-NetTCPConnection -LocalPort 7700 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }
 ```
 
 ### Video Won't Play in Browser
@@ -321,13 +347,21 @@ Some professional codecs (ProRes, DNxHR) can't play directly in a web browser. D
 - For **videos**: FFmpeg is required — verify with `ffmpeg -version`
 
 ### mrViewer2 Not Detected
-On Windows, `install.bat` offers to **download and install mrViewer2** for you during setup. If you skipped it or need to reinstall, re-run `install.bat`.
+Both `install.bat` (Windows) and `install.sh` / `install.command` (Mac) offer to **download and install mrViewer2** for you during setup. If you skipped it or need to reinstall, re-run the installer.
 
 DMV auto-discovers mrViewer2 in standard install locations:
 - **Windows**: `C:\Program Files\vmrv2-*\bin\mrv2.exe`
-- **macOS**: `/Applications/mrv2*.app`
+- **macOS**: `/Applications/mrv2*.app` or `/Applications/mrViewer*.app`
 
 If installed elsewhere, set the path manually in **Settings → External Player → Custom**.
+
+### RV Not Detected
+DMV auto-discovers RV / OpenRV in standard locations:
+- **Windows**: `C:\Program Files\Autodesk\RV*` or `C:\Program Files\Shotgun\RV*`
+- **macOS**: `/Applications/RV*.app`
+- **Linux**: `/usr/local/rv*` or `/opt/rv*`
+
+If not detected, RV menu items will be hidden. OpenRV is available at [github.com/AcademySoftwareFoundation/OpenRV](https://github.com/AcademySoftwareFoundation/OpenRV) but requires compilation (no pre-built installers).
 
 ---
 
