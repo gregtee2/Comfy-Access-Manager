@@ -1012,11 +1012,14 @@ async function buildFrameCache(videoSrc, fps, onProgress, externalAbort) {
     const ac = externalAbort || new AbortController();
     if (!externalAbort) frameCacheAbort = ac;
 
+    console.log('[FrameCache] buildFrameCache called. WebCodecs:', typeof VideoDecoder !== 'undefined', 'MP4Box:', typeof MP4Box !== 'undefined');
+
     // Primary: WebCodecs + mp4box demuxer (MP4/MOV with H.264/H.265/VP9/AV1)
     if (typeof VideoDecoder !== 'undefined' && typeof MP4Box !== 'undefined') {
         try {
             const result = await _buildCacheWebCodecs(videoSrc, fps, onProgress, ac);
             if (result) return result;
+            console.warn('[FrameCache] WebCodecs returned null, falling back to RVFC');
         } catch (e) {
             console.warn('[FrameCache] WebCodecs failed, falling back to RVFC:', e.message);
         }
