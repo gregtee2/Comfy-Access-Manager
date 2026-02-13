@@ -1505,7 +1505,9 @@ function initTransportControls(container, fps) {
     scrubCanvas.className = 'pt-scrub-canvas';
     scrubCanvas.style.display = 'none';
     video.parentElement.insertBefore(scrubCanvas, video);
-    const scrubCtx = scrubCanvas.getContext('2d');
+    // desynchronized: bypass vsync compositor — canvas paints independently, reducing latency
+    // alpha: false — canvas is opaque, skip alpha-blending during composite
+    const scrubCtx = scrubCanvas.getContext('2d', { desynchronized: true, alpha: false });
 
     let isScrubbing = false;
     const frameDuration = 1 / fps;
@@ -1522,6 +1524,7 @@ function initTransportControls(container, fps) {
 
     // ─── Draw a cached frame by index and update transport UI ───
     let _lastDrawnRect = null;  // Cache to avoid redundant style updates
+    let _uiThrottle = 0;        // Throttle DOM updates during playback
     function drawCachedFrame(idx) {
         if (!frameCache?.ready) return;
         idx = Math.max(0, Math.min(idx, frameCache.frames.length - 1));
@@ -1544,9 +1547,17 @@ function initTransportControls(container, fps) {
             scrubCanvas.style.height = _lastDrawnRect.height + 'px';
             scrubCanvas._styleH = _lastDrawnRect.height;
         }
+
+        // HOT PATH — blit the bitmap (this is the only thing that MUST happen every frame)
         scrubCtx.drawImage(bmp, 0, 0);
 
-        // Update transport UI
+        // Transport UI updates — throttle during playback to reduce DOM layout churn.
+        // During playback: update every 3rd frame (~8x/sec at 24fps, still visually smooth).
+        // When paused/stepping: always update immediately.
+        const isPlaying = cachedPlaybackState?.playing;
+        if (isPlaying && ++_uiThrottle < 3) return;
+        _uiThrottle = 0;
+
         const totalFrames = frameCache.frames.length;
         const timePos = idx / frameCache.fps;
         if (!isScrubbing) {
@@ -1607,7 +1618,8 @@ function initTransportControls(container, fps) {
             startFrame: 0,
             onTick: (idx, playing) => {
                 drawCachedFrame(idx);
-                playBtn.textContent = playing ? '⏸' : '▶';
+                // Only update play button on actual state transitions (not every frame)
+                if (!playing) playBtn.textContent = '▶';
             }
         };
         // Show first frame
