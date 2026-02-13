@@ -640,46 +640,57 @@ async function checkForUpdates(silent = false) {
 
         if (result.error) {
             if (!silent) {
-                statusEl.style.display = 'block';
-                statusEl.style.background = 'rgba(255, 82, 82, 0.15)';
-                statusEl.style.border = '1px solid rgba(255, 82, 82, 0.3)';
-                statusEl.innerHTML = `⚠️ Couldn't check for updates: ${esc(result.error)}`;
+                if (statusEl) {
+                    statusEl.style.display = 'block';
+                    statusEl.style.background = 'rgba(255, 82, 82, 0.15)';
+                    statusEl.style.border = '1px solid rgba(255, 82, 82, 0.3)';
+                    statusEl.innerHTML = `⚠️ Couldn't check for updates: ${esc(result.error)}`;
+                }
             }
             return;
         }
 
         if (result.hasUpdate) {
-            statusEl.style.display = 'block';
-            statusEl.style.background = 'rgba(0, 255, 136, 0.1)';
-            statusEl.style.border = '1px solid rgba(0, 255, 136, 0.3)';
-            statusEl.innerHTML = `🎉 <strong>Update available!</strong> v${esc(result.currentVersion)} → v${esc(result.remoteVersion)}`;
-            applyBtn.style.display = 'inline-block';
-
-            if (result.changelog) {
+            // ── Settings tab UI (if visible) ──
+            if (statusEl) {
+                statusEl.style.display = 'block';
+                statusEl.style.background = 'rgba(0, 255, 136, 0.1)';
+                statusEl.style.border = '1px solid rgba(0, 255, 136, 0.3)';
+                statusEl.innerHTML = `🎉 <strong>Update available!</strong> v${esc(result.currentVersion)} → v${esc(result.remoteVersion)}`;
+            }
+            if (applyBtn) applyBtn.style.display = 'inline-block';
+            if (result.changelog && changelogEl) {
                 changelogEl.style.display = 'block';
                 changelogEl.textContent = result.changelog;
-            } else {
+            } else if (changelogEl) {
                 changelogEl.style.display = 'none';
             }
 
-            // Show toast on any tab if not silent
-            if (!silent) showToast(`Update available: v${result.remoteVersion}`, 5000);
+            // ── Persistent banner on ANY tab ──
+            const dismissed = sessionStorage.getItem('dmv_update_dismissed');
+            if (dismissed !== result.remoteVersion) {
+                showUpdateBanner(result);
+            }
         } else {
             if (!silent) {
-                statusEl.style.display = 'block';
-                statusEl.style.background = 'rgba(136, 136, 136, 0.1)';
-                statusEl.style.border = '1px solid rgba(136, 136, 136, 0.2)';
-                statusEl.innerHTML = `✅ You're on the latest version (v${esc(result.currentVersion)})`;
-                applyBtn.style.display = 'none';
-                changelogEl.style.display = 'none';
+                if (statusEl) {
+                    statusEl.style.display = 'block';
+                    statusEl.style.background = 'rgba(136, 136, 136, 0.1)';
+                    statusEl.style.border = '1px solid rgba(136, 136, 136, 0.2)';
+                    statusEl.innerHTML = `✅ You're on the latest version (v${esc(result.currentVersion)})`;
+                }
+                if (applyBtn) applyBtn.style.display = 'none';
+                if (changelogEl) changelogEl.style.display = 'none';
             }
         }
     } catch (err) {
         if (!silent) {
-            statusEl.style.display = 'block';
-            statusEl.style.background = 'rgba(255, 82, 82, 0.15)';
-            statusEl.style.border = '1px solid rgba(255, 82, 82, 0.3)';
-            statusEl.innerHTML = `⚠️ Update check failed: ${esc(err.message)}`;
+            if (statusEl) {
+                statusEl.style.display = 'block';
+                statusEl.style.background = 'rgba(255, 82, 82, 0.15)';
+                statusEl.style.border = '1px solid rgba(255, 82, 82, 0.3)';
+                statusEl.innerHTML = `⚠️ Update check failed: ${esc(err.message)}`;
+            }
         }
     } finally {
         if (btn) {
@@ -689,7 +700,113 @@ async function checkForUpdates(silent = false) {
     }
 }
 
-/** Download and apply the update, then poll for server restart */
+// ═══════════════════════════════════════════
+//  PERSISTENT UPDATE BANNER (any tab)
+// ═══════════════════════════════════════════
+
+function showUpdateBanner(updateInfo) {
+    const banner = document.getElementById('updateBanner');
+    const versionSpan = document.getElementById('updateBannerVersion');
+    if (!banner) return;
+    versionSpan.textContent = `v${updateInfo.currentVersion} → v${updateInfo.remoteVersion}`;
+    banner.style.display = 'flex';
+}
+
+function dismissUpdateBanner() {
+    const banner = document.getElementById('updateBanner');
+    if (banner) banner.style.display = 'none';
+    // Don't set sessionStorage here — just hides banner. "Later" in modal sets it.
+}
+
+// ═══════════════════════════════════════════
+//  UPDATE MODAL
+// ═══════════════════════════════════════════
+
+function showUpdateModal() {
+    if (!_pendingUpdate || !_pendingUpdate.hasUpdate) return;
+
+    const modal = document.getElementById('updateModal');
+    document.getElementById('updateModalCurrent').textContent = `v${_pendingUpdate.currentVersion}`;
+    document.getElementById('updateModalNew').textContent = `v${_pendingUpdate.remoteVersion}`;
+    document.getElementById('updateModalChangelog').textContent = _pendingUpdate.changelog || 'No changelog available.';
+
+    const statusEl = document.getElementById('updateModalStatus');
+    statusEl.style.display = 'none';
+    statusEl.textContent = '';
+
+    const applyBtn = document.getElementById('btnUpdateModalApply');
+    applyBtn.disabled = false;
+    applyBtn.textContent = '⬇️ Update Now';
+
+    modal.style.display = 'flex';
+}
+
+function closeUpdateModal() {
+    document.getElementById('updateModal').style.display = 'none';
+}
+
+function dismissUpdateLater() {
+    if (_pendingUpdate && _pendingUpdate.remoteVersion) {
+        sessionStorage.setItem('dmv_update_dismissed', _pendingUpdate.remoteVersion);
+    }
+    closeUpdateModal();
+    dismissUpdateBanner();
+    showToast('Update reminder dismissed for this session', 3000);
+}
+
+/** Apply update from the modal (same backend call, different UI target) */
+async function applyUpdateFromModal() {
+    const statusEl = document.getElementById('updateModalStatus');
+    const applyBtn = document.getElementById('btnUpdateModalApply');
+
+    applyBtn.disabled = true;
+    applyBtn.textContent = '⏳ Updating...';
+    statusEl.style.display = 'block';
+    statusEl.style.color = 'var(--warning)';
+    statusEl.textContent = '⬇️ Downloading update...';
+
+    try {
+        const result = await api('/api/update/apply', { method: 'POST' });
+        statusEl.style.color = 'var(--success)';
+        statusEl.textContent = `✅ ${result.message || 'Updated!'} Waiting for restart...`;
+        setTimeout(() => pollForRestartModal(), 3000);
+    } catch (err) {
+        if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
+            statusEl.style.color = 'var(--warning)';
+            statusEl.textContent = '🔄 Server restarting...';
+            setTimeout(() => pollForRestartModal(), 3000);
+        } else {
+            statusEl.style.color = 'var(--danger)';
+            statusEl.textContent = `❌ Update failed: ${err.message}`;
+            applyBtn.disabled = false;
+            applyBtn.textContent = '⬇️ Update Now';
+        }
+    }
+}
+
+function pollForRestartModal(attempts = 0) {
+    const statusEl = document.getElementById('updateModalStatus');
+    if (attempts > 30) {
+        statusEl.style.color = 'var(--warning)';
+        statusEl.textContent = '⚠️ Server taking too long. Try refreshing the page manually.';
+        return;
+    }
+
+    fetch('/api/update/health')
+        .then(r => r.json())
+        .then(data => {
+            statusEl.style.color = 'var(--success)';
+            statusEl.textContent = `✅ Updated to v${data.version}! Reloading...`;
+            setTimeout(() => window.location.reload(), 1000);
+        })
+        .catch(() => {
+            statusEl.style.color = 'var(--text-dim)';
+            statusEl.textContent = `🔄 Server restarting... (${attempts + 1}s)`;
+            setTimeout(() => pollForRestartModal(attempts + 1), 2000);
+        });
+}
+
+/** Download and apply the update from Settings tab, then poll for server restart */
 async function applyUpdate() {
     const statusEl = document.getElementById('updateStatus');
     const applyBtn = document.getElementById('btnApplyUpdate');
@@ -697,32 +814,32 @@ async function applyUpdate() {
 
     if (!confirm('Apply update now?\n\nThe server will restart briefly. Your data is safe.')) return;
 
-    applyBtn.disabled = true;
-    applyBtn.textContent = '⏳ Updating...';
+    if (applyBtn) applyBtn.disabled = true;
+    if (applyBtn) applyBtn.textContent = '⏳ Updating...';
     if (checkBtn) checkBtn.disabled = true;
 
-    statusEl.style.display = 'block';
-    statusEl.style.background = 'rgba(255, 170, 0, 0.15)';
-    statusEl.style.border = '1px solid rgba(255, 170, 0, 0.3)';
-    statusEl.innerHTML = '⬇️ Downloading update...';
+    if (statusEl) {
+        statusEl.style.display = 'block';
+        statusEl.style.background = 'rgba(255, 170, 0, 0.15)';
+        statusEl.style.border = '1px solid rgba(255, 170, 0, 0.3)';
+        statusEl.innerHTML = '⬇️ Downloading update...';
+    }
 
     try {
         const result = await api('/api/update/apply', { method: 'POST' });
-        statusEl.innerHTML = `✅ ${esc(result.message || 'Updated!')} Waiting for restart...`;
-
-        // Poll /api/update/health until server comes back
+        if (statusEl) statusEl.innerHTML = `✅ ${esc(result.message || 'Updated!')} Waiting for restart...`;
         setTimeout(() => pollForRestart(), 3000);
     } catch (err) {
-        // Network error likely means server is restarting (good sign)
         if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-            statusEl.innerHTML = '🔄 Server restarting...';
+            if (statusEl) statusEl.innerHTML = '🔄 Server restarting...';
             setTimeout(() => pollForRestart(), 3000);
         } else {
-            statusEl.style.background = 'rgba(255, 82, 82, 0.15)';
-            statusEl.style.border = '1px solid rgba(255, 82, 82, 0.3)';
-            statusEl.innerHTML = `❌ Update failed: ${esc(err.message)}`;
-            applyBtn.disabled = false;
-            applyBtn.textContent = '⬇️ Update Now';
+            if (statusEl) {
+                statusEl.style.background = 'rgba(255, 82, 82, 0.15)';
+                statusEl.style.border = '1px solid rgba(255, 82, 82, 0.3)';
+                statusEl.innerHTML = `❌ Update failed: ${esc(err.message)}`;
+            }
+            if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = '⬇️ Update Now'; }
             if (checkBtn) checkBtn.disabled = false;
         }
     }
@@ -731,28 +848,29 @@ async function applyUpdate() {
 /** Poll server until it's back up after restart */
 function pollForRestart(attempts = 0) {
     const statusEl = document.getElementById('updateStatus');
-    if (attempts > 30) { // 60 seconds max
-        statusEl.innerHTML = '⚠️ Server taking too long to restart. Try refreshing the page manually.';
+    if (attempts > 30) {
+        if (statusEl) statusEl.innerHTML = '⚠️ Server taking too long to restart. Try refreshing the page manually.';
         return;
     }
 
     fetch('/api/update/health')
         .then(r => r.json())
         .then(data => {
-            statusEl.style.background = 'rgba(0, 255, 136, 0.15)';
-            statusEl.style.border = '1px solid rgba(0, 255, 136, 0.3)';
-            statusEl.innerHTML = `✅ Updated to v${data.version}! Reloading...`;
+            if (statusEl) {
+                statusEl.style.background = 'rgba(0, 255, 136, 0.15)';
+                statusEl.style.border = '1px solid rgba(0, 255, 136, 0.3)';
+                statusEl.innerHTML = `✅ Updated to v${data.version}! Reloading...`;
+            }
             setTimeout(() => window.location.reload(), 1000);
         })
         .catch(() => {
-            statusEl.innerHTML = `🔄 Server restarting... (${attempts + 1}s)`;
+            if (statusEl) statusEl.innerHTML = `🔄 Server restarting... (${attempts + 1}s)`;
             setTimeout(() => pollForRestart(attempts + 1), 2000);
         });
 }
 
-/** Auto-check on app load (silent — only shows if update available) */
+/** Auto-check on app load (silent — shows banner if update available) */
 export function autoCheckForUpdates() {
-    // Delay to let the app finish loading
     setTimeout(() => checkForUpdates(true), 5000);
 }
 
@@ -783,3 +901,8 @@ window.deleteRole = deleteRole;
 window.loadRoles = loadRoles;
 window.checkForUpdates = checkForUpdates;
 window.applyUpdate = applyUpdate;
+window.showUpdateModal = showUpdateModal;
+window.closeUpdateModal = closeUpdateModal;
+window.dismissUpdateLater = dismissUpdateLater;
+window.dismissUpdateBanner = dismissUpdateBanner;
+window.applyUpdateFromModal = applyUpdateFromModal;

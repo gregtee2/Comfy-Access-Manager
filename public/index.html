@@ -485,6 +485,51 @@
         </div>
     </div>
 
+    <!-- ═══ UPDATE BANNER (persistent, any tab) ═══ -->
+    <div id="updateBanner" class="update-banner" style="display:none">
+        <div class="update-banner-icon">🎉</div>
+        <div class="update-banner-text">
+            <strong>Update available!</strong>
+            <span id="updateBannerVersion"></span>
+        </div>
+        <button class="update-banner-btn" onclick="showUpdateModal()">View Details</button>
+        <button class="update-banner-close" onclick="dismissUpdateBanner()" title="Dismiss">✕</button>
+    </div>
+
+    <!-- ═══ UPDATE MODAL ═══ -->
+    <div id="updateModal" class="modal" style="display:none" onclick="if(event.target===this)closeUpdateModal()">
+        <div class="modal-card update-modal-card">
+            <div class="update-modal-header">
+                <h2>📦 Update Available</h2>
+                <button class="modal-close" onclick="closeUpdateModal()">✕</button>
+            </div>
+            <div class="update-modal-body">
+                <div class="update-version-row">
+                    <div class="update-version-box">
+                        <span class="update-version-label">Current</span>
+                        <span class="update-version-num" id="updateModalCurrent">v1.0.0</span>
+                    </div>
+                    <div class="update-version-arrow">→</div>
+                    <div class="update-version-box update-version-new">
+                        <span class="update-version-label">New</span>
+                        <span class="update-version-num" id="updateModalNew">v1.1.0</span>
+                    </div>
+                </div>
+                <div class="update-changelog-section">
+                    <h4>📋 What's New</h4>
+                    <pre class="update-changelog-content" id="updateModalChangelog">No changelog available.</pre>
+                </div>
+            </div>
+            <div class="update-modal-footer">
+                <div id="updateModalStatus" style="display:none;font-size:0.85rem;"></div>
+                <div class="update-modal-actions">
+                    <button class="btn-cancel" onclick="dismissUpdateLater()">Later</button>
+                    <button class="btn-confirm update-now-btn" id="btnUpdateModalApply" onclick="applyUpdateFromModal()">⬇️ Update Now</button>
+                </div>
+            </div>
+        </div>
+    </div>
+
     <!-- ═══ GENERIC MODAL ═══ -->
     <div id="modal" class="modal" style="display:none" onclick="if(event.target===this)closeModal()">
         <div class="modal-card" id="modalContent"></div>

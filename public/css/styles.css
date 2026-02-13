@@ -2466,3 +2466,162 @@ label:has(input[type="checkbox"]) {
     border-radius: 3px;
     font-size: 0.75rem;
 }
+
+/* ═══════════════════════════════════════════════════════════════
+   Update Banner (persistent, any-tab notification)
+   ═══════════════════════════════════════════════════════════════ */
+.update-banner {
+    position: fixed;
+    top: 12px;
+    right: 12px;
+    z-index: 10002;
+    display: flex;
+    align-items: center;
+    gap: 10px;
+    background: var(--bg-card);
+    border: 1px solid var(--success);
+    border-radius: var(--radius);
+    padding: 10px 14px;
+    box-shadow: 0 4px 24px rgba(122,184,122,0.18);
+    animation: updateBannerSlide 0.4s ease;
+    max-width: 420px;
+}
+@keyframes updateBannerSlide {
+    from { transform: translateY(-60px); opacity: 0; }
+    to   { transform: translateY(0); opacity: 1; }
+}
+.update-banner-icon { font-size: 1.3rem; }
+.update-banner-text { flex: 1; font-size: 0.84rem; line-height: 1.4; }
+.update-banner-text strong { color: var(--success); display: block; margin-bottom: 1px; }
+.update-banner-btn {
+    background: var(--success);
+    color: #111;
+    border: none;
+    padding: 5px 12px;
+    border-radius: var(--radius-sm);
+    font-size: 0.78rem;
+    font-weight: 600;
+    cursor: pointer;
+    white-space: nowrap;
+    transition: opacity var(--transition);
+}
+.update-banner-btn:hover { opacity: 0.85; }
+.update-banner-close {
+    background: none;
+    border: none;
+    color: var(--text-dim);
+    font-size: 1.1rem;
+    cursor: pointer;
+    padding: 2px 4px;
+    line-height: 1;
+    transition: color var(--transition);
+}
+.update-banner-close:hover { color: var(--text); }
+
+/* ═══════════════════════════════════════════════════════════════
+   Update Modal
+   ═══════════════════════════════════════════════════════════════ */
+.update-modal-card {
+    width: 500px;
+    max-width: 94vw;
+    max-height: 80vh;
+    display: flex;
+    flex-direction: column;
+}
+.update-modal-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 18px 20px;
+    border-bottom: 1px solid var(--border);
+}
+.update-modal-header h2 {
+    font-size: 1.1rem;
+    font-weight: 600;
+}
+.update-modal-body {
+    padding: 20px;
+    overflow-y: auto;
+    flex: 1;
+}
+.update-version-row {
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    gap: 16px;
+    margin-bottom: 20px;
+}
+.update-version-box {
+    text-align: center;
+    padding: 12px 20px;
+    background: var(--bg-dark);
+    border-radius: var(--radius);
+    border: 1px solid var(--border);
+    min-width: 120px;
+}
+.update-version-new {
+    border-color: var(--success);
+    background: rgba(122,184,122,0.08);
+}
+.update-version-label {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--text-dim);
+    text-transform: uppercase;
+    letter-spacing: 0.05em;
+    margin-bottom: 4px;
+}
+.update-version-num {
+    font-size: 1.15rem;
+    font-weight: 700;
+    color: var(--text);
+}
+.update-version-new .update-version-num { color: var(--success); }
+.update-version-arrow {
+    font-size: 1.4rem;
+    color: var(--text-dim);
+}
+.update-changelog-section h4 {
+    font-size: 0.88rem;
+    margin-bottom: 8px;
+    color: var(--text);
+}
+.update-changelog-content {
+    background: var(--bg-dark);
+    border: 1px solid var(--border);
+    border-radius: var(--radius-sm);
+    padding: 12px 14px;
+    font-size: 0.8rem;
+    line-height: 1.6;
+    color: var(--text-dim);
+    max-height: 250px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: 'Segoe UI', sans-serif;
+}
+.update-modal-footer {
+    padding: 14px 20px;
+    border-top: 1px solid var(--border);
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    gap: 12px;
+}
+.update-modal-actions {
+    display: flex;
+    gap: 8px;
+    margin-left: auto;
+}
+.update-now-btn {
+    background: var(--success) !important;
+    color: #111 !important;
+    font-weight: 600;
+    padding: 8px 20px !important;
+    font-size: 0.88rem !important;
+}
+.update-now-btn:hover { opacity: 0.85; }
+.update-now-btn:disabled {
+    opacity: 0.5;
+    cursor: not-allowed;
+}
