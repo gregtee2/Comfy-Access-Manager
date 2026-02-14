@@ -1246,32 +1246,23 @@ function rvPush(pushExe, filePaths, mode = 'set', compareArgs = null) {
  * 2. If RV is not running → launch rv.exe with -network flag (enables rvpush)
  *
  * RV compare modes: -compare (A/B), -wipe (wipe), -tile (side by side)
+ * RV is smart enough to handle compare layouts when it receives 2+ sources —
+ * user can toggle wipe/tile/sequence from RV's own UI.
  */
 function launchInRV(exePath, filePaths, compareArgs) {
-    const { execFile, spawnSync } = require('child_process');
+    const { execFile } = require('child_process');
     const cwd = path.dirname(exePath);
     const pushExe = findRvPush();
 
-    // If rvpush is available and we're NOT in compare mode, try pushing to running session
-    // (rvpush can't set compare/wipe/tile modes — those require a fresh launch)
-    if (pushExe && !compareArgs) {
+    // Always try rvpush first — even for compare. RV handles 2+ sources natively
+    // and lets the user pick wipe/tile/sequence from its own UI.
+    if (pushExe) {
         const pushResult = rvPush(pushExe, filePaths, 'set');
         if (pushResult.success) return;
     }
 
-    // For compare mode, kill existing RV first (can't set wipe mode via rvpush)
-    if (compareArgs) {
-        try {
-            if (process.platform === 'win32') {
-                spawnSync('taskkill', ['/F', '/IM', 'rv.exe'], { windowsHide: true, stdio: 'ignore' });
-            } else {
-                spawnSync('pkill', ['-x', 'RV'], { stdio: 'ignore' });
-            }
-        } catch { /* not running, that's fine */ }
-    }
-
-    // Launch fresh with -network enabled
-    // IMPORTANT: RV flags (-wipe, -tile, -compare) must come BEFORE file paths
+    // No running RV (or no rvpush) — launch fresh with -network enabled
+    // For 2+ files on fresh launch, hint -wipe so it opens in compare mode
     const args = ['-network'];
     if (compareArgs) args.push(...compareArgs);
     args.push(...filePaths);
