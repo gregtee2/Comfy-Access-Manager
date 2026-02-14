@@ -340,6 +340,26 @@ async function executeImport() {
     const projectId = document.getElementById('importProject').value;
     if (!projectId || !state.selectedFiles.length) return;
 
+    // ─── Auto-create any pending inline sequence/shot ───
+    const pendingSeqForm = document.getElementById('inlineNewSequence');
+    if (pendingSeqForm && pendingSeqForm.style.display !== 'none') {
+        const seqName = document.getElementById('newSeqName').value.trim();
+        if (seqName) {
+            await createInlineSequence();
+            // If creation failed (form still visible), abort import
+            if (pendingSeqForm.style.display !== 'none') return;
+        }
+    }
+    const pendingShotForm = document.getElementById('inlineNewShot');
+    if (pendingShotForm && pendingShotForm.style.display !== 'none') {
+        const shotName = document.getElementById('newShotName').value.trim();
+        if (shotName) {
+            await createInlineShot();
+            // If creation failed (form still visible), abort import
+            if (pendingShotForm.style.display !== 'none') return;
+        }
+    }
+
     // ─── Move-mode confirmation gate ───
     const importMode = document.querySelector('input[name="importMode"]:checked')?.value || 'move';
     if (importMode === 'move') {
@@ -584,16 +604,17 @@ function showMoveConfirmation(fileCount) {
 
 function showInlineNewSequence() {
     const form = document.getElementById('inlineNewSequence');
-    form.style.display = form.style.display === 'none' ? 'flex' : 'none';
-    if (form.style.display === 'flex') {
-        // Auto-suggest code based on current sequence count
-        const seqSel = document.getElementById('importSequence');
-        const count = Math.max(seqSel.options.length - 1, 0); // minus the "-- None --" option
-        const nextNum = (count + 1) * 10;
-        document.getElementById('newSeqCode').value = `SQ${String(nextNum).padStart(3, '0')}`;
-        document.getElementById('newSeqName').value = '';
-        document.getElementById('newSeqName').focus();
-    }
+    // Always show (don't toggle — Cancel button hides)
+    form.style.display = 'flex';
+    // Auto-suggest code based on current sequence count
+    const seqSel = document.getElementById('importSequence');
+    const count = Math.max(seqSel.options.length - 1, 0); // minus the "-- None --" option
+    const nextNum = (count + 1) * 10;
+    document.getElementById('newSeqCode').value = `SQ${String(nextNum).padStart(3, '0')}`;
+    document.getElementById('newSeqCode').dataset.defaultCode = `SQ${String(nextNum).padStart(3, '0')}`;
+    document.getElementById('newSeqCode').dataset.manual = 'false';
+    document.getElementById('newSeqName').value = '';
+    document.getElementById('newSeqName').focus();
 }
 
 function hideInlineNewSequence() {
@@ -670,17 +691,16 @@ function showInlineNewShot() {
     if (!seqId) return showToast('Select a sequence first', 'error');
 
     const form = document.getElementById('inlineNewShot');
-    form.style.display = form.style.display === 'none' ? 'flex' : 'none';
-    if (form.style.display === 'flex') {
-        const shotSel = document.getElementById('importShot');
-        const count = Math.max(shotSel.options.length - 1, 0);
-        const nextNum = (count + 1) * 10;
-        document.getElementById('newShotCode').value = `SH${String(nextNum).padStart(3, '0')}`;
-        document.getElementById('newShotCode').dataset.defaultCode = `SH${String(nextNum).padStart(3, '0')}`;
-        document.getElementById('newShotCode').dataset.manual = 'false';
-        document.getElementById('newShotName').value = '';
-        document.getElementById('newShotName').focus();
-    }
+    // Always show (don't toggle — Cancel button hides)
+    form.style.display = 'flex';
+    const shotSel = document.getElementById('importShot');
+    const count = Math.max(shotSel.options.length - 1, 0);
+    const nextNum = (count + 1) * 10;
+    document.getElementById('newShotCode').value = `SH${String(nextNum).padStart(3, '0')}`;
+    document.getElementById('newShotCode').dataset.defaultCode = `SH${String(nextNum).padStart(3, '0')}`;
+    document.getElementById('newShotCode').dataset.manual = 'false';
+    document.getElementById('newShotName').value = '';
+    document.getElementById('newShotName').focus();
 }
 
 function hideInlineNewShot() {
