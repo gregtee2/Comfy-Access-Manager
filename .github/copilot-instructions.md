@@ -21,6 +21,7 @@ Built for artists and studios who work with video, images, EXR sequences, 3D fil
 - **Database**: sql.js v1.11.0 (WASM SQLite — no native compilation)
 - **Thumbnails**: Sharp (images), FFmpeg (video)
 - **Transcode/Export**: FFmpeg with NVENC GPU acceleration
+- **Compare To**: OpenRV (compiled from source at `C:\OpenRV\_build\stage\app\bin\rv.exe`)
 - **File Watching**: Chokidar
 - **ComfyUI**: Custom Python nodes + JS dynamic dropdown extension
 - **GPU**: NVIDIA RTX PRO 6000 Blackwell (for NVENC and VisionService)
@@ -320,7 +321,7 @@ All frontend code uses ES6 modules loaded from `/js/main.js`:
 | `import.js` | File browser, import flow, rename preview | `loadImportTab()` |
 | `export.js` | Export modal with codec/resolution selection | `showExportModal()` |
 | `player.js` | Built-in media player modal | `openPlayer()` |
-| `settings.js` | Settings tab, roles, hotkeys | `loadSettings()`, `loadRoles()` |
+| `settings.js` | Settings tab, roles, watch folders | `loadSettings()`, `loadRoles()` |
 | `utils.js` | Shared utilities | `esc()`, `formatSize()`, `showToast()` |
 
 ### Tab System
@@ -328,7 +329,7 @@ All frontend code uses ES6 modules loaded from `/js/main.js`:
 - **Projects** — Project cards grid
 - **Browser** — Tree + asset grid/list with filter bar and selection toolbar
 - **Import** — File browser + import settings with ShotGrid naming preview
-- **Settings** — Vault config, naming, player, ComfyUI, Flow, roles, watch folders, hotkeys
+- **Settings** — Vault config, naming, player, ComfyUI, Flow, roles, watch folders
 
 ### CSS Theme
 Neutral gray theme designed for VFX / color-critical work:
@@ -425,6 +426,117 @@ When restructuring the hierarchy (moving shots between projects), you must updat
 
 ---
 
+## 🎬 OpenRV — Compare To Viewer (February 2026)
+
+**Status**: ✅ BUILT FROM SOURCE — rv.exe compiled and integrated  
+**Location**: `C:\OpenRV` (source), `C:\OpenRV\_build\stage\app\bin\rv.exe` (binary, 12.4 MB)  
+**License**: Apache 2.0 (free, open-source alternative to commercial ShotGrid RV)
+
+### What OpenRV Is
+OpenRV is a professional media review tool with A/B wipe comparison. It's the open-source version of Autodesk's ShotGrid RV. We compiled it from source and it is now MediaVault's **default and only external player** (mrViewer2 was fully removed in February 2026).
+
+### Build Environment (DO NOT CHANGE without full rebuild)
+| Component | Version | Location |
+|-----------|---------|----------|
+| CMake | 4.0.3 | `C:\Program Files\CMake` |
+| MSVC | v14.40.33807 | VS 2022 Build Tools |
+| Qt | 6.5.3 | `C:\Qt6\6.5.3\msvc2019_64` |
+| Strawberry Perl | latest | `C:\Strawberry` |
+| VFX Platform | CY2024 | Boost 1.82, Python 3.11 |
+| MSYS2 | latest | Required for FFmpeg configure step |
+
+### Build Commands (run in MSYS2 MinGW64 shell)
+```bash
+# CRITICAL environment variables (MUST be set before any build)
+export PKG_CONFIG_LIBDIR="/c/OpenRV/_build/RV_DEPS_DAV1D/install/lib/pkgconfig:/c/OpenRV/_build/RV_DEPS_OPENSSL/install/lib/pkgconfig:/c/OpenRV/_build/RV_DEPS_ZLIB/install/share/pkgconfig:/c/OpenRV/_build/RV_DEPS_JPEGTURBO/install/lib/pkgconfig"
+unset PKG_CONFIG_PATH
+export CMAKE_POLICY_VERSION_MINIMUM=3.5
+
+# CMake configure
+cmake -B _build -G "Visual Studio 17 2022" -A x64 \
+    -DCMAKE_BUILD_TYPE=Release \
+    -DRV_VFX_CY=CY2024 \
+    -DRV_DEPS_QT_LOCATION="C:/Qt6/6.5.3/msvc2019_64" \
+    -DRV_DEPS_STRAWBERRY_PERL_LOCATION="C:/Strawberry"
+
+# Build (full suite: rv.exe, rvio.exe, rvshell.exe, etc.)
+cmake --build _build --target main_executable --config Release -j 4
+cmake --build _build --target executables_with_plugins --config Release -j 4
+```
+
+### Build Scripts
+| Script | Purpose |
+|--------|---------|
+| `C:\OpenRV\build_no_aja.sh` | Original successful build (AJA disabled, default codecs) |
+| `C:\OpenRV\build_enable_codecs.sh` | Rebuild with ProRes, DNxHD, AAC, AC3 enabled |
+
+### AJA Plugin Disabled
+The AJA professional video I/O plugin was causing link errors (`ajantv2_vs143_MT.lib` not found). Fixed by:
+1. Moving `src/plugins/output/AJADevices` → `C:\OpenRV\AJADevices.disabled` (out of source tree)
+2. Commenting out `INCLUDE(aja.cmake)` in `cmake/dependencies/CMakeLists.txt`
+- Result: "no output plugins found" warning on launch — harmless, just means no AJA hardware output
+
+### FFmpeg Codec Support
+OpenRV's FFmpeg build disables some codecs by default (licensing). To enable them, pass CMake flags:
+```bash
+# Enable ProRes, DNxHD, AAC, AC3, QT Animation
+cmake -B _build ... \
+    -DRV_FFMPEG_NON_FREE_DECODERS_TO_ENABLE="dnxhd;prores;aac;aac_fixed;aac_latm;ac3;qtrle" \
+    -DRV_FFMPEG_NON_FREE_ENCODERS_TO_ENABLE="dnxhd;prores;qtrle"
+```
+
+**Current codec status (after codec rebuild):**
+| Codec | Status | Notes |
+|-------|--------|-------|
+| H.264 (MP4) | ✅ Works | Enabled by default |
+| H.265/HEVC | ✅ Works | Enabled by default |
+| ProRes | ✅ Enabled | Via `build_enable_codecs.sh` |
+| DNxHD/DNxHR | ✅ Enabled | Via `build_enable_codecs.sh` |
+| AAC audio | ✅ Enabled | MP4 audio support |
+| EXR/PNG/JPEG/TIFF/DPX | ✅ Works | Native I/O plugins (no FFmpeg needed) |
+| VP9 | ❌ Disabled | Licensing |
+
+**If codec rebuild hasn't run yet**, only H.264/H.265 and image formats work. ProRes/DNxHD will show "Unsupported codec_id" error.
+
+### ⚠️ Build Gotchas (Lessons Learned the Hard Way)
+1. **PKG_CONFIG_LIBDIR is critical** — Without it, FFmpeg's configure finds MSYS2 MinGW's OpenSSL instead of OpenRV's, causing "openssl not found" errors. Must point to only OpenRV's built deps.
+2. **CMAKE_POLICY_VERSION_MINIMUM=3.5** — CMake 4.x breaks without this. OpenRV's CMakeLists.txt uses old policy syntax.
+3. **Build must be run from MSYS2 MinGW64** — FFmpeg's configure is a bash script, won't work in PowerShell.
+4. **AJA directory must be physically moved out** — Renaming to `.disabled` doesn't work because CMake's `FILE(GLOB)` still finds its CMakeLists.txt.
+5. **Don't delete FFmpeg stamp files from PowerShell while rv.exe is running** — File locks prevent copy operations.
+6. **To force FFmpeg rebuild**: Delete stamp files in `_build/cmake/dependencies/RV_DEPS_FFMPEG-prefix/src/RV_DEPS_FFMPEG-stamp/Release/` (configure, build, install, done).
+
+### MediaVault Integration (Compare To)
+
+**Modified files:**
+| File | Changes |
+|------|---------|
+| `src/routes/assetRoutes.js` | `findRV()` with 3-tier path discovery; `launchInRV()` launcher; `POST /api/assets/open-compare` with `viewer: 'rv'` and `-wipe` flag |
+| `public/index.html` | "🔀 Compare in RV" button in selection toolbar; "RV / OpenRV Path" setting field |
+| `public/js/browser.js` | `launchCompareToInViewer()` opens compare in RV; "Compare To" submenu uses RV |
+| `public/js/settings.js` | `rv_path` in settings load/save |
+
+**How Compare To works:**
+1. User selects 2+ assets → clicks "🔀 Compare in RV" (or right-click → Compare To → pick second asset)
+2. Frontend calls `POST /api/assets/open-compare` with `{ assetIds: [id1, id2], viewer: 'rv' }`
+3. Backend resolves file paths, kills existing rv.exe, launches `rv.exe file1 file2 -wipe`
+4. RV opens in wipe comparison mode
+
+**`findRV()` path priority:**
+1. Settings → `rv_path` (user-configured)
+2. `C:\OpenRV\_build\stage\app\bin\rv.exe` (our build)
+3. Standard install locations (`C:\Program Files\...`)
+
+**`launchCompareToInViewer()`:**
+1. Calls `POST /api/assets/open-compare` with `{ assetIds, viewer: 'rv' }`
+2. RV opens with `-wipe` flag for side-by-side comparison
+3. If RV not found → shows error toast
+
+### ⚠️ Known Issue: Route Order Bug (Pre-existing)
+`router.get('/:id')` at line ~157 in `assetRoutes.js` catches before `router.get('/viewer-status')` at line ~1450. The viewer-status endpoint works from browser.js code but fails on direct API calls. Fix: move `/viewer-status` route above `/:id`.
+
+---
+
 ## 📌 Pinned Future Features
 
 ### 🔀 Flow/ShotGrid API Integration
@@ -438,17 +550,15 @@ Already has UI in Settings tab (Site URL, Script Name, API Key fields + Test/Syn
 **Goal**: AI object detection (YOLO) on camera feeds  
 Potential future link: auto-import detected clips into DMV.
 
-### 📋 Review Mode — FFmpeg Burn-In Overlays for mrViewer2
+### 📋 Review Mode — FFmpeg Burn-In Overlays
 **Status**: Pinned — blocked by FFmpeg drawtext bug  
-**Goal**: Open assets in mrv2 with burned-in review overlays (project hierarchy, frame counter, resolution, watermark, safe areas)  
-**Commit so far**: `bb8f8e8` — endpoint, UI button, context menu all working. Font fix + error logging uncommitted in `assetRoutes.js`.
+**Goal**: Open assets in RV with burned-in review overlays (project hierarchy, frame counter, resolution, watermark, safe areas)  
+**Commit so far**: `bb8f8e8` — endpoint working. Now launches in RV instead of mrViewer2.
 
 **What's done:**
-- `POST /api/assets/:id/open-review` endpoint in `assetRoutes.js` (generates temp file with overlays, opens in mrv2)
+- `POST /api/assets/:id/open-review` endpoint in `assetRoutes.js` (generates temp file with overlays, opens in RV)
 - `buildReviewFilters(opts)` function generates FFmpeg `-vf` drawtext/drawbox chain
 - `findFontFile()` helper resolves platform font paths for FFmpeg
-- "📋 Review" button in player toolbar + right-click context menu in browser
-- `openReviewInMrv2(assetId)` in `player.js` with overlay preference support
 
 **The Bug:**
 FFmpeg's drawtext filter fails when chaining 3+ filters that use expressions (`y=ih-26`, `x=w-text_w-10`). Error: `Failed to configure input pad on Parsed_drawtext_N`. Static numeric x/y values work fine; expressions break it. Same result with `-vf` and `-filter_complex`. Tested extensively — it's an FFmpeg filtergraph issue, not escaping.

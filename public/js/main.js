@@ -8,7 +8,7 @@ import { state } from './state.js';
 import { api } from './api.js';
 import { loadProjects, loadTree, initFileDropZone } from './browser.js';
 import { loadImportTab } from './import.js';
-import { loadSettings, loadHotkeys, loadRoles, openFolderPicker, autoCheckForUpdates } from './settings.js';
+import { loadSettings, loadRoles, openFolderPicker, autoCheckForUpdates } from './settings.js';
 import './export.js';
 
 // ═══════════════════════════════════════════
@@ -54,7 +54,7 @@ function switchTab(tab) {
     if (tab === 'projects') loadProjects();
     if (tab === 'browser') loadTree();
     if (tab === 'import') loadImportTab();
-    if (tab === 'settings') { loadSettings(); loadHotkeys(); loadRoles(); }
+    if (tab === 'settings') { loadSettings(); loadRoles(); }
 }
 
 // ═══════════════════════════════════════════

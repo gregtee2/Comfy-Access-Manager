@@ -153,6 +153,82 @@ router.post('/preview-name', (req, res) => {
 });
 
 
+// ═══════════════════════════════════════════
+//  STRING-PATH GET ROUTES — MUST be above /:id to avoid wildcard match
+// ═══════════════════════════════════════════
+
+// GET /api/assets/viewer-status — Which external viewers are installed
+router.get('/viewer-status', (req, res) => {
+    res.json({
+        rv: !!findRV(),
+        rvpush: !!findRvPush(),
+        rvRunning: isRvRunning(),
+    });
+});
+
+// GET /api/assets/rv-status — Check if RV is running and rvpush is available
+router.get('/rv-status', (req, res) => {
+    res.json({
+        rvFound: !!findRV(),
+        rvpushFound: !!findRvPush(),
+        rvRunning: isRvRunning()
+    });
+});
+
+// GET /api/assets/compare-targets-by-path — Same as compare-targets but looks up asset by file_path
+// Used by RV plugin to find compare targets for the currently loaded file
+router.get('/compare-targets-by-path', (req, res) => {
+    const db = getDb();
+    const filePath = req.query.path;
+    if (!filePath) return res.status(400).json({ error: 'Provide ?path= parameter' });
+
+    // Normalize slashes for comparison (DB might store either format)
+    const normalized = filePath.replace(/\\/g, '/');
+    const asset = db.prepare(`
+        SELECT id, shot_id, project_id, role_id, vault_name
+        FROM assets
+        WHERE replace(file_path, '\\', '/') = ?
+    `).get(normalized);
+    if (!asset) return res.status(404).json({ error: 'Asset not found in vault' });
+    if (!asset.shot_id) return res.json({ asset: { id: asset.id, vault_name: asset.vault_name }, roles: [] });
+
+    // Reuse the same sibling query
+    const siblings = db.prepare(`
+        SELECT a.id, a.vault_name, a.version, a.file_ext, a.media_type, a.file_size,
+               a.file_path,
+               a.role_id, r.name AS role_name, r.code AS role_code, r.icon AS role_icon, r.color AS role_color,
+               r.sort_order AS role_sort
+        FROM assets a
+        LEFT JOIN roles r ON a.role_id = r.id
+        WHERE a.shot_id = ? AND a.project_id = ? AND a.id != ?
+        ORDER BY r.sort_order ASC, r.name ASC, a.version DESC
+    `).all(asset.shot_id, asset.project_id, asset.id);
+
+    const roleMap = new Map();
+    for (const s of siblings) {
+        const key = s.role_id || 0;
+        if (!roleMap.has(key)) {
+            roleMap.set(key, {
+                id: s.role_id,
+                name: s.role_name || 'Unassigned',
+                code: s.role_code || '',
+                icon: s.role_icon || '',
+                assets: []
+            });
+        }
+        roleMap.get(key).assets.push({
+            id: s.id,
+            vault_name: s.vault_name,
+            version: s.version,
+            file_ext: s.file_ext,
+            file_path: s.file_path
+        });
+    }
+
+    res.json({ asset: { id: asset.id, vault_name: asset.vault_name }, roles: [...roleMap.values()] });
+});
+
+
 // GET /api/assets/:id — Single asset with full details
 router.get('/:id', (req, res) => {
     const db = getDb();
@@ -998,59 +1074,8 @@ function getMimeType(filename) {
 }
 
 // ═══════════════════════════════════════════
-//  External Viewer helpers (mrViewer2 + RV)
+//  External Viewer helpers (RV / OpenRV)
 // ═══════════════════════════════════════════
-
-function findMrViewer2() {
-    const isWin = process.platform === 'win32';
-    const isMac = process.platform === 'darwin';
-
-    if (isWin) {
-        // Windows: check Program Files for vmrv2-*/mrv2 folders
-        const candidates = [
-            'C:\\Program Files\\vmrv2-v1.5.4\\bin\\mrv2.exe',
-            'C:\\Program Files\\mrv2\\bin\\mrv2.exe',
-        ];
-        for (const c of candidates) {
-            if (fs.existsSync(c)) return c;
-        }
-        try {
-            const progFiles = 'C:\\Program Files';
-            const dirs = fs.readdirSync(progFiles).filter(d => d.startsWith('vmrv2') || d.startsWith('mrv2'));
-            for (const d of dirs) {
-                const exe = path.join(progFiles, d, 'bin', 'mrv2.exe');
-                if (fs.existsSync(exe)) return exe;
-            }
-        } catch (e) { /* ignore */ }
-    } else if (isMac) {
-        // macOS: check /Applications for mrv2.app bundles
-        const candidates = [
-            '/Applications/mrv2.app/Contents/MacOS/mrv2',
-            '/Applications/mrViewer2.app/Contents/MacOS/mrv2',
-        ];
-        for (const c of candidates) {
-            if (fs.existsSync(c)) return c;
-        }
-        try {
-            const dirs = fs.readdirSync('/Applications').filter(d => d.toLowerCase().includes('mrv2') || d.toLowerCase().includes('mrviewer'));
-            for (const d of dirs) {
-                const exe = path.join('/Applications', d, 'Contents', 'MacOS', 'mrv2');
-                if (fs.existsSync(exe)) return exe;
-            }
-        } catch (e) { /* ignore */ }
-    } else {
-        // Linux: check common install locations
-        const candidates = [
-            '/usr/local/bin/mrv2',
-            '/usr/bin/mrv2',
-            path.join(process.env.HOME || '', '.local', 'bin', 'mrv2'),
-        ];
-        for (const c of candidates) {
-            if (fs.existsSync(c)) return c;
-        }
-    }
-    return null;
-}
 
 /**
  * Find RV (Autodesk/ShotGrid media viewer) executable on this machine.
@@ -1059,6 +1084,16 @@ function findMrViewer2() {
 function findRV() {
     const isWin = process.platform === 'win32';
     const isMac = process.platform === 'darwin';
+
+    // 1. Check user-configured RV path in settings (highest priority)
+    try {
+        const customPath = getSetting('rv_path');
+        if (customPath && fs.existsSync(customPath)) return customPath;
+    } catch (e) { /* settings not ready yet */ }
+
+    // 2. Check OpenRV local build (common for self-compiled OpenRV)
+    const openrvBuild = 'C:\\OpenRV\\_build\\stage\\app\\bin\\rv.exe';
+    if (isWin && fs.existsSync(openrvBuild)) return openrvBuild;
 
     if (isWin) {
         // Windows: check Program Files for RV installations
@@ -1135,314 +1170,95 @@ function findRV() {
 }
 
 /**
- * Launch file(s) in RV.
- * RV compare modes: -compare (A/B), -wipe (wipe), -tile (side by side)
+ * Find rvpush.exe companion tool (lives next to rv.exe in same bin/ dir).
+ * rvpush sends commands to a running RV session over network.
  */
-function launchInRV(exePath, filePaths, compareArgs) {
-    const { execFile, execSync, spawnSync } = require('child_process');
-    const cwd = path.dirname(exePath);
-
-    // Kill existing RV instance so we reuse the window slot
-    try {
-        if (process.platform === 'win32') {
-            execSync('taskkill /F /IM rv.exe', { windowsHide: true, stdio: 'ignore' });
-        } else {
-            execSync('pkill -x RV || pkill -x rv || true', { stdio: 'ignore' });
-        }
-    } catch (e) { /* not running, that's fine */ }
-
-    // Wait for process to fully die
-    if (process.platform === 'win32') {
-        spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Start-Sleep -Milliseconds 300'], { windowsHide: true });
-    } else {
-        spawnSync('sleep', ['0.3']);
-    }
-
-    const args = [...filePaths];
-    if (compareArgs) args.push(...compareArgs);
-    execFile(exePath, args, { cwd });
-    console.log(`[RV] Launched: ${filePaths.length} file(s)${compareArgs ? ' (' + compareArgs[0].replace('-', '') + ' mode)' : ''}`);
-}
-
-/**
- * Capture mrViewer2 window position before killing it (Windows only).
- * Returns { left, top, width, height } or null.
- * On macOS/Linux, returns null (window position restore not supported yet).
- */
-function getMrv2WindowRect() {
-    if (process.platform !== 'win32') return null;
-
-    const { spawnSync } = require('child_process');
-    // C# helper that enumerates all windows for mrv2 PIDs and returns the largest
-    const script = `
-Add-Type -TypeDefinition @'
-using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using System.Diagnostics;
-
-public class MrvWinHelper {
-    [DllImport("user32.dll")] static extern bool EnumWindows(EnumWinProc cb, IntPtr lp);
-    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
-    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
-    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
-    delegate bool EnumWinProc(IntPtr h, IntPtr lp);
-    [StructLayout(LayoutKind.Sequential)]
-    public struct RECT { public int Left, Top, Right, Bottom; }
-
-    public static string GetLargestRect(string procName) {
-        var procs = Process.GetProcessesByName(procName);
-        if (procs.Length == 0) return "NO_PROCESS";
-        var pids = new HashSet<uint>();
-        foreach (var p in procs) pids.Add((uint)p.Id);
-
-        string best = "NONE";
-        int bestArea = 0;
-        EnumWindows((h, lp) => {
-            uint wp; GetWindowThreadProcessId(h, out wp);
-            if (pids.Contains(wp) && IsWindowVisible(h)) {
-                RECT r; GetWindowRect(h, out r);
-                int w = r.Right - r.Left, ht = r.Bottom - r.Top;
-                int area = w * ht;
-                if (w > 200 && ht > 200 && area > bestArea) {
-                    bestArea = area;
-                    best = r.Left + "," + r.Top + "," + r.Right + "," + r.Bottom;
-                }
-            }
-            return true;
-        }, IntPtr.Zero);
-        return best;
-    }
-}
-'@
-Write-Output ([MrvWinHelper]::GetLargestRect("mrv2"))
-`;
-    try {
-        const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', script], {
-            windowsHide: true, encoding: 'utf-8', timeout: 8000
-        });
-        const output = (result.stdout || '').trim();
-        if (output && output !== 'NONE' && output !== 'NO_PROCESS' && output.includes(',')) {
-            const [left, top, right, bottom] = output.split(',').map(Number);
-            const width = right - left, height = bottom - top;
-            if (!isNaN(left) && !isNaN(top) && width > 200 && height > 200) {
-                return { left, top, width, height };
-            }
-        }
-        if (result.stderr) console.log(`[mrViewer2] GetRect stderr: ${result.stderr.trim().slice(0, 200)}`);
-    } catch (e) { console.log(`[mrViewer2] GetRect error: ${e.message}`); }
+function findRvPush() {
+    const rvExe = findRV();
+    if (!rvExe) return null;
+    const rvDir = path.dirname(rvExe);
+    const pushExe = path.join(rvDir, process.platform === 'win32' ? 'rvpush.exe' : 'rvpush');
+    if (fs.existsSync(pushExe)) return pushExe;
     return null;
 }
 
 /**
- * Move mrViewer2 window to a saved position (Windows only).
- * Retries up to 10 times (every 800ms) waiting for the main window to appear.
+ * Check if an RV process is currently running.
+ * Returns true/false.
  */
-function restoreMrv2Position(rect, attempt = 1) {
-    if (process.platform !== 'win32') return;  // Only supported on Windows
-    if (attempt > 10) {
-        console.log(`[mrViewer2] Could not restore position after ${attempt - 1} attempts`);
-        return;
-    }
-    const { spawnSync } = require('child_process');
-    // Find largest mrv2 window and move it
-    const script = `
-Add-Type -TypeDefinition @'
-using System;
-using System.Collections.Generic;
-using System.Runtime.InteropServices;
-using System.Diagnostics;
-
-public class MrvWinMover {
-    [DllImport("user32.dll")] static extern bool EnumWindows(EnumWinProc cb, IntPtr lp);
-    [DllImport("user32.dll")] static extern uint GetWindowThreadProcessId(IntPtr h, out uint pid);
-    [DllImport("user32.dll")] static extern bool IsWindowVisible(IntPtr h);
-    [DllImport("user32.dll")] static extern bool GetWindowRect(IntPtr h, out RECT r);
-    [DllImport("user32.dll")] static extern bool MoveWindow(IntPtr h, int x, int y, int w, int ht, bool repaint);
-    [DllImport("user32.dll")] static extern bool SetForegroundWindow(IntPtr h);
-    delegate bool EnumWinProc(IntPtr h, IntPtr lp);
-    [StructLayout(LayoutKind.Sequential)]
-    public struct RECT { public int Left, Top, Right, Bottom; }
-
-    public static string MoveMainWindow(string procName, int tx, int ty, int tw, int th) {
-        var procs = Process.GetProcessesByName(procName);
-        if (procs.Length == 0) return "NO_PROCESS";
-        var pids = new HashSet<uint>();
-        foreach (var p in procs) pids.Add((uint)p.Id);
-
-        IntPtr bestHwnd = IntPtr.Zero;
-        int bestArea = 0;
-        EnumWindows((h, lp) => {
-            uint wp; GetWindowThreadProcessId(h, out wp);
-            if (pids.Contains(wp) && IsWindowVisible(h)) {
-                RECT r; GetWindowRect(h, out r);
-                int w = r.Right - r.Left, ht2 = r.Bottom - r.Top;
-                int area = w * ht2;
-                if (w > 200 && ht2 > 200 && area > bestArea) {
-                    bestArea = area;
-                    bestHwnd = h;
-                }
-            }
-            return true;
-        }, IntPtr.Zero);
-
-        if (bestHwnd != IntPtr.Zero) {
-            MoveWindow(bestHwnd, tx, ty, tw, th, true);
-            SetForegroundWindow(bestHwnd);
-            return "ok";
-        }
-        return "WAIT";
-    }
-}
-'@
-Write-Output ([MrvWinMover]::MoveMainWindow("mrv2", ${rect.left}, ${rect.top}, ${rect.width}, ${rect.height}))
-`;
+function isRvRunning() {
+    const { execSync } = require('child_process');
     try {
-        const result = spawnSync('powershell.exe', ['-NoProfile', '-Command', script], {
-            windowsHide: true, encoding: 'utf-8', timeout: 8000
-        });
-        const out = (result.stdout || '').trim();
-        if (out === 'ok') {
-            console.log(`[mrViewer2] Restored position: ${rect.left},${rect.top} ${rect.width}x${rect.height} (attempt ${attempt})`);
-            return;
+        if (process.platform === 'win32') {
+            const out = execSync('tasklist /FI "IMAGENAME eq rv.exe" /NH', { windowsHide: true, encoding: 'utf8' });
+            return out.includes('rv.exe');
+        } else {
+            execSync('pgrep -x rv', { stdio: 'ignore' });
+            return true;
         }
-        console.log(`[mrViewer2] Restore attempt ${attempt}: ${out}`);
-    } catch (e) { /* */ }
-    // Window not ready yet — retry
-    setTimeout(() => restoreMrv2Position(rect, attempt + 1), 800);
+    } catch { return false; }
 }
 
 /**
- * Launch file(s) in mrViewer2.
- * Captures window position, kills existing instance, launches new one,
- * then restores the window to the same monitor/position.
+ * Try to push files to a running RV session via rvpush.
+ * @param {string} pushExe - Path to rvpush.exe
+ * @param {string[]} filePaths - Files to load
+ * @param {string} mode - 'set' (replace) or 'merge' (add)
+ * @param {string[]} compareArgs - Optional compare flags (e.g. ['-wipe'])
+ * @returns {{ success: boolean, started: boolean }} - started=true if we had to launch a new RV
  */
-function launchInMrv2(exePath, filePaths, compareArgs) {
-    const { execFile, execSync, spawnSync } = require('child_process');
-    const cwd = path.dirname(exePath);
+function rvPush(pushExe, filePaths, mode = 'set', compareArgs = null) {
+    const { spawnSync } = require('child_process');
+    const cwd = path.dirname(pushExe);
 
-    // Capture window position before killing (Windows only)
-    const savedRect = getMrv2WindowRect();
-    if (savedRect) {
-        console.log(`[mrViewer2] Saved position: ${savedRect.left},${savedRect.top} ${savedRect.width}x${savedRect.height}`);
-    } else {
-        console.log(`[mrViewer2] No existing window found — will open at default position`);
+    // Build rvpush arguments
+    const args = [mode, ...filePaths];
+    if (compareArgs) args.push(...compareArgs);
+
+    // Set RVPUSH_RV_EXECUTABLE_PATH=none so rvpush never auto-launches RV
+    // (we handle launching ourselves with -network to ensure future pushes work)
+    const env = { ...process.env, RVPUSH_RV_EXECUTABLE_PATH: 'none' };
+
+    const result = spawnSync(pushExe, args, { cwd, windowsHide: true, timeout: 5000, encoding: 'utf8', env });
+
+    // Exit 0 = success (pushed to running RV)
+    // Exit 15 = no running RV found, rvpush started a new one
+    // Exit 4 = connection failed (RV not running and couldn't auto-start)
+    if (result.status === 0) {
+        console.log(`[RV] rvpush ${mode}: ${filePaths.length} file(s) → running session`);
+        return { success: true, started: false };
     }
-
-    // Kill existing mrViewer2 (cross-platform)
-    try {
-        if (process.platform === 'win32') {
-            execSync('taskkill /F /IM mrv2.exe', { windowsHide: true, stdio: 'ignore' });
-        } else {
-            execSync('pkill -f mrv2 || true', { stdio: 'ignore' });
-        }
-    } catch (e) { /* not running, that's fine */ }
-
-    // Wait for process to fully die before launching new one
-    if (process.platform === 'win32') {
-        spawnSync('powershell.exe', ['-NoProfile', '-Command', 'Start-Sleep -Milliseconds 300'], { windowsHide: true });
-    } else {
-        spawnSync('sleep', ['0.3']);
+    if (result.status === 15) {
+        console.log(`[RV] rvpush ${mode}: started new RV with ${filePaths.length} file(s)`);
+        return { success: true, started: true };
     }
-
-    const args = [];
-    // mrv2's version_regex matches _v in our vault names (e.g. _v001) and tries
-    // to expand into a frame sequence → "Cannot open" errors.
-    // -s (single/still) prevents this, but only works with 1-2 files.
-    // For 3+ images: isolate each file in its own temp subdirectory so mrv2
-    // can't find sequence neighbors (it only detects sequences within a folder).
-    const imageExts = ['.png', '.jpg', '.jpeg', '.exr', '.tif', '.tiff', '.bmp', '.tga', '.hdr', '.webp', '.gif', '.dpx'];
-    const allFiles = [...filePaths];
-    if (compareArgs) {
-        const bFile = compareArgs[1];
-        if (bFile) allFiles.push(bFile);
-    }
-    const allImages = allFiles.every(f => imageExts.includes(path.extname(f).toLowerCase()));
-    // mrv2 version_regex matches _v### patterns in filenames and tries to expand
-    // into a frame sequence → "Cannot open" errors for missing frames.
-    // Detect if ANY filename has a version pattern that would trigger this.
-    const hasVersionPattern = allFiles.some(f => /[_\-]v\d+|_\d{3,}/i.test(path.basename(f)));
-
-    if (allImages && hasVersionPattern) {
-        // Images with version patterns: copy to temp dir with clean names.
-        // This prevents mrv2 from detecting sequences in ALL modes (single, compare, 3+).
-        const os = require('os');
-        const tmpDir = path.join(os.tmpdir(), `dmv-mrv2-${Date.now()}`);
-        fs.mkdirSync(tmpDir, { recursive: true });
-        const letters = 'ABCDEFGHIJKLMNOPQRSTUVWXYZ';
-
-        if (allFiles.length <= 2) {
-            // 1-2 images: clean-named copies + -s flag + optional compare
-            for (let i = 0; i < filePaths.length; i++) {
-                const ext = path.extname(filePaths[i]).toLowerCase();
-                const dest = path.join(tmpDir, letters[i] + ext);
-                try { fs.linkSync(filePaths[i], dest); } catch { fs.copyFileSync(filePaths[i], dest); }
-                filePaths[i] = dest;  // Replace with clean path
-            }
-            if (compareArgs) {
-                const bOrig = compareArgs[1];
-                const bExt = path.extname(bOrig).toLowerCase();
-                const bDest = path.join(tmpDir, letters[filePaths.length] + bExt);
-                try { fs.linkSync(bOrig, bDest); } catch { fs.copyFileSync(bOrig, bDest); }
-                compareArgs[1] = bDest;  // Replace B file with clean path
-            }
-            args.push('-s');
-            args.push(...filePaths);
-            if (compareArgs) args.push(...compareArgs);
-        } else {
-            // 3+ images: contiguous frame sequence for arrow key scrubbing
-            for (let i = 0; i < allFiles.length; i++) {
-                const ext = path.extname(allFiles[i]).toLowerCase();
-                const frame = String(i + 1).padStart(4, '0');
-                const dest = path.join(tmpDir, `img.${frame}${ext}`);
-                try { fs.linkSync(allFiles[i], dest); } catch { fs.copyFileSync(allFiles[i], dest); }
-            }
-            args.push(path.join(tmpDir, `img.0001${path.extname(allFiles[0]).toLowerCase()}`));
-        }
-        setTimeout(() => {
-            try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-        }, 60000);
-    } else if (allImages && allFiles.length <= 2) {
-        // 1-2 images without version patterns: -s flag is sufficient
-        args.push('-s');
-        args.push(...filePaths);
-        if (compareArgs) args.push(...compareArgs);
-    } else if (allImages && allFiles.length > 2) {
-        // 3+ images without version patterns: sequence approach
-        const os = require('os');
-        const tmpDir = path.join(os.tmpdir(), `dmv-mrv2-${Date.now()}`);
-        fs.mkdirSync(tmpDir, { recursive: true });
-        for (let i = 0; i < allFiles.length; i++) {
-            const ext = path.extname(allFiles[i]).toLowerCase();
-            const frame = String(i + 1).padStart(4, '0');
-            const dest = path.join(tmpDir, `img.${frame}${ext}`);
-            try { fs.linkSync(allFiles[i], dest); } catch { fs.copyFileSync(allFiles[i], dest); }
-        }
-        args.push(path.join(tmpDir, `img.0001${path.extname(allFiles[0]).toLowerCase()}`));
-        setTimeout(() => {
-            try { fs.rmSync(tmpDir, { recursive: true, force: true }); } catch {}
-        }, 60000);
-    } else {
-        // Non-image files (video, etc.) — pass as-is, mrv2 handles them fine
-        args.push(...filePaths);
-        if (compareArgs) args.push(...compareArgs);
-    }
-    execFile(exePath, args, { cwd });
-    console.log(`[mrViewer2] Launched: ${allFiles.length} file(s)${args.includes('-s') ? ' (still)' : ''}${allImages && hasVersionPattern ? ' (clean names)' : ''}`);
-
-    // Restore window to previous position/monitor after it opens
-    if (savedRect) {
-        setTimeout(() => restoreMrv2Position(savedRect), 2000);
-    }
+    return { success: false, started: false };
 }
 
-// GET /api/assets/viewer-status — Which external viewers are installed
-router.get('/viewer-status', (req, res) => {
-    res.json({
-        mrviewer2: !!findMrViewer2(),
-        rv: !!findRV(),
-    });
-});
+/**
+ * Launch file(s) in RV with persistent session support.
+ * 1. If RV is running → use rvpush to replace/merge media (no restart)
+ * 2. If RV is not running → launch rv.exe with -network flag (enables rvpush)
+ *
+ * RV compare modes: -compare (A/B), -wipe (wipe), -tile (side by side)
+ */
+function launchInRV(exePath, filePaths, compareArgs) {
+    const { execFile, spawnSync } = require('child_process');
+    const cwd = path.dirname(exePath);
+    const pushExe = findRvPush();
+
+    // If rvpush is available, try pushing to a running session first
+    if (pushExe) {
+        const pushResult = rvPush(pushExe, filePaths, 'set', compareArgs);
+        if (pushResult.success) return;
+    }
+
+    // No running RV (or no rvpush) — launch fresh with -network enabled
+    const args = ['-network', ...filePaths];
+    if (compareArgs) args.push(...compareArgs);
+    execFile(exePath, args, { cwd });
+    console.log(`[RV] Launched new session (-network): ${filePaths.length} file(s)${compareArgs ? ' (' + compareArgs[0].replace('-', '') + ' mode)' : ''}`);
+}
 
 // GET /api/assets/:id/compare-targets — Get sibling assets in the same shot, grouped by role
 // Used by "Compare To →" context menu to show versions by role
@@ -1492,65 +1308,71 @@ router.get('/:id/compare-targets', (req, res) => {
     res.json({ roles: [...roleMap.values()] });
 });
 
-// GET /api/assets/compare-targets-by-path — Same as compare-targets but looks up asset by file_path
-// Used by mrViewer2 plugin to find compare targets for the currently loaded file
-router.get('/compare-targets-by-path', (req, res) => {
+// POST /api/assets/rv-push — Push files to a running RV session (or start one)
+// Body: { ids: [assetId, ...], mode: 'set'|'merge', compareArgs: ['-wipe'] }
+//   mode 'set' = replace current media, 'merge' = add to sources
+router.post('/rv-push', (req, res) => {
     const db = getDb();
-    const filePath = req.query.path;
-    if (!filePath) return res.status(400).json({ error: 'Provide ?path= parameter' });
+    const { ids, mode, compareArgs } = req.body || {};
+    if (!ids || !Array.isArray(ids) || ids.length < 1) {
+        return res.status(400).json({ error: 'Provide an array of asset ids' });
+    }
 
-    // Normalize slashes for comparison (DB might store either format)
-    const normalized = filePath.replace(/\\/g, '/');
-    const asset = db.prepare(`
-        SELECT id, shot_id, project_id, role_id, vault_name
-        FROM assets
-        WHERE replace(file_path, '\\', '/') = ?
-    `).get(normalized);
-    if (!asset) return res.status(404).json({ error: 'Asset not found in vault' });
-    if (!asset.shot_id) return res.json({ asset: { id: asset.id, vault_name: asset.vault_name }, roles: [] });
+    const pushExe = findRvPush();
+    const rvExe = findRV();
+    if (!pushExe && !rvExe) {
+        return res.status(404).json({ error: 'Neither rvpush nor RV found.' });
+    }
 
-    // Reuse the same sibling query
-    const siblings = db.prepare(`
-        SELECT a.id, a.vault_name, a.version, a.file_ext, a.media_type, a.file_size,
-               a.file_path,
-               a.role_id, r.name AS role_name, r.code AS role_code, r.icon AS role_icon, r.color AS role_color,
-               r.sort_order AS role_sort
-        FROM assets a
-        LEFT JOIN roles r ON a.role_id = r.id
-        WHERE a.shot_id = ? AND a.project_id = ? AND a.id != ?
-        ORDER BY r.sort_order ASC, r.name ASC, a.version DESC
-    `).all(asset.shot_id, asset.project_id, asset.id);
+    // Resolve file paths
+    const filePaths = [];
+    for (const id of ids) {
+        const asset = db.prepare('SELECT file_path FROM assets WHERE id = ?').get(id);
+        if (asset && fs.existsSync(asset.file_path)) {
+            filePaths.push(asset.file_path);
+        }
+    }
+    if (filePaths.length === 0) {
+        return res.status(404).json({ error: 'No valid files found' });
+    }
 
-    const roleMap = new Map();
-    for (const s of siblings) {
-        const key = s.role_id || 0;
-        if (!roleMap.has(key)) {
-            roleMap.set(key, {
-                id: s.role_id,
-                name: s.role_name || 'Unassigned',
-                code: s.role_code || '',
-                icon: s.role_icon || '',
-                assets: []
+    const pushMode = mode === 'merge' ? 'merge' : 'set';
+
+    // Try rvpush first
+    if (pushExe) {
+        const result = rvPush(pushExe, filePaths, pushMode, compareArgs || null);
+        if (result.success) {
+            return res.json({
+                success: true,
+                count: filePaths.length,
+                mode: pushMode,
+                started: result.started,
+                message: result.started
+                    ? `Started RV with ${filePaths.length} file(s)`
+                    : `Pushed ${filePaths.length} file(s) to running RV (${pushMode})`
             });
         }
-        roleMap.get(key).assets.push({
-            id: s.id,
-            vault_name: s.vault_name,
-            version: s.version,
-            file_ext: s.file_ext,
-            file_path: s.file_path
+    }
+
+    // rvpush failed — launch fresh RV with -network
+    if (rvExe) {
+        launchInRV(rvExe, filePaths, compareArgs || null);
+        return res.json({
+            success: true,
+            count: filePaths.length,
+            mode: pushMode,
+            started: true,
+            message: `Launched new RV session with ${filePaths.length} file(s)`
         });
     }
 
-    res.json({ asset: { id: asset.id, vault_name: asset.vault_name }, roles: [...roleMap.values()] });
+    res.status(500).json({ error: 'Failed to push or launch RV' });
 });
 
-// POST /api/assets/open-compare — Open multiple files in external viewer for A/B compare
-// Accepts optional `viewer` body param: 'mrviewer2' (default) or 'rv'
-// Accepts optional `mode` body param: 'compare' (default) or 'files' (just load all, no compare)
+// POST /api/assets/open-compare — Open multiple files in RV for A/B compare
 router.post('/open-compare', (req, res) => {
     const db = getDb();
-    const { ids, viewer, mode: requestedMode } = req.body || {};
+    const { ids } = req.body || {};
     if (!ids || !Array.isArray(ids) || ids.length < 1) {
         return res.status(400).json({ error: 'Provide an array of asset ids' });
     }
@@ -1567,46 +1389,15 @@ router.post('/open-compare', (req, res) => {
         return res.status(404).json({ error: 'No valid files found' });
     }
 
-    if (viewer === 'rv') {
-        // RV compare mode
-        const exePath = findRV();
-        if (!exePath) {
-            return res.status(404).json({ error: 'RV not found. Install Autodesk RV / ShotGrid RV.' });
-        }
-        // RV: all files then -wipe flag
-        const compareArgs = filePaths.length >= 2 ? ['-wipe'] : null;
-        launchInRV(exePath, filePaths, compareArgs);
-        console.log(`[RV] Compare: ${filePaths.length} files`);
-        res.json({ success: true, count: filePaths.length, viewer: 'rv' });
-    } else {
-        // mrViewer2 (default)
-        const exePath = findMrViewer2();
-        if (!exePath) {
-            return res.status(404).json({ error: 'mrViewer2 not found. Install from https://mrv2.sourceforge.io/' });
-        }
-
-        // "files" mode = load all into Files panel, no compare flags
-        if (requestedMode === 'files') {
-            launchInMrv2(exePath, filePaths, null);
-            console.log(`[mrViewer2] Files panel: ${filePaths.length} clips`);
-            return res.json({ success: true, count: filePaths.length, mode: 'files', viewer: 'mrviewer2' });
-        }
-
-        // Default: compare mode
-        let compareArgs = null;
-        let mode = 'playlist';
-        if (filePaths.length === 2) {
-            // Exactly 2 → Wipe compare (A vs B)
-            const bFile = filePaths.pop();
-            compareArgs = ['-compare', bFile, '-compareMode', 'Wipe'];
-            mode = 'wipe';
-        }
-        // 3+ files → pass all as-is (flipbook / tile in mrViewer2)
-        launchInMrv2(exePath, filePaths, compareArgs);
-        const totalCount = filePaths.length + (compareArgs ? 1 : 0);
-        console.log(`[mrViewer2] Compare: ${totalCount} files (${mode})`);
-        res.json({ success: true, count: totalCount, mode, viewer: 'mrviewer2' });
+    const exePath = findRV();
+    if (!exePath) {
+        return res.status(404).json({ error: 'RV not found. Install OpenRV or Autodesk RV.' });
     }
+    // RV: all files then -wipe flag for 2+ files
+    const compareArgs = filePaths.length >= 2 ? ['-wipe'] : null;
+    launchInRV(exePath, filePaths, compareArgs);
+    console.log(`[RV] Compare: ${filePaths.length} files`);
+    res.json({ success: true, count: filePaths.length, viewer: 'rv' });
 });
 
 // ═══════════════════════════════════════════
@@ -1741,10 +1532,10 @@ router.post('/:id/open-review', async (req, res) => {
         return res.status(500).json({ error: 'FFmpeg not found — required for review mode' });
     }
 
-    // Find external player
-    const exePath = findMrViewer2();
+    // Find external player (RV)
+    const exePath = findRV();
     if (!exePath) {
-        return res.status(404).json({ error: 'mrViewer2 not found — install from https://mrv2.sourceforge.io/' });
+        return res.status(404).json({ error: 'RV not found — install OpenRV or set path in Settings' });
     }
 
     // Overlay options from client
@@ -1789,7 +1580,7 @@ router.post('/:id/open-review', async (req, res) => {
 
     if (!filterStr) {
         // No overlays selected — just open normally
-        launchInMrv2(exePath, [asset.file_path]);
+        launchInRV(exePath, [asset.file_path]);
         return res.json({ success: true, mode: 'direct' });
     }
 
@@ -1831,8 +1622,8 @@ router.post('/:id/open-review', async (req, res) => {
         }
         console.log(`[Review] Generated: ${outFile}`);
 
-        // Open in mrViewer2
-        launchInMrv2(exePath, [outFile]);
+        // Open in RV
+        launchInRV(exePath, [outFile]);
 
         // Clean up temp dir after 1 hour
         setTimeout(() => {
@@ -1870,13 +1661,13 @@ router.post('/:id/open-external', (req, res) => {
         launchInRV(exePath, [asset.file_path]);
         playerName = 'RV';
     } else {
-        // mrViewer2 (default)
-        exePath = findMrViewer2();
+        // RV (default)
+        exePath = findRV();
         if (!exePath) {
-            return res.status(404).json({ error: 'mrViewer2 not found. Install from https://mrv2.sourceforge.io/' });
+            return res.status(404).json({ error: 'RV not found. Install OpenRV or set path in Settings.' });
         }
-        launchInMrv2(exePath, [asset.file_path]);
-        playerName = 'mrViewer2';
+        launchInRV(exePath, [asset.file_path]);
+        playerName = 'RV';
     }
 
     console.log(`[${playerName}] Launched: ${asset.vault_name}`);

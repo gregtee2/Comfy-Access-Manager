@@ -1,6 +1,6 @@
 /**
  * DMV — Player Module
- * Built-in media player, external player launch (mrViewer2), compare view.
+ * Built-in media player, external player launch (RV / OpenRV), compare view.
  */
 
 import { state } from './state.js';
@@ -284,9 +284,8 @@ function renderPlayer() {
     if (asset.original_name !== asset.vault_name) {
         parts.push(`<span>📄 Originally: ${esc(asset.original_name)}</span>`);
     }
-    parts.push(`<button class="player-mrv2-btn" onclick="openInMrViewer2(${asset.id})" title="Open in mrViewer2">🎬 mrViewer2</button>`);
-    parts.push(`<button class="player-mrv2-btn" onclick="openInRV(${asset.id})" title="Open in RV (ShotGrid)">🎬 RV</button>`);
-    parts.push(`<button class="player-mrv2-btn player-review-btn" onclick="openReviewInMrv2(${asset.id})" title="Open in mrViewer2 with burn-in overlays (hierarchy, watermark, frame counter)">📋 Review</button>`);
+    parts.push(`<button class="player-rv-btn" onclick="openInRV(${asset.id})" title="Open in RV">🎬 RV</button>`);
+    parts.push(`<button class="player-rv-btn" onclick="sendToRV(${asset.id}, 'merge')" title="Add to running RV session">➕ Add to RV</button>`);
     meta.innerHTML = parts.join('');
 
     // Update generation metadata panel if it's open
@@ -607,7 +606,7 @@ function cleanupOverlay() {
 
 async function openInExternalPlayer(assetId) {
     try {
-        const player = state.settings?.default_player || 'mrviewer2';
+        const player = state.settings?.default_player || 'rv';
         const customPath = state.settings?.custom_player_path || '';
         await api(`/api/assets/${assetId}/open-external`, {
             method: 'POST',
@@ -620,88 +619,59 @@ async function openInExternalPlayer(assetId) {
     }
 }
 
-async function openInMrViewer2(assetId) {
-    try {
-        await api(`/api/assets/${assetId}/open-external`, { method: 'POST', body: { player: 'mrviewer2' } });
-        showToast('Launched in mrViewer2');
-        window.blur();
-    } catch (err) {
-        showToast('Failed to launch mrViewer2: ' + err.message, 5000);
-    }
-}
 
-async function openCompareInMrViewer2() {
-    if (state.selectedAssets.length < 2) {
-        showToast('Select at least 2 clips to compare (Ctrl-click or Shift-click)', 4000);
-        return;
-    }
-    try {
-        const res = await api('/api/assets/open-compare', {
-            method: 'POST',
-            body: { ids: state.selectedAssets, viewer: 'mrviewer2' }
-        });
-        if (res.mode === 'wipe') {
-            showToast(`Loaded ${res.count} clips in mrViewer2 — Wipe compare`);
-        } else {
-            showToast(`Loaded ${res.count} clips in mrViewer2 — use ← → to flip, or Panel → Compare → Tile`);
-        }
-        window.blur();
-    } catch (err) {
-        showToast('Failed to launch compare: ' + err.message, 5000);
-    }
-}
-
-async function openAllInMrv2() {
-    if (state.selectedAssets.length < 1) {
-        showToast('Select clips to open (Ctrl-click or Shift-click)', 4000);
-        return;
-    }
-    try {
-        const res = await api('/api/assets/open-compare', {
-            method: 'POST',
-            body: { ids: state.selectedAssets, viewer: 'mrviewer2', mode: 'files' }
-        });
-        showToast(`Loaded ${res.count} clips — PageUp/PageDown to switch clips, F4 for Files panel`, 6000);
-        window.blur();
-    } catch (err) {
-        showToast('Failed to launch mrViewer2: ' + err.message, 5000);
-    }
-}
 
 async function openInRV(assetId) {
     try {
-        await api(`/api/assets/${assetId}/open-external`, { method: 'POST', body: { player: 'rv' } });
-        showToast('Launched in RV');
+        // Use rv-push endpoint for persistent session (uses rvpush if RV running, launches new if not)
+        await api('/api/assets/rv-push', { method: 'POST', body: { ids: [assetId], mode: 'set' } });
+        showToast('Loaded in RV');
         window.blur();
     } catch (err) {
         showToast('Failed to launch RV: ' + err.message, 5000);
     }
 }
 
-async function openReviewInMrv2(assetId) {
+/**
+ * Send a single asset to an already-running RV session (merge mode = add, not replace).
+ * If RV isn't running, starts a new session with -network.
+ */
+async function sendToRV(assetId, mode = 'merge') {
     try {
-        const opts = loadOverlayPrefs();
-        showToast('Generating review file with overlays...', 4000);
-        const res = await api(`/api/assets/${assetId}/open-review`, {
+        const res = await api('/api/assets/rv-push', {
             method: 'POST',
-            body: {
-                burnIn: opts.burnIn,
-                watermark: opts.watermark,
-                safeAreas: opts.safeAreas,
-                frameCounter: opts.frameCounter,
-                watermarkText: opts.watermarkText || 'INTERNAL REVIEW',
-            }
+            body: { ids: [assetId], mode }
         });
-        if (res.mode === 'direct') {
-            showToast('Launched in mrViewer2 (no overlays selected)');
-        } else {
-            showToast('Review file generating — mrViewer2 will open when ready');
-        }
+        showToast(res.message || `Sent to RV (${mode})`);
         window.blur();
     } catch (err) {
-        showToast('Failed to generate review: ' + err.message, 5000);
+        showToast('Failed to send to RV: ' + err.message, 5000);
     }
 }
+
+/**
+ * Send all selected assets to RV (merge or set mode).
+ * Default: 'set' for replace, 'merge' to add to existing sources.
+ */
+async function sendSelectedToRV(mode = 'set') {
+    const { state } = await import('./state.js');
+    if (!state.selectedAssets || state.selectedAssets.length === 0) {
+        showToast('Select clips first (Ctrl-click or Shift-click)', 4000);
+        return;
+    }
+    try {
+        const res = await api('/api/assets/rv-push', {
+            method: 'POST',
+            body: { ids: state.selectedAssets, mode }
+        });
+        showToast(res.message || `${state.selectedAssets.length} clip(s) sent to RV`);
+        window.blur();
+    } catch (err) {
+        showToast('Failed to send to RV: ' + err.message, 5000);
+    }
+}
+
+
 
 async function openCompareInRV() {
     if (state.selectedAssets.length < 2) {
@@ -709,9 +679,9 @@ async function openCompareInRV() {
         return;
     }
     try {
-        const res = await api('/api/assets/open-compare', {
+        const res = await api('/api/assets/rv-push', {
             method: 'POST',
-            body: { ids: state.selectedAssets, viewer: 'rv' }
+            body: { ids: state.selectedAssets, mode: 'set', compareArgs: ['-wipe'] }
         });
         showToast(`Loaded ${res.count} clips in RV — wipe mode`);
         window.blur();
@@ -1428,6 +1398,13 @@ function cachedPlay() {
     st.startTime = performance.now();
     st.startFrame = st.frameIdx;
 
+    // Resume hidden video for audio output
+    if (st._video && st._video.paused) {
+        const targetTime = st.frameIdx / frameCache.fps;
+        st._video.currentTime = targetTime;
+        st._video.play().catch(() => {});
+    }
+
     function tick(now) {
         if (!st.playing || !frameCache?.ready) return;
         const elapsed = (now - st.startTime) / 1000;
@@ -1438,9 +1415,12 @@ function cachedPlay() {
                 newFrame = newFrame % frameCache.frames.length;
                 st.startTime = now;
                 st.startFrame = 0;
+                // Loop audio too
+                if (st._video) st._video.currentTime = 0;
             } else {
                 st.frameIdx = frameCache.frames.length - 1;
                 st.playing = false;
+                if (st._video) st._video.pause();
                 if (st.onTick) st.onTick(st.frameIdx, false);
                 return;
             }
@@ -1466,6 +1446,10 @@ function cachedPause() {
         cancelAnimationFrame(cachedPlaybackState.rafId);
         cachedPlaybackState.rafId = null;
     }
+    // Pause hidden video (stops audio)
+    if (cachedPlaybackState._video && !cachedPlaybackState._video.paused) {
+        cachedPlaybackState._video.pause();
+    }
 }
 
 /** Set cached playback to specific frame index */
@@ -1475,6 +1459,10 @@ function cachedSeekFrame(frameIdx) {
     // Reset start reference so play() continues from here
     cachedPlaybackState.startTime = performance.now();
     cachedPlaybackState.startFrame = cachedPlaybackState.frameIdx;
+    // Sync hidden video position for audio alignment
+    if (cachedPlaybackState._video && frameCache?.fps) {
+        cachedPlaybackState._video.currentTime = cachedPlaybackState.frameIdx / frameCache.fps;
+    }
 }
 
 /** Set cached playback to specific time position */
@@ -1592,7 +1580,8 @@ function initTransportControls(container, fps) {
     // ─── Switch to cached playback mode ───
     function activateCache() {
         useCache = true;
-        video.pause();
+        // DON'T pause video — keep it playing (hidden) for AUDIO output.
+        // Canvas handles visuals; video provides audio.
 
         // Capture display rect — prefer video, fallback to container (pre-cache hit case)
         let rect = video.getBoundingClientRect();
@@ -1609,6 +1598,7 @@ function initTransportControls(container, fps) {
         // (destroyCachedPlayback nulls playerTransportAPI which breaks keyboard frame stepping)
         if (cachedPlaybackState?.rafId) cancelAnimationFrame(cachedPlaybackState.rafId);
         const currentFrame = Math.floor((video.currentTime || 0) * fps);
+        const wasPlaying = !video.paused;
         cachedPlaybackState = {
             playing: false,
             frameIdx: Math.min(currentFrame, frameCache.frames.length - 1),
@@ -1616,15 +1606,31 @@ function initTransportControls(container, fps) {
             rafId: null,
             startTime: 0,
             startFrame: 0,
+            _video: video,  // Reference for cachedPlay/Pause/Seek to control audio
             onTick: (idx, playing) => {
                 drawCachedFrame(idx);
+                // Sync video currentTime to cached position for audio alignment
+                if (frameCache?.fps) {
+                    const targetTime = idx / frameCache.fps;
+                    // Only seek video if drift > 0.15s (avoids constant seeking)
+                    if (Math.abs(video.currentTime - targetTime) > 0.15) {
+                        video.currentTime = targetTime;
+                    }
+                }
                 // Only update play button on actual state transitions (not every frame)
                 if (!playing) playBtn.textContent = '▶';
             }
         };
         // Show first frame
         drawCachedFrame(cachedPlaybackState.frameIdx);
-        playBtn.textContent = '▶';
+        // If video was playing before cache activated, resume cached + video playback
+        if (wasPlaying) {
+            cachedPlay();
+            playBtn.textContent = '⏸';
+        } else {
+            video.pause();
+            playBtn.textContent = '▶';
+        }
     }
 
     // ─── Unified toggle play/pause (works for both video and cache) ───
@@ -1666,6 +1672,8 @@ function initTransportControls(container, fps) {
             cachedPlaybackState.startFrame = newIdx;
             cachedPlaybackState.startTime = performance.now();
             drawCachedFrame(newIdx);
+            // Sync video position for audio (paused, so it just sets the seek point)
+            if (frameCache?.fps) video.currentTime = newIdx / frameCache.fps;
             playBtn.textContent = '▶';
         } else {
             video.pause();
@@ -2108,6 +2116,151 @@ document.addEventListener('mousemove', () => {
 });
 
 // ═══════════════════════════════════════════
+//  PLAYER CONTEXT MENU (Ctrl + Right-click)
+//  Shows sibling assets by role for quick swap / RV push
+// ═══════════════════════════════════════════
+
+function dismissPlayerCtxMenu() {
+    const old = document.getElementById('playerCtxMenu');
+    if (old) old.remove();
+}
+
+// Ctrl+Right-click in the player → version/role context menu
+document.addEventListener('contextmenu', async (e) => {
+    const modal = document.getElementById('playerModal');
+    const content = document.getElementById('playerContent');
+
+    // Only fire inside the player modal + only when Ctrl is held
+    if (!modal || modal.style.display === 'none') return;
+    if (!content || !content.contains(e.target)) return;
+    if (!e.ctrlKey) return; // Regular right-click → native menu
+
+    e.preventDefault();
+    e.stopImmediatePropagation(); // Prevent dismiss listener on same event from killing the menu
+    dismissPlayerCtxMenu();
+
+    const asset = state.playerAssets?.[state.playerIndex];
+    if (!asset) return;
+
+    // Build menu shell with loading state
+    const menu = document.createElement('div');
+    menu.id = 'playerCtxMenu';
+    menu.className = 'context-menu';
+    menu.style.left = e.clientX + 'px';
+    menu.style.top = e.clientY + 'px';
+    menu.innerHTML = `<div class="ctx-item ctx-muted" style="pointer-events:none;font-size:0.75rem;opacity:0.6;">📎 ${esc(asset.vault_name)}</div>`
+        + `<div class="ctx-separator"></div>`
+        + `<div class="ctx-item ctx-loading" style="pointer-events:none">Loading versions…</div>`;
+    document.body.appendChild(menu);
+
+    // Keep menu within viewport
+    requestAnimationFrame(() => {
+        const rect = menu.getBoundingClientRect();
+        if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 8) + 'px';
+        if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
+    });
+
+    // Fetch compare targets
+    try {
+        const resp = await fetch(`/api/assets/${asset.id}/compare-targets`);
+        const data = await resp.json();
+
+        if (!data.roles || data.roles.length === 0) {
+            menu.innerHTML = `<div class="ctx-item ctx-muted" style="pointer-events:none;font-size:0.75rem;opacity:0.6;">📎 ${esc(asset.vault_name)}</div>`
+                + `<div class="ctx-separator"></div>`
+                + `<div class="ctx-item ctx-muted" style="pointer-events:none">No other versions in this shot</div>`;
+            return;
+        }
+
+        let html = `<div class="ctx-item ctx-muted" style="pointer-events:none;font-size:0.75rem;opacity:0.6;">📎 ${esc(asset.vault_name)}</div>`
+            + `<div class="ctx-separator"></div>`;
+
+        for (const role of data.roles) {
+            if (role.assets.length === 1) {
+                const a = role.assets[0];
+                const ext = (a.file_ext || '').toLowerCase();
+                const vLabel = a.version ? `v${String(a.version).padStart(3, '0')}` : ext;
+                // Single asset — show action sub-menu on hover
+                html += `<div class="ctx-item ctx-item-parent" style="position:relative">`
+                    + `<span>${role.icon || '📁'} ${esc(role.name)} — ${vLabel} ${ext}</span>`
+                    + `<div class="ctx-submenu">`
+                    + `<div class="ctx-sub-item" data-pctx-play="${a.id}">▶️ Play Here</div>`
+                    + `<div class="ctx-sub-item" data-pctx-rv-set="${a.id}">📤 Send to RV</div>`
+                    + `<div class="ctx-sub-item" data-pctx-rv-merge="${a.id}">➕ Add to RV</div>`
+                    + `<div class="ctx-sub-item" data-pctx-rv-wipe="${a.id}">🔀 Compare in RV (wipe)</div>`
+                    + `</div></div>`;
+            } else {
+                // Multiple versions — nested: role → version → actions
+                html += `<div class="ctx-item ctx-item-parent" style="position:relative">`
+                    + `<span>${role.icon || '📁'} ${esc(role.name)} (${role.assets.length})</span>`
+                    + `<div class="ctx-submenu">`;
+                for (const a of role.assets) {
+                    const ext = (a.file_ext || '').toLowerCase();
+                    const vLabel = a.version ? `v${String(a.version).padStart(3, '0')}` : a.vault_name;
+                    html += `<div class="ctx-sub-item ctx-item-parent" style="position:relative">`
+                        + `<span>${vLabel} ${ext}</span>`
+                        + `<div class="ctx-submenu">`
+                        + `<div class="ctx-sub-item" data-pctx-play="${a.id}">▶️ Play Here</div>`
+                        + `<div class="ctx-sub-item" data-pctx-rv-set="${a.id}">📤 Send to RV</div>`
+                        + `<div class="ctx-sub-item" data-pctx-rv-merge="${a.id}">➕ Add to RV</div>`
+                        + `<div class="ctx-sub-item" data-pctx-rv-wipe="${a.id}">🔀 Compare in RV (wipe)</div>`
+                        + `</div></div>`;
+                }
+                html += `</div></div>`;
+            }
+        }
+
+        menu.innerHTML = html;
+
+        // Reposition after content change
+        requestAnimationFrame(() => {
+            const rect = menu.getBoundingClientRect();
+            if (rect.right > window.innerWidth) menu.style.left = (window.innerWidth - rect.width - 8) + 'px';
+            if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
+        });
+    } catch (err) {
+        menu.innerHTML = `<div class="ctx-item ctx-muted" style="pointer-events:none">Error loading versions</div>`;
+    }
+
+    // Click handler
+    menu.addEventListener('click', (ev) => {
+        const item = ev.target.closest('[data-pctx-play], [data-pctx-rv-set], [data-pctx-rv-merge], [data-pctx-rv-wipe]');
+        if (!item) return;
+        dismissPlayerCtxMenu();
+
+        const playId = item.dataset.pctxPlay;
+        const rvSetId = item.dataset.pctxRvSet;
+        const rvMergeId = item.dataset.pctxRvMerge;
+        const rvWipeId = item.dataset.pctxRvWipe;
+
+        if (playId) {
+            openPlayerById(parseInt(playId));
+        } else if (rvSetId) {
+            sendToRV(parseInt(rvSetId), 'set');
+        } else if (rvMergeId) {
+            sendToRV(parseInt(rvMergeId), 'merge');
+        } else if (rvWipeId) {
+            // Compare current + selected in RV wipe mode
+            const ids = [asset.id, parseInt(rvWipeId)];
+            fetch('/api/assets/rv-push', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify({ ids, mode: 'set', compareArgs: ['-wipe'] })
+            }).then(r => r.json()).then(data => {
+                if (data.success) showToast(`Comparing in RV (wipe) — ${data.message}`, 3000);
+                else showToast(data.error || 'Failed to compare in RV', 5000);
+            }).catch(() => showToast('Failed to compare in RV', 5000));
+        }
+    });
+});
+
+// Dismiss player context menu on click anywhere or any right-click
+document.addEventListener('click', dismissPlayerCtxMenu);
+document.addEventListener('keydown', (e) => {
+    if (e.key === 'Escape') dismissPlayerCtxMenu();
+});
+
+// ═══════════════════════════════════════════
 //  EXPOSE ON WINDOW (for HTML onclick handlers)
 // ═══════════════════════════════════════════
 
@@ -2117,11 +2270,9 @@ window.closePlayer = closePlayer;
 window.playerPrev = playerPrev;
 window.playerNext = playerNext;
 window.openInExternalPlayer = openInExternalPlayer;
-window.openInMrViewer2 = openInMrViewer2;
-window.openCompareInMrViewer2 = openCompareInMrViewer2;
-window.openAllInMrv2 = openAllInMrv2;
 window.openInRV = openInRV;
-window.openReviewInMrv2 = openReviewInMrv2;
+window.sendToRV = sendToRV;
+window.sendSelectedToRV = sendSelectedToRV;
 window.openCompareInRV = openCompareInRV;
 window.openRoleCompare = openRoleCompare;
 window.setCompareMode = setCompareMode;

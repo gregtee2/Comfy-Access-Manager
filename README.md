@@ -54,10 +54,10 @@ Built for artists and studios who work with video, images, EXR sequences, 3D fil
 - ~~Exports~~ Exported files are organized in hierarchical folders and auto-registered back into the vault
 
 ### External Player Support
-- **mrViewer2** integration for professional playback (EXR, ProRes, HDR, etc.)
-- **RV (ShotGrid)** support — launch assets in Autodesk RV / OpenRV
-- **Player comparison**: Select two assets and compare side-by-side in mrViewer2 or RV
-- Customizable keyboard shortcuts for mrViewer2 hotkeys
+- **RV (OpenRV / ShotGrid)** integration for professional playback (EXR, ProRes, HDR, etc.)
+- **Player comparison**: Select two assets and compare side-by-side in RV with wipe mode
+- **Persistent RV sessions** — send multiple assets to a running RV instance via rvpush
+- **MediaVault RV plugin** — Compare To submenu with role-based version switching
 - Also supports any custom external player (set the path in Settings)
 
 ### ComfyUI Integration
@@ -104,7 +104,7 @@ Built for artists and studios who work with video, images, EXR sequences, 3D fil
 
 ## Installation
 
-The one-click installer automatically downloads and installs **everything** you need — Node.js, Git, FFmpeg, npm packages, and mrViewer2. No manual setup required.
+The one-click installer automatically downloads and installs **everything** you need — Node.js, Git, FFmpeg, and npm packages. No manual setup required.
 
 ### Windows
 
@@ -129,7 +129,7 @@ cd Digital-Media-Vault
 
 # 2. Double-click install.command in Finder
 #    (or from Terminal: chmod +x install.sh && ./install.sh)
-#    Installs: Homebrew, Node.js, Git, FFmpeg, npm packages, mrViewer2
+#    Installs: Homebrew, Node.js, Git, FFmpeg, npm packages
 
 # 3. Double-click start.command in Finder to launch
 #    (or from Terminal: ./start.sh)
@@ -237,13 +237,12 @@ Access settings from the **Settings** tab:
 |---------|-------------|
 | **Vault Root Path** | Where all media files are stored. Changing this offers to migrate existing files. |
 | **Naming Template** | How imported files are named. Tokens: `{project}`, `{sequence}`, `{shot}`, `{step}`, `{version}`, `{take}`, `{type}`, `{date}`, `{original}`, `{counter}`. Follows ShotGrid/Flow naming conventions. |
-| **Default Player** | Browser (built-in), mrViewer2, RV (ShotGrid), or a custom player path |
+| **Default Player** | Browser (built-in), RV (OpenRV / ShotGrid), or a custom player path |
 | **Thumbnail Size** | Size of grid thumbnails (100–800px) |
 | **Auto-generate Thumbnails** | Generate thumbnails automatically on import |
 | **ComfyUI Output Path** | Point to your ComfyUI output folder for auto-import |
 | **Roles** | Add, rename, recolor, or remove asset roles |
 | **Watch Folders** | Directories to monitor for new files |
-| **Keyboard Shortcuts** | Customize mrViewer2 hotkeys |
 
 ---
 
@@ -345,15 +344,6 @@ Some professional codecs (ProRes, DNxHR) can't play directly in a web browser. D
 ### Thumbnails Not Generating
 - For **images**: Make sure the `sharp` npm package installed correctly (`npm install`)
 - For **videos**: FFmpeg is required — verify with `ffmpeg -version`
-
-### mrViewer2 Not Detected
-Both `install.bat` (Windows) and `install.sh` / `install.command` (Mac) offer to **download and install mrViewer2** for you during setup. If you skipped it or need to reinstall, re-run the installer.
-
-DMV auto-discovers mrViewer2 in standard install locations:
-- **Windows**: `C:\Program Files\vmrv2-*\bin\mrv2.exe`
-- **macOS**: `/Applications/mrv2*.app` or `/Applications/mrViewer*.app`
-
-If installed elsewhere, set the path manually in **Settings → External Player → Custom**.
 
 ### RV Not Detected
 DMV auto-discovers RV / OpenRV in standard locations:

@@ -124,7 +124,9 @@
                     <button class="btn-small btn-accent" onclick="showMoveToSequenceModal()" title="Move selected assets to a different sequence/shot">📋 Move to Sequence</button>
                     <button class="btn-small btn-role" onclick="showAssignRoleModal()" title="Assign a pipeline role (Comp, Light, Anim, etc.) to selected assets">🎭 Set Role</button>
                     <button class="btn-small btn-export" onclick="showExportModal()" title="Transcode/export selected assets via FFmpeg (GPU-accelerated)">📤 Export</button>
-                    <button class="btn-small btn-compare" onclick="openCompareInMrViewer2()" title="Open two selected assets side-by-side in mrViewer2">🎬 Compare in mrViewer2</button>
+                    <button class="btn-small btn-compare" onclick="openCompareInRV()" title="Open selected assets in OpenRV wipe-compare mode" style="background:var(--bg-hover)">🔀 Compare in RV</button>
+                    <button class="btn-small" onclick="sendSelectedToRV('set')" title="Send selected clips to RV (replaces current media). If RV is running, clips load instantly without restarting." style="background:#334">📤 Send to RV</button>
+                    <button class="btn-small" onclick="sendSelectedToRV('merge')" title="Add selected clips to the running RV session (keeps existing sources)" style="background:#334">➕ Add to RV</button>
                     <button class="btn-small btn-danger" onclick="bulkDeleteAssets()" title="Delete selected assets from the database AND remove files from disk">🗑 Delete Selected</button>
                     <button class="btn-small" onclick="bulkDeleteAssets(true)" title="Remove from database only — files stay on disk">🗑 DB Only (keep files)</button>
                 </div>
@@ -306,18 +308,22 @@
 
                 <div class="settings-section">
                     <h3>🎬 External Player</h3>
-                    <label>Default Player <span class="help-icon" data-tip="Choose how media files open when clicked. 'Browser' uses the built-in player. mrViewer2 and RV support EXR, ProRes, HDR, and professional formats.">?</span></label>
+                    <label>Default Player <span class="help-icon" data-tip="Choose how media files open when clicked. 'Browser' uses the built-in player. RV supports EXR, ProRes, HDR, and professional formats.">?</span></label>
                     <select id="settingDefaultPlayer" class="setting-select" title="Player used when clicking an asset">
                         <option value="browser">Browser (built-in)</option>
-                        <option value="mrviewer2">mrViewer2</option>
-                        <option value="rv">RV (ShotGrid)</option>
+                        <option value="rv">RV (OpenRV / ShotGrid)</option>
                         <option value="custom">Custom...</option>
                     </select>
                     <div id="customPlayerRow" class="input-row" style="display:none; margin-top:6px;">
                         <input type="text" id="settingCustomPlayerPath" placeholder="C:\\path\\to\\player.exe">
                         <button onclick="saveSettings()">Save</button>
                     </div>
-                    <p class="hint">Files will open in this player when clicked. mrViewer2 and RV both support EXR, ProRes, and professional formats. RV also opens from right-click → "🎬 RV".</p>
+                    <label>RV / OpenRV Path <span class="help-icon" data-tip="If RV isn't auto-detected, set the full path to rv.exe here. Leave blank for auto-discovery.">?</span></label>
+                    <div class="input-row" style="margin-top:4px;">
+                        <input type="text" id="settingRvPath" placeholder="C:\\OpenRV\\_build\\stage\\app\\bin\\rv.exe" title="Full path to rv.exe (leave blank to auto-detect)">
+                        <button onclick="saveSettings()">Save</button>
+                    </div>
+                    <p class="hint">Files will open in this player when clicked. RV supports EXR, ProRes, and professional formats. RV also opens from right-click → "🎬 RV".</p>
                 </div>
 
                 <div class="settings-section">
@@ -408,14 +414,6 @@
                     </div>
                 </div>
 
-                <!-- ─── Keyboard Shortcuts ─── -->
-                <div class="settings-section settings-section-wide">
-                    <h3>⌨️ Viewer Keyboard Shortcuts</h3>
-                    <p class="hint" style="margin-bottom:10px;">Customize mrViewer2 hotkeys. Click a shortcut to remap it, then press the new key combo. Changes apply next time mrViewer2 opens.</p>
-                    <div id="hotkeyEditor">
-                        <div class="hotkey-loading">Loading shortcuts...</div>
-                    </div>
-                </div>
             </div>
         </section>
     </main>

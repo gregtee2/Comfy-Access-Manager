@@ -1,6 +1,6 @@
 /**
  * DMV — Settings Module
- * Settings tab, hotkey editor, vault migration, watch folders, folder picker.
+ * Settings tab, vault migration, watch folders, folder picker.
  */
 
 import { state } from './state.js';
@@ -29,6 +29,7 @@ export async function loadSettings() {
         playerSel.value = defPlayer;
         document.getElementById('customPlayerRow').style.display = defPlayer === 'custom' ? 'flex' : 'none';
         document.getElementById('settingCustomPlayerPath').value = state.settings.custom_player_path || '';
+        document.getElementById('settingRvPath').value = state.settings.rv_path || '';
         playerSel.onchange = () => {
             document.getElementById('customPlayerRow').style.display = playerSel.value === 'custom' ? 'flex' : 'none';
             saveSettings();
@@ -75,6 +76,7 @@ async function saveSettings() {
         comfyui_watch_enabled: document.getElementById('settingComfyWatch').checked ? 'true' : 'false',
         default_player: document.getElementById('settingDefaultPlayer').value,
         custom_player_path: document.getElementById('settingCustomPlayerPath').value.trim(),
+        rv_path: document.getElementById('settingRvPath').value.trim(),
     };
 
     try {
@@ -86,247 +88,8 @@ async function saveSettings() {
 }
 
 // ═══════════════════════════════════════════
-//  VIEWER KEYBOARD SHORTCUTS
+//  VAULT MIGRATION
 // ═══════════════════════════════════════════
-let _hotkeyData = null;
-let _hotkeyChanges = {};
-
-export async function loadHotkeys() {
-    const editor = document.getElementById('hotkeyEditor');
-    if (!editor) return;
-    try {
-        const data = await api('/api/settings/hotkeys');
-        _hotkeyData = data.categories;
-        _hotkeyChanges = {};
-        renderHotkeyEditor();
-    } catch (err) {
-        editor.innerHTML = `<div class="hotkey-loading" style="color:var(--warning)">⚠ Could not load shortcuts: ${esc(err.message)}</div>`;
-    }
-}
-
-function renderHotkeyEditor() {
-    const editor = document.getElementById('hotkeyEditor');
-    if (!_hotkeyData) return;
-
-    let html = '<div class="hotkey-toolbar">'
-        + '<input type="text" id="hotkeySearch" placeholder="Search shortcuts..." oninput="filterHotkeys(this.value)">'
-        + '<button class="hotkey-save-btn" onclick="saveHotkeys()" id="hotkeysSaveBtn" disabled>💾 Save Changes</button>'
-        + '<button class="hotkey-reset-btn" onclick="resetHotkeyChanges()">↩ Discard</button>'
-        + '</div>';
-
-    for (const cat of _hotkeyData) {
-        if (cat.actions.length === 0) continue;
-        const catId = cat.name.replace(/[^a-zA-Z]/g, '');
-        html += `<details class="hotkey-category" id="hkCat_${catId}">`;
-        html += `<summary class="hotkey-cat-header">${esc(cat.name)} <span class="hotkey-cat-count">${cat.actions.length}</span></summary>`;
-        html += '<div class="hotkey-list">';
-        for (const action of cat.actions) {
-            const safeId = action.name.replace(/[^a-zA-Z0-9]/g, '_');
-            const changed = _hotkeyChanges[action.name];
-            const label = changed ? buildShortcutLabelClient(changed) : action.label;
-            const isModified = changed ? ' hotkey-modified' : '';
-            html += `<div class="hotkey-row${isModified}" data-action="${esc(action.name)}" id="hkRow_${safeId}">`;
-            html += `  <span class="hotkey-action-name">${esc(action.name)}</span>`;
-            html += `  <button class="hotkey-key-btn${isModified}" onclick="captureHotkey('${esc(action.name)}')" title="Click to remap">${esc(label)}</button>`;
-            if (changed) {
-                html += `  <button class="hotkey-clear-btn" onclick="clearHotkeyChange('${esc(action.name)}')" title="Undo change">✕</button>`;
-            }
-            html += '</div>';
-        }
-        html += '</div></details>';
-    }
-
-    editor.innerHTML = html;
-    markHotkeysModified();
-}
-
-function buildShortcutLabelClient(binding) {
-    const parts = [];
-    if (binding.ctrl === '1') parts.push('Ctrl');
-    if (binding.alt === '1') parts.push('Alt');
-    if (binding.shift === '1') parts.push('Shift');
-    if (binding.meta === '1') parts.push('Meta');
-    const keyLabel = fltkKeyLabel(binding.key, binding.text);
-    if (keyLabel) parts.push(keyLabel);
-    return parts.join(' + ') || '(none)';
-}
-
-function fltkKeyLabel(keyCode, textVal) {
-    const kc = parseInt(keyCode) || 0;
-    const names = {
-        0:'', 8:'Backspace', 9:'Tab', 13:'Enter', 27:'Escape', 32:'Space',
-        44:',', 45:'-', 46:'.', 47:'/',
-        59:';', 61:'=', 91:'[', 92:'\\', 93:']', 96:'`', 127:'Delete',
-        65288:'Backspace', 65289:'Tab', 65293:'Enter', 65307:'Escape',
-        65360:'Home', 65361:'Left', 65362:'Up', 65363:'Right', 65364:'Down',
-        65365:'Page Up', 65366:'Page Down', 65367:'End',
-        65379:'Insert', 65535:'Delete',
-        65470:'F1', 65471:'F2', 65472:'F3', 65473:'F4', 65474:'F5', 65475:'F6',
-        65476:'F7', 65477:'F8', 65478:'F9', 65479:'F10', 65480:'F11', 65481:'F12',
-    };
-    if (kc >= 97 && kc <= 122) return String.fromCharCode(kc).toUpperCase();
-    if (kc >= 48 && kc <= 57) return String.fromCharCode(kc);
-    if (names[kc]) return names[kc];
-    if (kc > 0) return `Key(${kc})`;
-    if (textVal) return textVal;
-    return '';
-}
-
-function browserKeyToFltk(e) {
-    if (['Control','Alt','Shift','Meta'].includes(e.key)) return null;
-
-    const result = {
-        ctrl: e.ctrlKey ? '1' : '0',
-        alt: e.altKey ? '1' : '0',
-        shift: e.shiftKey ? '1' : '0',
-        meta: e.metaKey ? '1' : '0',
-        key: '0',
-        text: '',
-    };
-
-    const keyMap = {
-        'Backspace': 65288, 'Tab': 65289, 'Enter': 65293, 'Escape': 65307,
-        'Home': 65360, 'ArrowLeft': 65361, 'ArrowUp': 65362,
-        'ArrowRight': 65363, 'ArrowDown': 65364,
-        'PageUp': 65365, 'PageDown': 65366, 'End': 65367,
-        'Insert': 65379, 'Delete': 65535,
-        'F1': 65470, 'F2': 65471, 'F3': 65472, 'F4': 65473,
-        'F5': 65474, 'F6': 65475, 'F7': 65476, 'F8': 65477,
-        'F9': 65478, 'F10': 65479, 'F11': 65480, 'F12': 65481,
-        ' ': 32,
-    };
-
-    if (keyMap[e.key]) {
-        result.key = String(keyMap[e.key]);
-    } else if (e.key.length === 1) {
-        const ch = e.key.toLowerCase();
-        const code = ch.charCodeAt(0);
-        if (code >= 97 && code <= 122) {
-            result.key = String(code);
-        } else if (code >= 48 && code <= 57) {
-            result.key = String(code);
-        } else {
-            result.key = '0';
-            result.text = e.key;
-        }
-    }
-
-    return result;
-}
-
-let _captureOverlay = null;
-
-function captureHotkey(actionName) {
-    if (_captureOverlay) _captureOverlay.remove();
-
-    const overlay = document.createElement('div');
-    overlay.className = 'hotkey-capture-overlay';
-    overlay.innerHTML = `
-        <div class="hotkey-capture-box">
-            <div class="hotkey-capture-title">Remap: ${esc(actionName)}</div>
-            <div class="hotkey-capture-prompt">Press the new key combination...</div>
-            <div class="hotkey-capture-hint">Press <strong>Escape</strong> to cancel, <strong>Backspace</strong> to clear binding</div>
-        </div>
-    `;
-    document.body.appendChild(overlay);
-    _captureOverlay = overlay;
-
-    const handler = (e) => {
-        e.preventDefault();
-        e.stopPropagation();
-
-        if (e.key === 'Escape') {
-            overlay.remove();
-            _captureOverlay = null;
-            document.removeEventListener('keydown', handler, true);
-            return;
-        }
-
-        if (e.key === 'Backspace' && !e.ctrlKey && !e.altKey && !e.shiftKey) {
-            _hotkeyChanges[actionName] = { name: actionName, ctrl:'0', alt:'0', meta:'0', shift:'0', key:'0', text:'' };
-            overlay.remove();
-            _captureOverlay = null;
-            document.removeEventListener('keydown', handler, true);
-            markHotkeysModified();
-            renderHotkeyEditor();
-            return;
-        }
-
-        const fltk = browserKeyToFltk(e);
-        if (!fltk) return;
-
-        fltk.name = actionName;
-        _hotkeyChanges[actionName] = fltk;
-        overlay.remove();
-        _captureOverlay = null;
-        document.removeEventListener('keydown', handler, true);
-        markHotkeysModified();
-        renderHotkeyEditor();
-    };
-
-    document.addEventListener('keydown', handler, true);
-    overlay.onclick = (e) => {
-        if (e.target === overlay) {
-            overlay.remove();
-            _captureOverlay = null;
-            document.removeEventListener('keydown', handler, true);
-        }
-    };
-}
-
-function clearHotkeyChange(actionName) {
-    delete _hotkeyChanges[actionName];
-    markHotkeysModified();
-    renderHotkeyEditor();
-}
-
-function markHotkeysModified() {
-    const btn = document.getElementById('hotkeysSaveBtn');
-    const count = Object.keys(_hotkeyChanges).length;
-    if (btn) {
-        btn.disabled = count === 0;
-        btn.textContent = count > 0 ? `💾 Save ${count} Change${count > 1 ? 's' : ''}` : '💾 Save Changes';
-    }
-}
-
-function resetHotkeyChanges() {
-    _hotkeyChanges = {};
-    markHotkeysModified();
-    renderHotkeyEditor();
-}
-
-async function saveHotkeys() {
-    const changes = Object.values(_hotkeyChanges);
-    if (changes.length === 0) return;
-
-    try {
-        const result = await api('/api/settings/hotkeys', { method: 'POST', body: { changes } });
-        if (result.success) {
-            showToast(`Saved ${result.written} shortcut${result.written > 1 ? 's' : ''}`);
-            _hotkeyChanges = {};
-            loadHotkeys();
-        }
-    } catch (err) {
-        alert('Error saving hotkeys: ' + err.message);
-    }
-}
-
-function filterHotkeys(query) {
-    const q = query.toLowerCase().trim();
-    const rows = document.querySelectorAll('.hotkey-row');
-    const cats = document.querySelectorAll('.hotkey-category');
-
-    rows.forEach(row => {
-        const name = row.dataset.action.toLowerCase();
-        row.style.display = (!q || name.includes(q)) ? '' : 'none';
-    });
-
-    cats.forEach(cat => {
-        const visible = cat.querySelectorAll('.hotkey-row:not([style*="display: none"])').length;
-        cat.style.display = visible > 0 || !q ? '' : 'none';
-        if (q && visible > 0) cat.open = true;
-    });
-}
 
 // ═══════════════════════════════════════════
 //  VAULT MIGRATION
@@ -880,12 +643,6 @@ export function autoCheckForUpdates() {
 
 window.loadSettings = loadSettings;
 window.saveSettings = saveSettings;
-window.loadHotkeys = loadHotkeys;
-window.captureHotkey = captureHotkey;
-window.clearHotkeyChange = clearHotkeyChange;
-window.resetHotkeyChanges = resetHotkeyChanges;
-window.saveHotkeys = saveHotkeys;
-window.filterHotkeys = filterHotkeys;
 window.migrateVault = migrateVault;
 window.addWatchFolder = addWatchFolder;
 window.removeWatch = removeWatch;

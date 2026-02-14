@@ -1,0 +1,18 @@
+package: MediaVault Integration
+author: DMV
+organization: Digital Media Vault
+version: 1.0
+requires: ""
+rv: 4.0
+openrv: 1.0
+hidden: false
+system: false
+
+modes:
+  - file: mediavault_mode.py
+    load: immediate
+
+description: |
+  Adds a "MediaVault" menu to OpenRV with version/role browsing.
+  Load Version picks sibling assets from the vault and adds them
+  as A/B wipe sources for quick comparison.

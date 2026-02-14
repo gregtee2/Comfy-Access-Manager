@@ -680,22 +680,22 @@ function updateSelectionToolbar() {
 // ═══════════════════════════════════════════
 
 /**
- * Launch mrViewer2 in wipe-compare mode with two specific assets.
+ * Launch RV in compare mode with two specific assets.
  * Called by "Compare To" context menu selections.
  */
-async function launchCompareToInMrv2(assetA, assetB) {
+async function launchCompareToInViewer(assetA, assetB) {
     try {
-        const resp = await fetch('/api/assets/open-compare', {
+        const resp = await fetch('/api/assets/rv-push', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ids: [assetA, assetB], viewer: 'mrviewer2' })
+            body: JSON.stringify({ ids: [assetA, assetB], mode: 'set', compareArgs: ['-wipe'] })
         });
         const data = await resp.json();
         if (!resp.ok) {
             window.showToast?.(data.error || 'Failed to launch compare', 'error');
         }
     } catch (err) {
-        window.showToast?.('Failed to launch mrViewer2 compare', 'error');
+        window.showToast?.('Failed to launch RV compare', 'error');
     }
 }
 
@@ -751,8 +751,8 @@ async function showContextMenu(event, assetIdx) {
             // Single format — show extension inline, no sub-menu
             const ext = (asset.file_ext || '').toLowerCase();
             html += `<div class="ctx-item" data-action="play">▶️ Play ${ext}</div>`;
-            html += `<div class="ctx-item" data-action="mrv2">🎬 mrViewer2 ${ext}</div>`;
             html += `<div class="ctx-item" data-action="rv">🎬 RV ${ext}</div>`;
+            html += `<div class="ctx-item" data-action="send-rv">📤 Send to RV ${ext}</div>`;
         } else {
             // Multiple formats — show sub-menus
             html += `<div class="ctx-item ctx-item-parent">▶️ Play`;
@@ -760,14 +760,6 @@ async function showContextMenu(event, assetIdx) {
             for (const f of formats) {
                 const ext = (f.file_ext || '').toLowerCase();
                 html += `<div class="ctx-sub-item" data-play-id="${f.id}"><span class="ctx-sub-ext">${ext}</span><span class="ctx-sub-size">${fmtSize(f.file_size)}</span></div>`;
-            }
-            html += `</div></div>`;
-
-            html += `<div class="ctx-item ctx-item-parent">🎬 mrViewer2`;
-            html += `<div class="ctx-submenu">`;
-            for (const f of formats) {
-                const ext = (f.file_ext || '').toLowerCase();
-                html += `<div class="ctx-sub-item" data-mrv2-id="${f.id}"><span class="ctx-sub-ext">${ext}</span><span class="ctx-sub-size">${fmtSize(f.file_size)}</span></div>`;
             }
             html += `</div></div>`;
 
@@ -779,7 +771,7 @@ async function showContextMenu(event, assetIdx) {
             }
             html += `</div></div>`;
         }
-        html += `<div class="ctx-item" data-action="review">📋 Review (overlays)</div>`;
+        html += `<div class="ctx-item" data-action="send-rv">📤 Send to RV</div>`;
 
         // "Compare To" cascading submenu — loads sibling versions by role on hover
         if (asset.shot_id) {
@@ -800,9 +792,9 @@ async function showContextMenu(event, assetIdx) {
 
     if (count >= 2) {
         html += `<div class="ctx-item" data-action="play-all">▶️ Play All (${count})</div>`;
-        html += `<div class="ctx-item" data-action="open-all-mrv2">🎬 Open All in mrViewer2 (${count})</div>`;
-        html += `<div class="ctx-item" data-action="compare-mrv2">🔀 Compare in mrViewer2 (${count})</div>`;
         html += `<div class="ctx-item" data-action="compare-rv">🔀 Compare in RV (${count})</div>`;
+        html += `<div class="ctx-item" data-action="send-rv-set">📤 Send to RV (${count})</div>`;
+        html += `<div class="ctx-item" data-action="send-rv-merge">➕ Add to RV (${count})</div>`;
     }
 
     html += `<div class="ctx-separator"></div>`;
@@ -866,34 +858,31 @@ async function showContextMenu(event, assetIdx) {
     }
     // Wire up click handlers
     menu.addEventListener('click', (e) => {
-        const item = e.target.closest('[data-action], [data-play-id], [data-mrv2-id], [data-rv-id], [data-compare-id]');
+        const item = e.target.closest('[data-action], [data-play-id], [data-rv-id], [data-compare-id]');
         if (!item) return;
         dismissContextMenu();
 
         const action = item.dataset.action;
         const playId = item.dataset.playId;
-        const mrv2Id = item.dataset.mrv2Id;
         const rvId = item.dataset.rvId;
         const compareId = item.dataset.compareId;
 
-        if (compareId) { launchCompareToInMrv2(asset.id, parseInt(compareId)); return; }
+        if (compareId) { launchCompareToInViewer(asset.id, parseInt(compareId)); return; }
         if (playId) { window.openPlayerById?.(parseInt(playId)); return; }
-        if (mrv2Id) { window.openInMrViewer2?.(parseInt(mrv2Id)); return; }
         if (rvId) { window.openInRV?.(parseInt(rvId)); return; }
 
         switch (action) {
             case 'play': openPlayerBuiltIn(assetIdx); break;
-            case 'mrv2': window.openInMrViewer2?.(asset.id); break;
             case 'rv': window.openInRV?.(asset.id); break;
-            case 'review': window.openReviewInMrv2?.(asset.id); break;
+            case 'send-rv': window.sendToRV?.(asset.id, 'merge'); break;
             case 'star': toggleStar(asset.id); break;
             case 'move': showMoveToSequenceModal(); break;
             case 'role': showAssignRoleModal(); break;
             case 'export': window.showExportModal?.(); break;
             case 'play-all': playSelectedAssets(); break;
-            case 'open-all-mrv2': window.openAllInMrv2?.(); break;
-            case 'compare-mrv2': window.openCompareInMrViewer2?.(); break;
             case 'compare-rv': window.openCompareInRV?.(); break;
+            case 'send-rv-set': window.sendSelectedToRV?.('set'); break;
+            case 'send-rv-merge': window.sendSelectedToRV?.('merge'); break;
             case 'selectAll': selectAllAssets(); break;
             case 'deselectAll': clearAssetSelection(); break;
             case 'delete': bulkDeleteAssets(); break;
