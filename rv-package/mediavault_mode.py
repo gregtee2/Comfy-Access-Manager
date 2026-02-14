@@ -130,9 +130,12 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         GET /api/assets/compare-targets-by-path?path=<filepath>
         Returns: {
             asset: { id, vault_name },
+            scope: 'shot' | 'sequence' | 'project' | 'none',
             roles: [{ id, name, code, icon,
-                       assets: [{ id, vault_name, version, file_ext, file_path }] }]
+                       assets: [{ id, vault_name, version, file_ext, file_path,
+                                  shot_name, seq_name }] }]
         }
+        Falls back: shot → sequence → project if no siblings at narrower scope.
         """
         if urllib is None:
             return None
@@ -208,9 +211,10 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
     # ── popup menu builder ───────────────────────────────────────
 
-    def _buildRoleMenu(self, roles, action_fn, current_asset_name):
+    def _buildRoleMenu(self, data, action_fn, current_asset_name):
         """
-        Build and show a QMenu listing each role.
+        Build and show a QMenu listing assets grouped by role.
+        Adapts label based on scope (shot/sequence/project).
         Bold = has assets (clickable). Gray = no assets in vault.
         Clicking a role calls action_fn(latest_file_path).
         """
@@ -224,11 +228,25 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         except Exception:
             parent = None
 
+        roles = data.get("roles", [])
+        scope = data.get("scope", "shot")
+
         menu = QMenu(parent)
         menu.setStyleSheet(MENU_STYLE)
 
         bold_font = QFont()
         bold_font.setBold(True)
+
+        # Scope header so user knows where the results came from
+        scope_labels = {
+            "shot": "Same Shot",
+            "sequence": "Same Sequence",
+            "project": "Same Project",
+        }
+        if scope in scope_labels:
+            header = menu.addAction("— %s —" % scope_labels[scope])
+            header.setEnabled(False)
+            menu.addSeparator()
 
         for role in roles:
             role_name = role.get("name", "Unassigned")
@@ -238,23 +256,56 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             label = "%s %s" % (role_icon, role_name) if role_icon else role_name
 
             if assets:
-                # Find latest version with a valid file
-                latest_path = None
-                for a in assets:
+                if len(assets) == 1:
+                    # Single asset — clickable directly
+                    a = assets[0]
                     p = a.get("file_path", "")
-                    if p and os.path.exists(p):
-                        latest_path = p
-                        break
+                    display = label
+                    # Add shot/sequence context for wider scopes
+                    if scope == "sequence" and a.get("shot_name"):
+                        display = "%s  (%s)" % (label, a["shot_name"])
+                    elif scope == "project":
+                        parts = []
+                        if a.get("seq_name"):
+                            parts.append(a["seq_name"])
+                        if a.get("shot_name"):
+                            parts.append(a["shot_name"])
+                        if parts:
+                            display = "%s  (%s)" % (label, " / ".join(parts))
 
-                if latest_path:
-                    action = menu.addAction(label)
-                    action.setFont(bold_font)
-                    # Capture path in closure
-                    action.triggered.connect(lambda checked=False, fp=latest_path: action_fn(fp))
+                    action = menu.addAction(display)
+                    if p and os.path.exists(p):
+                        action.setFont(bold_font)
+                        action.triggered.connect(lambda checked=False, fp=p: action_fn(fp))
+                    else:
+                        action.setEnabled(False)
                 else:
-                    # Has assets in DB but files missing on disk
-                    action = menu.addAction(label)
-                    action.setEnabled(False)
+                    # Multiple assets — submenu per role
+                    sub = menu.addMenu(label)
+                    sub.setStyleSheet(MENU_STYLE)
+                    for a in assets:
+                        p = a.get("file_path", "")
+                        v = a.get("version")
+                        ext = (a.get("file_ext") or "").lower()
+                        v_label = "v%03d %s" % (v, ext) if v else (a.get("vault_name") or "unknown")
+                        # Add shot context for wider scopes
+                        if scope == "sequence" and a.get("shot_name"):
+                            v_label = "%s  (%s)" % (v_label, a["shot_name"])
+                        elif scope == "project":
+                            parts = []
+                            if a.get("seq_name"):
+                                parts.append(a["seq_name"])
+                            if a.get("shot_name"):
+                                parts.append(a["shot_name"])
+                            if parts:
+                                v_label = "%s  (%s)" % (v_label, " / ".join(parts))
+
+                        sa = sub.addAction(v_label)
+                        if p and os.path.exists(p):
+                            sa.setFont(bold_font)
+                            sa.triggered.connect(lambda checked=False, fp=p: action_fn(fp))
+                        else:
+                            sa.setEnabled(False)
             else:
                 action = menu.addAction(label)
                 action.setEnabled(False)
@@ -306,11 +357,12 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         if not data:
             return
         roles = data.get("roles", [])
+        scope = data.get("scope", "none")
         if not roles:
-            rve.displayFeedback("No other roles found in this shot", 3.0)
+            rve.displayFeedback("No other assets found in this project", 3.0)
             return
         current_name = data.get("asset", {}).get("vault_name", "")
-        self._buildRoleMenu(roles, self._loadAsCompare, current_name)
+        self._buildRoleMenu(data, self._loadAsCompare, current_name)
 
     def showSwitchMenu(self, event):
         """MediaVault → Switch to ..."""
@@ -318,11 +370,12 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         if not data:
             return
         roles = data.get("roles", [])
+        scope = data.get("scope", "none")
         if not roles:
-            rve.displayFeedback("No other roles found in this shot", 3.0)
+            rve.displayFeedback("No other assets found in this project", 3.0)
             return
         current_name = data.get("asset", {}).get("vault_name", "")
-        self._buildRoleMenu(roles, self._switchTo, current_name)
+        self._buildRoleMenu(data, self._switchTo, current_name)
 
     def prevVersion(self, event):
         """MediaVault → Prev Version"""

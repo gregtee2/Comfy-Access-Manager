@@ -175,90 +175,146 @@ router.get('/rv-status', (req, res) => {
     });
 });
 
-// GET /api/assets/:id/shot-siblings — Find other versions/roles in the same shot
+// GET /api/assets/:id/shot-siblings — Find related assets with hierarchical fallback
+// Fallback: shot → sequence → project
 router.get('/:id/shot-siblings', (req, res) => {
     const db = getDb();
-    const asset = db.prepare('SELECT id, shot_id, project_id, vault_name FROM assets WHERE id = ?').get(req.params.id);
+    const asset = db.prepare('SELECT id, shot_id, sequence_id, project_id, vault_name FROM assets WHERE id = ?').get(req.params.id);
     if (!asset) return res.status(404).json({ error: 'Asset not found' });
-    if (!asset.shot_id) return res.json({ roles: [] });
 
-    const siblings = db.prepare(`
-        SELECT a.id, a.vault_name, a.version, a.file_ext, a.media_type, a.file_size,
-               a.role_id, r.name AS role_name, r.code AS role_code, r.icon AS role_icon, r.color AS role_color,
-               r.sort_order AS role_sort
-        FROM assets a
-        LEFT JOIN roles r ON a.role_id = r.id
-        WHERE a.shot_id = ? AND a.project_id = ? AND a.id != ?
-        ORDER BY r.sort_order ASC, r.name ASC, a.version DESC
-    `).all(asset.shot_id, asset.project_id, asset.id);
-
-    const roleMap = new Map();
-    for (const s of siblings) {
-        const key = s.role_id || 0;
-        if (!roleMap.has(key)) {
-            roleMap.set(key, {
-                id: s.role_id, name: s.role_name || 'Unassigned',
-                code: s.role_code || '', icon: s.role_icon || '', assets: []
+    function groupByRole(rows) {
+        const roleMap = new Map();
+        for (const s of rows) {
+            const key = s.role_id || 0;
+            if (!roleMap.has(key)) {
+                roleMap.set(key, {
+                    id: s.role_id, name: s.role_name || 'Unassigned',
+                    code: s.role_code || '', icon: s.role_icon || '', assets: []
+                });
+            }
+            roleMap.get(key).assets.push({
+                id: s.id, vault_name: s.vault_name, version: s.version, file_ext: s.file_ext
             });
         }
-        roleMap.get(key).assets.push({
-            id: s.id, vault_name: s.vault_name, version: s.version, file_ext: s.file_ext
-        });
+        return [...roleMap.values()];
     }
-    res.json({ roles: [...roleMap.values()] });
+
+    const baseCols = `a.id, a.vault_name, a.version, a.file_ext, a.media_type, a.file_size,
+               a.role_id, r.name AS role_name, r.code AS role_code, r.icon AS role_icon, r.color AS role_color,
+               r.sort_order AS role_sort`;
+    const baseJoin = `FROM assets a LEFT JOIN roles r ON a.role_id = r.id`;
+    const baseOrder = `ORDER BY r.sort_order ASC, r.name ASC, a.version DESC`;
+
+    // 1) Shot-level
+    if (asset.shot_id) {
+        const siblings = db.prepare(`SELECT ${baseCols} ${baseJoin} WHERE a.shot_id = ? AND a.project_id = ? AND a.id != ? ${baseOrder}`)
+            .all(asset.shot_id, asset.project_id, asset.id);
+        if (siblings.length > 0) return res.json({ scope: 'shot', roles: groupByRole(siblings) });
+    }
+
+    // 2) Sequence-level
+    if (asset.sequence_id) {
+        const seqSiblings = db.prepare(`SELECT ${baseCols} ${baseJoin} WHERE a.sequence_id = ? AND a.project_id = ? AND a.id != ? ${baseOrder}`)
+            .all(asset.sequence_id, asset.project_id, asset.id);
+        if (seqSiblings.length > 0) return res.json({ scope: 'sequence', roles: groupByRole(seqSiblings) });
+    }
+
+    // 3) Project-level
+    if (asset.project_id) {
+        const projSiblings = db.prepare(`SELECT ${baseCols} ${baseJoin} WHERE a.project_id = ? AND a.id != ? ${baseOrder}`)
+            .all(asset.project_id, asset.id);
+        if (projSiblings.length > 0) return res.json({ scope: 'project', roles: groupByRole(projSiblings) });
+    }
+
+    res.json({ scope: 'none', roles: [] });
 });
 
-// GET /api/assets/compare-targets-by-path — Find shot siblings by file_path
+// GET /api/assets/compare-targets-by-path — Find related assets with hierarchical fallback
 // Used by RV plugin to find sibling versions for the currently loaded file
+// Fallback: shot → sequence → project
 router.get('/compare-targets-by-path', (req, res) => {
     const db = getDb();
     const filePath = req.query.path;
     if (!filePath) return res.status(400).json({ error: 'Provide ?path= parameter' });
 
-    // Normalize slashes for comparison (DB might store either format)
     const normalized = filePath.replace(/\\/g, '/');
     const asset = db.prepare(`
-        SELECT id, shot_id, project_id, role_id, vault_name
+        SELECT id, shot_id, sequence_id, project_id, role_id, vault_name
         FROM assets
         WHERE replace(file_path, '\\', '/') = ?
     `).get(normalized);
     if (!asset) return res.status(404).json({ error: 'Asset not found in vault' });
-    if (!asset.shot_id) return res.json({ asset: { id: asset.id, vault_name: asset.vault_name }, roles: [] });
 
-    // Reuse the same sibling query
-    const siblings = db.prepare(`
-        SELECT a.id, a.vault_name, a.version, a.file_ext, a.media_type, a.file_size,
-               a.file_path,
-               a.role_id, r.name AS role_name, r.code AS role_code, r.icon AS role_icon, r.color AS role_color,
-               r.sort_order AS role_sort
-        FROM assets a
-        LEFT JOIN roles r ON a.role_id = r.id
-        WHERE a.shot_id = ? AND a.project_id = ? AND a.id != ?
-        ORDER BY r.sort_order ASC, r.name ASC, a.version DESC
-    `).all(asset.shot_id, asset.project_id, asset.id);
-
-    const roleMap = new Map();
-    for (const s of siblings) {
-        const key = s.role_id || 0;
-        if (!roleMap.has(key)) {
-            roleMap.set(key, {
-                id: s.role_id,
-                name: s.role_name || 'Unassigned',
-                code: s.role_code || '',
-                icon: s.role_icon || '',
-                assets: []
+    // Helper to group results by role
+    function groupByRole(rows) {
+        const roleMap = new Map();
+        for (const s of rows) {
+            const key = s.role_id || 0;
+            if (!roleMap.has(key)) {
+                roleMap.set(key, {
+                    id: s.role_id,
+                    name: s.role_name || 'Unassigned',
+                    code: s.role_code || '',
+                    icon: s.role_icon || '',
+                    assets: []
+                });
+            }
+            roleMap.get(key).assets.push({
+                id: s.id, vault_name: s.vault_name, version: s.version,
+                file_ext: s.file_ext, file_path: s.file_path,
+                shot_name: s.shot_name || null, seq_name: s.seq_name || null
             });
         }
-        roleMap.get(key).assets.push({
-            id: s.id,
-            vault_name: s.vault_name,
-            version: s.version,
-            file_ext: s.file_ext,
-            file_path: s.file_path
-        });
+        return [...roleMap.values()];
     }
 
-    res.json({ asset: { id: asset.id, vault_name: asset.vault_name }, roles: [...roleMap.values()] });
+    const baseCols = `a.id, a.vault_name, a.version, a.file_ext, a.media_type, a.file_size, a.file_path,
+               a.role_id, r.name AS role_name, r.code AS role_code, r.icon AS role_icon, r.color AS role_color,
+               r.sort_order AS role_sort`;
+    const baseJoin = `FROM assets a LEFT JOIN roles r ON a.role_id = r.id`;
+    const baseOrder = `ORDER BY r.sort_order ASC, r.name ASC, a.version DESC`;
+
+    // 1) Try shot-level siblings
+    if (asset.shot_id) {
+        const siblings = db.prepare(`
+            SELECT ${baseCols} ${baseJoin}
+            WHERE a.shot_id = ? AND a.project_id = ? AND a.id != ?
+            ${baseOrder}
+        `).all(asset.shot_id, asset.project_id, asset.id);
+        if (siblings.length > 0) {
+            return res.json({ asset: { id: asset.id, vault_name: asset.vault_name }, scope: 'shot', roles: groupByRole(siblings) });
+        }
+    }
+
+    // 2) Fallback: sequence-level siblings (all shots in same sequence)
+    if (asset.sequence_id) {
+        const seqSiblings = db.prepare(`
+            SELECT ${baseCols}, sh.name AS shot_name ${baseJoin}
+            LEFT JOIN shots sh ON a.shot_id = sh.id
+            WHERE a.sequence_id = ? AND a.project_id = ? AND a.id != ?
+            ${baseOrder}
+        `).all(asset.sequence_id, asset.project_id, asset.id);
+        if (seqSiblings.length > 0) {
+            return res.json({ asset: { id: asset.id, vault_name: asset.vault_name }, scope: 'sequence', roles: groupByRole(seqSiblings) });
+        }
+    }
+
+    // 3) Fallback: project-level (all assets in the project)
+    if (asset.project_id) {
+        const projSiblings = db.prepare(`
+            SELECT ${baseCols}, sh.name AS shot_name, sq.name AS seq_name ${baseJoin}
+            LEFT JOIN shots sh ON a.shot_id = sh.id
+            LEFT JOIN sequences sq ON a.sequence_id = sq.id
+            WHERE a.project_id = ? AND a.id != ?
+            ${baseOrder}
+        `).all(asset.project_id, asset.id);
+        if (projSiblings.length > 0) {
+            return res.json({ asset: { id: asset.id, vault_name: asset.vault_name }, scope: 'project', roles: groupByRole(projSiblings) });
+        }
+    }
+
+    // Nothing found at any level
+    res.json({ asset: { id: asset.id, vault_name: asset.vault_name }, scope: 'none', roles: [] });
 });
 
 
