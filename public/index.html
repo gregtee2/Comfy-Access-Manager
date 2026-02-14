@@ -182,15 +182,33 @@
                     </select>
 
                     <div id="importShotFields" style="display:none">
-                        <label>Sequence <span class="help-icon" data-tip="A sequence groups related shots (e.g., SQ010, ACT1). Optional — leave blank for project-level assets.">?</span></label>
-                        <select id="importSequence" onchange="onImportSequenceChange()" title="Optional — group assets by sequence">
-                            <option value="">-- None --</option>
-                        </select>
+                        <label>Sequence <span class="help-icon" data-tip="A sequence groups related shots (e.g., SQ010, ACT1). Optional — leave blank for project-level assets. Click '+' to create a new one.">?</span></label>
+                        <div class="import-field-row">
+                            <select id="importSequence" onchange="onImportSequenceChange()" title="Optional — group assets by sequence">
+                                <option value="">-- None --</option>
+                            </select>
+                            <button class="btn-inline-create" id="btnNewSeq" onclick="showInlineNewSequence()" title="Create a new sequence">+</button>
+                        </div>
+                        <div id="inlineNewSequence" class="inline-create-form" style="display:none">
+                            <input type="text" id="newSeqName" placeholder="Sequence name (e.g. Car Chase)">
+                            <input type="text" id="newSeqCode" placeholder="Code" maxlength="12" style="width:80px;text-transform:uppercase;">
+                            <button class="btn-inline-confirm" onclick="createInlineSequence()">Create</button>
+                            <button class="btn-inline-cancel" onclick="hideInlineNewSequence()">✕</button>
+                        </div>
 
-                        <label>Shot <span class="help-icon" data-tip="A shot within the sequence (e.g., SH0010). This is where assets get their ShotGrid-standard name.">?</span></label>
-                        <select id="importShot" title="Optional — assign to a specific shot">
-                            <option value="">-- None --</option>
-                        </select>
+                        <label>Shot <span class="help-icon" data-tip="A shot within the sequence (e.g., SH0010). This is where assets get their ShotGrid-standard name. Click '+' to create one.">?</span></label>
+                        <div class="import-field-row">
+                            <select id="importShot" title="Optional — assign to a specific shot">
+                                <option value="">-- None --</option>
+                            </select>
+                            <button class="btn-inline-create" id="btnNewShot" onclick="showInlineNewShot()" title="Create a new shot" disabled>+</button>
+                        </div>
+                        <div id="inlineNewShot" class="inline-create-form" style="display:none">
+                            <input type="text" id="newShotName" placeholder="Shot name (e.g. Hero Close-Up)">
+                            <input type="text" id="newShotCode" placeholder="Code" maxlength="12" style="width:80px;text-transform:uppercase;">
+                            <button class="btn-inline-confirm" onclick="createInlineShot()">Create</button>
+                            <button class="btn-inline-cancel" onclick="hideInlineNewShot()">✕</button>
+                        </div>
 
                         <label>Role <span class="help-icon" data-tip="Pipeline step / department (Comp, Light, Anim, FX, etc.). Drives the '{step}' token in naming. Manage roles in Settings.">?</span></label>
                         <select id="importRole" title="Optional — categorize by pipeline role">

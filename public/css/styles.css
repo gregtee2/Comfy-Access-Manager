@@ -853,6 +853,62 @@ label {
     padding: 20px;
 }
 .import-source h3, .import-settings h3 { margin-bottom: 12px; font-size: 1rem; }
+
+/* Inline create rows for Sequence / Shot in Import */
+.import-field-row {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+}
+.import-field-row select { flex: 1; }
+.btn-inline-create {
+    width: 30px; height: 30px;
+    background: var(--bg-input);
+    border: 1px solid var(--border);
+    color: var(--text);
+    border-radius: var(--radius-sm);
+    font-size: 1.1rem;
+    cursor: pointer;
+    display: flex; align-items: center; justify-content: center;
+    transition: background .15s, border-color .15s;
+}
+.btn-inline-create:hover:not(:disabled) { background: #333; border-color: #555; }
+.btn-inline-create:disabled { opacity: .35; cursor: default; }
+.inline-create-form {
+    display: flex;
+    gap: 6px;
+    align-items: center;
+    margin: 6px 0 10px 0;
+    padding: 8px 10px;
+    background: #1e1e24;
+    border: 1px solid #3a3a44;
+    border-radius: var(--radius-sm);
+}
+.inline-create-form input {
+    flex: 1;
+    font-size: 0.85rem;
+    padding: 5px 8px;
+}
+.btn-inline-confirm {
+    padding: 4px 12px;
+    background: #2a7a5a;
+    color: #fff;
+    border: none;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+.btn-inline-confirm:hover { background: #339968; }
+.btn-inline-cancel {
+    padding: 4px 8px;
+    background: transparent;
+    color: #999;
+    border: 1px solid #555;
+    border-radius: var(--radius-sm);
+    font-size: 0.82rem;
+    cursor: pointer;
+}
+.btn-inline-cancel:hover { color: #ff5252; border-color: #ff5252; }
 .file-browser-bar {
     display: flex; gap: 4px; margin-bottom: 8px;
 }

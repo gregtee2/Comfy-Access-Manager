@@ -24,6 +24,10 @@ export async function loadImportTab() {
     sel.innerHTML = '<option value="">-- Select Project --</option>' +
         projects.map(p => `<option value="${p.id}">${p.name} (${p.code})</option>`).join('');
 
+    // Set up auto-code generation for inline create forms
+    setupInlineAutoCode('newSeqName', 'newSeqCode', 'SQ');
+    setupInlineAutoCode('newShotName', 'newShotCode', 'SH');
+
     // Browse to default location or drives
     if (!state.importBrowsePath) {
         browseTo('');
@@ -189,17 +193,30 @@ async function onImportProjectChange() {
     const projectId = document.getElementById('importProject').value;
     const shotFields = document.getElementById('importShotFields');
 
+    // Hide inline create forms when project changes
+    hideInlineNewSequence();
+    hideInlineNewShot();
+
     if (projectId) {
         const project = await api(`/api/projects/${projectId}`);
-        if (project.type !== 'simple' && project.sequences?.length > 0) {
-            shotFields.style.display = 'block';
-            const seqSel = document.getElementById('importSequence');
+
+        // Always show shot fields for non-simple projects (user can create sequences inline)
+        shotFields.style.display = project.type === 'simple' ? 'none' : 'block';
+
+        const seqSel = document.getElementById('importSequence');
+        if (project.sequences?.length > 0) {
             seqSel.innerHTML = '<option value="">-- None --</option>' +
                 project.sequences.map(s => `<option value="${s.id}">${s.name} (${s.code})</option>`).join('');
         } else {
-            shotFields.style.display = project.type === 'simple' ? 'none' : 'block';
-            document.getElementById('importSequence').innerHTML = '<option value="">-- None (create one first) --</option>';
+            seqSel.innerHTML = '<option value="">-- None --</option>';
         }
+
+        // Reset shot dropdown
+        document.getElementById('importShot').innerHTML = '<option value="">-- None --</option>';
+
+        // Enable/disable shot + button based on whether a sequence is selected
+        const btnNewShot = document.getElementById('btnNewShot');
+        if (btnNewShot) btnNewShot.disabled = !seqSel.value;
 
         // Populate roles dropdown
         try {
@@ -222,6 +239,13 @@ async function onImportSequenceChange() {
     const projectId = document.getElementById('importProject').value;
     const seqId = document.getElementById('importSequence').value;
     const shotSel = document.getElementById('importShot');
+
+    // Hide shot inline form when sequence changes
+    hideInlineNewShot();
+
+    // Enable/disable the shot + button
+    const btnNewShot = document.getElementById('btnNewShot');
+    if (btnNewShot) btnNewShot.disabled = !seqId;
 
     if (seqId && projectId) {
         const shots = await api(`/api/projects/${projectId}/sequences/${seqId}/shots`);
@@ -555,6 +579,149 @@ function showMoveConfirmation(fileCount) {
 }
 
 // ═══════════════════════════════════════════
+//  INLINE CREATE — Sequence & Shot from Import
+// ═══════════════════════════════════════════
+
+function showInlineNewSequence() {
+    const form = document.getElementById('inlineNewSequence');
+    form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+    if (form.style.display === 'flex') {
+        // Auto-suggest code based on current sequence count
+        const seqSel = document.getElementById('importSequence');
+        const count = Math.max(seqSel.options.length - 1, 0); // minus the "-- None --" option
+        const nextNum = (count + 1) * 10;
+        document.getElementById('newSeqCode').value = `SQ${String(nextNum).padStart(3, '0')}`;
+        document.getElementById('newSeqName').value = '';
+        document.getElementById('newSeqName').focus();
+    }
+}
+
+function hideInlineNewSequence() {
+    document.getElementById('inlineNewSequence').style.display = 'none';
+}
+
+// Auto-generate code from name as user types
+function setupInlineAutoCode(nameId, codeId, prefix) {
+    const nameEl = document.getElementById(nameId);
+    const codeEl = document.getElementById(codeId);
+    if (!nameEl || !codeEl) return;
+
+    nameEl.addEventListener('input', () => {
+        // Only auto-fill if user hasn't manually edited the code
+        if (codeEl.dataset.manual === 'true') return;
+        const raw = nameEl.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+        if (raw) {
+            codeEl.value = raw;
+        } else {
+            // Revert to default SQ/SH code
+            codeEl.value = codeEl.dataset.defaultCode || '';
+        }
+    });
+
+    codeEl.addEventListener('input', () => {
+        codeEl.dataset.manual = 'true';
+        codeEl.value = codeEl.value.toUpperCase().replace(/[^A-Z0-9_]/g, '');
+    });
+
+    // Reset manual flag when form re-opens
+    codeEl.dataset.manual = 'false';
+}
+
+async function createInlineSequence() {
+    const projectId = document.getElementById('importProject').value;
+    if (!projectId) return showToast('Select a project first', 'error');
+
+    const name = document.getElementById('newSeqName').value.trim();
+    const code = document.getElementById('newSeqCode').value.trim().toUpperCase();
+
+    if (!name) return showToast('Sequence name is required', 'error');
+    if (!code) return showToast('Sequence code is required', 'error');
+
+    try {
+        const newSeq = await api(`/api/projects/${projectId}/sequences`, {
+            method: 'POST',
+            body: { name, code }
+        });
+
+        showToast(`✅ Sequence "${name}" (${code}) created!`, 'success');
+        hideInlineNewSequence();
+
+        // Refresh the sequence dropdown and auto-select the new one
+        const project = await api(`/api/projects/${projectId}`);
+        const seqSel = document.getElementById('importSequence');
+        seqSel.innerHTML = '<option value="">-- None --</option>' +
+            project.sequences.map(s =>
+                `<option value="${s.id}" ${s.id === newSeq.id ? 'selected' : ''}>${s.name} (${s.code})</option>`
+            ).join('');
+
+        // Enable the Shot + button now
+        document.getElementById('btnNewShot').disabled = false;
+
+        // Trigger shot dropdown load for the new sequence
+        onImportSequenceChange();
+        updateRenamePreview();
+    } catch (err) {
+        showToast('❌ ' + (err.message || 'Failed to create sequence'), 'error');
+    }
+}
+
+function showInlineNewShot() {
+    const seqId = document.getElementById('importSequence').value;
+    if (!seqId) return showToast('Select a sequence first', 'error');
+
+    const form = document.getElementById('inlineNewShot');
+    form.style.display = form.style.display === 'none' ? 'flex' : 'none';
+    if (form.style.display === 'flex') {
+        const shotSel = document.getElementById('importShot');
+        const count = Math.max(shotSel.options.length - 1, 0);
+        const nextNum = (count + 1) * 10;
+        document.getElementById('newShotCode').value = `SH${String(nextNum).padStart(3, '0')}`;
+        document.getElementById('newShotCode').dataset.defaultCode = `SH${String(nextNum).padStart(3, '0')}`;
+        document.getElementById('newShotCode').dataset.manual = 'false';
+        document.getElementById('newShotName').value = '';
+        document.getElementById('newShotName').focus();
+    }
+}
+
+function hideInlineNewShot() {
+    document.getElementById('inlineNewShot').style.display = 'none';
+}
+
+async function createInlineShot() {
+    const projectId = document.getElementById('importProject').value;
+    const seqId = document.getElementById('importSequence').value;
+    if (!projectId || !seqId) return showToast('Select project and sequence first', 'error');
+
+    const name = document.getElementById('newShotName').value.trim();
+    const code = document.getElementById('newShotCode').value.trim().toUpperCase();
+
+    if (!name) return showToast('Shot name is required', 'error');
+    if (!code) return showToast('Shot code is required', 'error');
+
+    try {
+        const newShot = await api(`/api/projects/${projectId}/sequences/${seqId}/shots`, {
+            method: 'POST',
+            body: { name, code }
+        });
+
+        showToast(`✅ Shot "${name}" (${code}) created!`, 'success');
+        hideInlineNewShot();
+
+        // Refresh the shot dropdown and auto-select the new one
+        const shots = await api(`/api/projects/${projectId}/sequences/${seqId}/shots`);
+        const shotSel = document.getElementById('importShot');
+        shotSel.innerHTML = '<option value="">-- None --</option>' +
+            shots.map(s =>
+                `<option value="${s.id}" ${s.id === newShot.id ? 'selected' : ''}>${s.name} (${s.code})</option>`
+            ).join('');
+
+        updateRenamePreview();
+    } catch (err) {
+        showToast('❌ ' + (err.message || 'Failed to create shot'), 'error');
+    }
+}
+
+// ═══════════════════════════════════════════
 //  EXPOSE ON WINDOW (for HTML onclick handlers)
 // ═══════════════════════════════════════════
 
@@ -569,3 +736,9 @@ window.onImportSequenceChange = onImportSequenceChange;
 window.updateRenamePreview = updateRenamePreview;
 window.executeImport = executeImport;
 window.importToProject = importToProject;
+window.showInlineNewSequence = showInlineNewSequence;
+window.hideInlineNewSequence = hideInlineNewSequence;
+window.createInlineSequence = createInlineSequence;
+window.showInlineNewShot = showInlineNewShot;
+window.hideInlineNewShot = hideInlineNewShot;
+window.createInlineShot = createInlineShot;
