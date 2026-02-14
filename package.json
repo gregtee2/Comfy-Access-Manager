@@ -5,7 +5,10 @@
   "main": "src/server.js",
   "scripts": {
     "start": "node src/server.js",
-    "dev": "node --watch src/server.js"
+    "dev": "node --watch src/server.js",
+    "build": "node scripts/build.js",
+    "build:clean": "node scripts/build.js --clean",
+    "production": "set NODE_ENV=production&& node src/server.js"
   },
   "dependencies": {
     "chokidar": "^4.0.3",
@@ -19,5 +22,8 @@
   },
   "author": "",
   "license": "UNLICENSED",
-  "private": true
+  "private": true,
+  "devDependencies": {
+    "javascript-obfuscator": "^5.3.0"
+  }
 }

@@ -1,4 +1,10 @@
 /**
+ * Digital Media Vault - Copyright (c) 2026 Greg Tee. All Rights Reserved.
+ * This source code is proprietary and confidential. Unauthorized copying,
+ * modification, distribution, or use of this file is strictly prohibited.
+ * See LICENSE file for details.
+ */
+/**
  * DMV — Export Module
  * Video transcoding/export via FFmpeg backend.
  * Supports single & batch export, resolution presets, codec selection,

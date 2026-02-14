@@ -1,3 +1,7 @@
+# Digital Media Vault - Copyright (c) 2026 Greg Tee. All Rights Reserved.
+# This source code is proprietary and confidential. Unauthorized copying,
+# modification, distribution, or use of this file is strictly prohibited.
+# See LICENSE file for details.
 #!/usr/bin/env python3
 """
 Flow Production Tracking (ShotGrid) Bridge for Digital Media Vault

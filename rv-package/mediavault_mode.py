@@ -1,3 +1,7 @@
+# Digital Media Vault - Copyright (c) 2026 Greg Tee. All Rights Reserved.
+# This source code is proprietary and confidential. Unauthorized copying,
+# modification, distribution, or use of this file is strictly prohibited.
+# See LICENSE file for details.
 #
 # MediaVault Integration for OpenRV
 # Adds "MediaVault" menu with Compare/Switch submenus

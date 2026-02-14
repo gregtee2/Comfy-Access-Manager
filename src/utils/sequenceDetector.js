@@ -1,4 +1,10 @@
 /**
+ * Digital Media Vault - Copyright (c) 2026 Greg Tee. All Rights Reserved.
+ * This source code is proprietary and confidential. Unauthorized copying,
+ * modification, distribution, or use of this file is strictly prohibited.
+ * See LICENSE file for details.
+ */
+/**
  * MediaVault — Frame Sequence Detector
  * Detects numbered frame sequences from a list of file paths.
  * Groups files like render.0001.exr … render.0100.exr into a single sequence.

@@ -1,4 +1,10 @@
 /**
+ * Digital Media Vault - Copyright (c) 2026 Greg Tee. All Rights Reserved.
+ * This source code is proprietary and confidential. Unauthorized copying,
+ * modification, distribution, or use of this file is strictly prohibited.
+ * See LICENSE file for details.
+ */
+/**
  * Fix collision-suffixed filenames: v002_02 → v003, v002_03 → v004, etc.
  *
  * Groups files by their base pattern (e.g. EDA1500_ai_v) and renumbers

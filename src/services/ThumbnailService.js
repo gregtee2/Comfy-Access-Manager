@@ -1,4 +1,10 @@
 /**
+ * Digital Media Vault - Copyright (c) 2026 Greg Tee. All Rights Reserved.
+ * This source code is proprietary and confidential. Unauthorized copying,
+ * modification, distribution, or use of this file is strictly prohibited.
+ * See LICENSE file for details.
+ */
+/**
  * MediaVault - Thumbnail Service
  * Generates thumbnails for video and image assets using sharp and FFmpeg
  */

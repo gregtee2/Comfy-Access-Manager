@@ -1,4 +1,10 @@
 /**
+ * Digital Media Vault - Copyright (c) 2026 Greg Tee. All Rights Reserved.
+ * This source code is proprietary and confidential. Unauthorized copying,
+ * modification, distribution, or use of this file is strictly prohibited.
+ * See LICENSE file for details.
+ */
+/**
  * MediaVault — Transcode Service
  * Background FFmpeg job queue for generating derivative formats.
  * Supports: image sequence → video, video → image sequence, sequence → sequence.

@@ -1,4 +1,10 @@
 /**
+ * Digital Media Vault - Copyright (c) 2026 Greg Tee. All Rights Reserved.
+ * This source code is proprietary and confidential. Unauthorized copying,
+ * modification, distribution, or use of this file is strictly prohibited.
+ * See LICENSE file for details.
+ */
+/**
  * Digital Media Vault (DMV) - Main Server
  * Local Digital Asset Manager for creative production
  * Port: 7700
@@ -20,6 +26,13 @@ app.use(express.json({ limit: '50mb' }));
 app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // ─── Static Files ───
+// In production, serve obfuscated JS from js-dist/ instead of js/
+const IS_PRODUCTION = process.env.NODE_ENV === 'production';
+if (IS_PRODUCTION && fs.existsSync(path.join(__dirname, '..', 'public', 'js-dist'))) {
+    // Rewrite /js/* requests to /js-dist/* (HTML stays the same)
+    app.use('/js', express.static(path.join(__dirname, '..', 'public', 'js-dist')));
+    console.log('  🔒 Serving obfuscated frontend (production mode)');
+}
 app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Serve thumbnails directory
