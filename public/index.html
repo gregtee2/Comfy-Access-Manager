@@ -124,7 +124,6 @@
                     <button class="btn-small btn-accent" onclick="showMoveToSequenceModal()" title="Move selected assets to a different sequence/shot">📋 Move to Sequence</button>
                     <button class="btn-small btn-role" onclick="showAssignRoleModal()" title="Assign a pipeline role (Comp, Light, Anim, etc.) to selected assets">🎭 Set Role</button>
                     <button class="btn-small btn-export" onclick="showExportModal()" title="Transcode/export selected assets via FFmpeg (GPU-accelerated)">📤 Export</button>
-                    <button class="btn-small btn-compare" onclick="openCompareInRV()" title="Open selected assets in OpenRV wipe-compare mode" style="background:var(--bg-hover)">🔀 Compare in RV</button>
                     <button class="btn-small" onclick="sendSelectedToRV('set')" title="Send selected clips to RV (replaces current media). If RV is running, clips load instantly without restarting." style="background:#334">📤 Send to RV</button>
                     <button class="btn-small" onclick="sendSelectedToRV('merge')" title="Add selected clips to the running RV session (keeps existing sources)" style="background:#334">➕ Add to RV</button>
                     <button class="btn-small btn-danger" onclick="bulkDeleteAssets()" title="Delete selected assets from the database AND remove files from disk">🗑 Delete Selected</button>
@@ -438,9 +437,7 @@
                 <div id="playerContent" class="player-content">
                     <!-- Video or image rendered here -->
                 </div>
-                <div id="playerCompare" class="player-compare" style="display:none">
-                    <!-- Side-by-side or toggle comparison rendered here -->
-                </div>
+
                 <div id="playerMetaPanel" class="player-meta-panel" style="display:none">
                     <div class="meta-panel-header">
                         <span>Generation Info</span>
@@ -453,7 +450,7 @@
             </div>
             <div class="player-info">
                 <div id="playerMeta" class="player-meta"></div>
-                <div id="playerRoleBar" class="player-role-bar" style="display:none"></div>
+
             </div>
         </div>
     </div>

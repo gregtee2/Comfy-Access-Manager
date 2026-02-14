@@ -175,8 +175,41 @@ router.get('/rv-status', (req, res) => {
     });
 });
 
-// GET /api/assets/compare-targets-by-path — Same as compare-targets but looks up asset by file_path
-// Used by RV plugin to find compare targets for the currently loaded file
+// GET /api/assets/:id/shot-siblings — Find other versions/roles in the same shot
+router.get('/:id/shot-siblings', (req, res) => {
+    const db = getDb();
+    const asset = db.prepare('SELECT id, shot_id, project_id, vault_name FROM assets WHERE id = ?').get(req.params.id);
+    if (!asset) return res.status(404).json({ error: 'Asset not found' });
+    if (!asset.shot_id) return res.json({ roles: [] });
+
+    const siblings = db.prepare(`
+        SELECT a.id, a.vault_name, a.version, a.file_ext, a.media_type, a.file_size,
+               a.role_id, r.name AS role_name, r.code AS role_code, r.icon AS role_icon, r.color AS role_color,
+               r.sort_order AS role_sort
+        FROM assets a
+        LEFT JOIN roles r ON a.role_id = r.id
+        WHERE a.shot_id = ? AND a.project_id = ? AND a.id != ?
+        ORDER BY r.sort_order ASC, r.name ASC, a.version DESC
+    `).all(asset.shot_id, asset.project_id, asset.id);
+
+    const roleMap = new Map();
+    for (const s of siblings) {
+        const key = s.role_id || 0;
+        if (!roleMap.has(key)) {
+            roleMap.set(key, {
+                id: s.role_id, name: s.role_name || 'Unassigned',
+                code: s.role_code || '', icon: s.role_icon || '', assets: []
+            });
+        }
+        roleMap.get(key).assets.push({
+            id: s.id, vault_name: s.vault_name, version: s.version, file_ext: s.file_ext
+        });
+    }
+    res.json({ roles: [...roleMap.values()] });
+});
+
+// GET /api/assets/compare-targets-by-path — Find shot siblings by file_path
+// Used by RV plugin to find sibling versions for the currently loaded file
 router.get('/compare-targets-by-path', (req, res) => {
     const db = getDb();
     const filePath = req.query.path;
@@ -1208,10 +1241,9 @@ function isRvRunning() {
  * @param {string} pushExe - Path to rvpush.exe
  * @param {string[]} filePaths - Files to load
  * @param {string} mode - 'set' (replace) or 'merge' (add)
- * @param {string[]} compareArgs - Optional compare flags (e.g. ['-wipe'])
  * @returns {{ success: boolean, started: boolean }} - started=true if we had to launch a new RV
  */
-function rvPush(pushExe, filePaths, mode = 'set', compareArgs = null) {
+function rvPush(pushExe, filePaths, mode = 'set') {
     const { spawnSync } = require('child_process');
     const cwd = path.dirname(pushExe);
 
@@ -1245,85 +1277,31 @@ function rvPush(pushExe, filePaths, mode = 'set', compareArgs = null) {
  * 1. If RV is running → use rvpush to replace/merge media (no restart)
  * 2. If RV is not running → launch rv.exe with -network flag (enables rvpush)
  *
- * RV compare modes: -compare (A/B), -wipe (wipe), -tile (side by side)
- * RV is smart enough to handle compare layouts when it receives 2+ sources —
- * user can toggle wipe/tile/sequence from RV's own UI.
+ * When RV receives 2+ sources it lets the user pick wipe/tile/sequence from its own UI.
  */
-function launchInRV(exePath, filePaths, compareArgs) {
+function launchInRV(exePath, filePaths) {
     const { execFile } = require('child_process');
     const cwd = path.dirname(exePath);
     const pushExe = findRvPush();
 
-    // Always try rvpush first — even for compare. RV handles 2+ sources natively
-    // and lets the user pick wipe/tile/sequence from its own UI.
+    // Always try rvpush first. RV handles 2+ sources natively.
     if (pushExe) {
         const pushResult = rvPush(pushExe, filePaths, 'set');
         if (pushResult.success) return;
     }
 
     // No running RV (or no rvpush) — launch fresh with -network enabled
-    // For 2+ files on fresh launch, hint -wipe so it opens in compare mode
-    const args = ['-network'];
-    if (compareArgs) args.push(...compareArgs);
-    args.push(...filePaths);
+    const args = ['-network', ...filePaths];
     execFile(exePath, args, { cwd });
-    console.log(`[RV] Launched new session (-network): ${filePaths.length} file(s)${compareArgs ? ' (' + compareArgs[0].replace('-', '') + ' mode)' : ''}`);
+    console.log(`[RV] Launched new session (-network): ${filePaths.length} file(s)`);
 }
 
-// GET /api/assets/:id/compare-targets — Get sibling assets in the same shot, grouped by role
-// Used by "Compare To →" context menu to show versions by role
-router.get('/:id/compare-targets', (req, res) => {
-    const db = getDb();
-    const asset = db.prepare('SELECT id, shot_id, project_id, role_id FROM assets WHERE id = ?').get(req.params.id);
-    if (!asset) return res.status(404).json({ error: 'Asset not found' });
-    if (!asset.shot_id) return res.json({ roles: [] }); // No shot context → nothing to compare
-
-    // Get all assets in the same shot (excluding the current one), with role info
-    const siblings = db.prepare(`
-        SELECT a.id, a.vault_name, a.version, a.file_ext, a.media_type, a.file_size,
-               a.file_path,
-               a.role_id, r.name AS role_name, r.code AS role_code, r.icon AS role_icon, r.color AS role_color,
-               r.sort_order AS role_sort
-        FROM assets a
-        LEFT JOIN roles r ON a.role_id = r.id
-        WHERE a.shot_id = ? AND a.project_id = ? AND a.id != ?
-        ORDER BY r.sort_order ASC, r.name ASC, a.version DESC
-    `).all(asset.shot_id, asset.project_id, asset.id);
-
-    // Group by role
-    const roleMap = new Map();
-    for (const s of siblings) {
-        const key = s.role_id || 0; // 0 = unassigned
-        if (!roleMap.has(key)) {
-            roleMap.set(key, {
-                id: s.role_id,
-                name: s.role_name || 'Unassigned',
-                code: s.role_code || '',
-                icon: s.role_icon || '📁',
-                color: s.role_color || '#888888',
-                assets: []
-            });
-        }
-        roleMap.get(key).assets.push({
-            id: s.id,
-            vault_name: s.vault_name,
-            version: s.version,
-            file_ext: s.file_ext,
-            media_type: s.media_type,
-            file_size: s.file_size,
-            file_path: s.file_path
-        });
-    }
-
-    res.json({ roles: [...roleMap.values()] });
-});
-
 // POST /api/assets/rv-push — Push files to a running RV session (or start one)
-// Body: { ids: [assetId, ...], mode: 'set'|'merge', compareArgs: ['-wipe'] }
+// Body: { ids: [assetId, ...], mode: 'set'|'merge' }
 //   mode 'set' = replace current media, 'merge' = add to sources
 router.post('/rv-push', (req, res) => {
     const db = getDb();
-    const { ids, mode, compareArgs } = req.body || {};
+    const { ids, mode } = req.body || {};
     if (!ids || !Array.isArray(ids) || ids.length < 1) {
         return res.status(400).json({ error: 'Provide an array of asset ids' });
     }
@@ -1350,7 +1328,7 @@ router.post('/rv-push', (req, res) => {
 
     // Try rvpush first
     if (pushExe) {
-        const result = rvPush(pushExe, filePaths, pushMode, compareArgs || null);
+        const result = rvPush(pushExe, filePaths, pushMode);
         if (result.success) {
             return res.json({
                 success: true,
@@ -1366,7 +1344,7 @@ router.post('/rv-push', (req, res) => {
 
     // rvpush failed — launch fresh RV with -network
     if (rvExe) {
-        launchInRV(rvExe, filePaths, compareArgs || null);
+        launchInRV(rvExe, filePaths);
         return res.json({
             success: true,
             count: filePaths.length,
@@ -1377,37 +1355,6 @@ router.post('/rv-push', (req, res) => {
     }
 
     res.status(500).json({ error: 'Failed to push or launch RV' });
-});
-
-// POST /api/assets/open-compare — Open multiple files in RV for A/B compare
-router.post('/open-compare', (req, res) => {
-    const db = getDb();
-    const { ids } = req.body || {};
-    if (!ids || !Array.isArray(ids) || ids.length < 1) {
-        return res.status(400).json({ error: 'Provide an array of asset ids' });
-    }
-
-    // Look up file paths for all requested assets
-    const filePaths = [];
-    for (const id of ids) {
-        const asset = db.prepare('SELECT file_path, vault_name FROM assets WHERE id = ?').get(id);
-        if (asset && fs.existsSync(asset.file_path)) {
-            filePaths.push(asset.file_path);
-        }
-    }
-    if (filePaths.length === 0) {
-        return res.status(404).json({ error: 'No valid files found' });
-    }
-
-    const exePath = findRV();
-    if (!exePath) {
-        return res.status(404).json({ error: 'RV not found. Install OpenRV or Autodesk RV.' });
-    }
-    // RV: all files then -wipe flag for 2+ files
-    const compareArgs = filePaths.length >= 2 ? ['-wipe'] : null;
-    launchInRV(exePath, filePaths, compareArgs);
-    console.log(`[RV] Compare: ${filePaths.length} files`);
-    res.json({ success: true, count: filePaths.length, viewer: 'rv' });
 });
 
 // ═══════════════════════════════════════════

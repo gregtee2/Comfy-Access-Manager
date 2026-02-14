@@ -460,18 +460,6 @@ label {
 /* ─── Tree: Roles Level ─── */
 .tree-indent-3 { padding-left: 60px; }
 
-/* ─── Role Compare Button (in shot chips) ─── */
-.role-compare-btn {
-    background: rgba(156, 39, 176, 0.15) !important;
-    border-color: rgba(156, 39, 176, 0.4) !important;
-    color: #ce93d8 !important;
-    font-size: 0.68rem !important;
-}
-.role-compare-btn:hover {
-    border-color: #ce93d8 !important;
-    background: rgba(156, 39, 176, 0.3) !important;
-}
-
 /* ─── Asset Role Badge (grid view) ─── */
 .asset-role-badge {
     position: absolute;
@@ -551,114 +539,6 @@ label {
 .btn-role:hover {
     border-color: #ce93d8;
     background: rgba(156, 39, 176, 0.3);
-}
-
-/* ─── Player: Role Comparison ─── */
-.player-compare {
-    flex: 1;
-    overflow: auto;
-}
-.player-compare.side-by-side {
-    display: flex;
-    gap: 8px;
-    padding: 8px;
-}
-.player-compare.toggle-view {
-    display: flex;
-    padding: 8px;
-}
-.compare-panel {
-    flex: 1;
-    border: 1px solid var(--border);
-    border-radius: 8px;
-    overflow: hidden;
-    display: flex; flex-direction: column;
-}
-.compare-panel.full { width: 100%; }
-.compare-panel-header {
-    padding: 6px 12px;
-    background: var(--bg-card);
-    font-size: 0.82rem;
-    display: flex; align-items: center; gap: 6px;
-    border-bottom: 2px solid var(--border);
-}
-.compare-panel-media {
-    flex: 1;
-    display: flex; align-items: center; justify-content: center;
-    background: #111;
-    min-height: 200px;
-}
-.compare-panel-media img,
-.compare-panel-media video {
-    max-width: 100%; max-height: 65vh;
-    object-fit: contain;
-}
-.compare-panel-nav {
-    display: flex; gap: 4px; padding: 4px 8px;
-    background: var(--bg-card);
-    justify-content: center;
-}
-.compare-thumb-pill {
-    padding: 2px 8px;
-    border-radius: 10px;
-    font-size: 0.7rem;
-    cursor: pointer;
-    background: var(--bg-input);
-    border: 1px solid var(--border);
-    color: var(--text-dim);
-}
-.compare-thumb-pill:hover { border-color: var(--accent); }
-.compare-thumb-pill.active {
-    background: var(--accent-dim);
-    border-color: var(--accent);
-    color: var(--accent-light);
-}
-
-/* ─── Player: Role Bar ─── */
-.player-role-bar {
-    display: flex;
-    flex-direction: column;
-    gap: 6px;
-    padding: 6px 12px;
-    background: var(--bg-card);
-    border-top: 1px solid var(--border);
-}
-.compare-mode-toggle {
-    display: flex; gap: 6px;
-}
-.compare-mode-toggle button {
-    padding: 4px 12px;
-    border-radius: 14px;
-    border: 1px solid var(--border);
-    background: var(--bg-input);
-    color: var(--text-dim);
-    cursor: pointer;
-    font-size: 0.75rem;
-    transition: var(--transition);
-}
-.compare-mode-toggle button:hover { border-color: var(--accent); color: var(--text); }
-.compare-mode-toggle button.active {
-    background: var(--accent-dim);
-    border-color: var(--accent);
-    color: var(--accent-light);
-}
-.compare-role-pills {
-    display: flex; gap: 6px; flex-wrap: wrap;
-}
-.compare-pill {
-    padding: 3px 10px;
-    border-radius: 12px;
-    border: 1px solid var(--border);
-    font-size: 0.75rem;
-    cursor: pointer;
-    transition: var(--transition);
-    display: flex; align-items: center; gap: 4px;
-}
-.compare-pill:hover { opacity: 0.9; }
-.compare-pill.active { font-weight: 600; }
-.pill-count {
-    font-size: 0.65rem;
-    opacity: 0.7;
 }
 
 /* ─── File Drop Overlay ─── */

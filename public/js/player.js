@@ -1,18 +1,11 @@
 /**
  * DMV — Player Module
- * Built-in media player, external player launch (RV / OpenRV), compare view.
+ * Built-in media player and external player launch (RV / OpenRV).
  */
 
 import { state } from './state.js';
 import { api } from './api.js';
 import { esc, formatSize, formatDuration, showToast } from './utils.js';
-
-// ═══════════════════════════════════════════
-//  COMPARE STATE
-// ═══════════════════════════════════════════
-let compareMode = null;       // null | 'side-by-side' | 'toggle'
-let compareRoles = [];        // Array of { role, assets } for comparison
-let compareActiveIdx = 0;     // Index into compareRoles for toggle mode
 
 // ═══════════════════════════════════════════
 //  OVERLAY STATE
@@ -92,24 +85,6 @@ function closePlayer() {
 }
 
 function playerKeyHandler(e) {
-    // Compare mode key handling
-    if (compareMode) {
-        if (e.key === 'Escape') { exitCompareMode(); return; }
-        if (compareMode === 'toggle') {
-            if (e.key === 'ArrowRight') {
-                compareActiveIdx = (compareActiveIdx + 1) % compareRoles.length;
-                renderRoleCompare();
-                return;
-            }
-            if (e.key === 'ArrowLeft') {
-                compareActiveIdx = (compareActiveIdx - 1 + compareRoles.length) % compareRoles.length;
-                renderRoleCompare();
-                return;
-            }
-        }
-        return;
-    }
-
     // Normal player key handling
     if (e.key === 'Escape') {
         if (presentationMode) { togglePresentationMode(); return; }
@@ -673,202 +648,7 @@ async function sendSelectedToRV(mode = 'set') {
 
 
 
-async function openCompareInRV() {
-    if (state.selectedAssets.length < 2) {
-        showToast('Select at least 2 clips to compare (Ctrl-click or Shift-click)', 4000);
-        return;
-    }
-    try {
-        const res = await api('/api/assets/rv-push', {
-            method: 'POST',
-            body: { ids: state.selectedAssets, mode: 'set', compareArgs: ['-wipe'] }
-        });
-        showToast(`Loaded ${res.count} clips in RV — wipe mode`);
-        window.blur();
-    } catch (err) {
-        showToast('Failed to launch RV compare: ' + err.message, 5000);
-    }
-}
-
 // ═══════════════════════════════════════════
-//  ROLE COMPARISON MODE
-// ═══════════════════════════════════════════
-
-async function openRoleCompare(shotId) {
-    if (!shotId && !state.currentShot?.id) {
-        showToast('Select a shot first to compare roles', 4000);
-        return;
-    }
-    const targetShot = shotId || state.currentShot.id;
-    const projectId = state.currentProject?.id;
-    if (!projectId) return;
-
-    try {
-        // Get all assets in this shot, grouped by role
-        const result = await api(`/api/assets?project_id=${projectId}&shot_id=${targetShot}`);
-        const assets = result.assets || [];
-
-        // Group by role
-        const grouped = {};
-        for (const a of assets) {
-            const key = a.role_id || 0;
-            if (!grouped[key]) {
-                grouped[key] = {
-                    role: a.role_id ? { id: a.role_id, name: a.role_name, code: a.role_code, color: a.role_color, icon: a.role_icon } : { id: 0, name: 'Unassigned', code: 'NONE', color: '#888', icon: '📎' },
-                    assets: [],
-                };
-            }
-            grouped[key].assets.push(a);
-        }
-
-        compareRoles = Object.values(grouped).filter(g => g.assets.length > 0);
-        if (compareRoles.length < 2) {
-            showToast('Need assets in at least 2 roles to compare', 4000);
-            return;
-        }
-
-        compareActiveIdx = 0;
-        compareMode = 'side-by-side';
-        renderRoleCompare();
-
-        document.getElementById('playerModal').style.display = 'flex';
-        document.addEventListener('keydown', playerKeyHandler);
-    } catch (err) {
-        showToast('Failed to load role comparison: ' + err.message, 4000);
-    }
-}
-
-function renderRoleCompare() {
-    const content = document.getElementById('playerContent');
-    const compare = document.getElementById('playerCompare');
-    const roleBar = document.getElementById('playerRoleBar');
-
-    if (!compareMode || compareRoles.length < 2) {
-        compare.style.display = 'none';
-        roleBar.style.display = 'none';
-        return;
-    }
-
-    content.style.display = 'none';
-    compare.style.display = 'flex';
-    roleBar.style.display = 'flex';
-
-    // Title
-    document.getElementById('playerTitle').textContent = 'Role Comparison';
-    document.getElementById('playerIndex').textContent = `${compareRoles.length} roles`;
-
-    // Mode toggle bar
-    roleBar.innerHTML = `
-        <div class="compare-mode-toggle">
-            <button class="${compareMode === 'side-by-side' ? 'active' : ''}" onclick="setCompareMode('side-by-side')">⬛⬜ Side by Side</button>
-            <button class="${compareMode === 'toggle' ? 'active' : ''}" onclick="setCompareMode('toggle')">🔄 Toggle</button>
-            <button onclick="exitCompareMode()">✕ Exit Compare</button>
-        </div>
-        <div class="compare-role-pills">
-            ${compareRoles.map((g, i) => `
-                <span class="compare-pill ${compareMode === 'toggle' && compareActiveIdx === i ? 'active' : ''}" 
-                    style="border-color:${g.role.color};${compareMode === 'toggle' && compareActiveIdx === i ? `background:${g.role.color}30` : ''}"
-                    onclick="setCompareActive(${i})">
-                    ${g.role.icon} ${esc(g.role.name)} <span class="pill-count">${g.assets.length}</span>
-                </span>
-            `).join('')}
-        </div>
-    `;
-
-    if (compareMode === 'side-by-side') {
-        renderSideBySide();
-    } else {
-        renderToggleView();
-    }
-}
-
-function renderSideBySide() {
-    const compare = document.getElementById('playerCompare');
-    compare.className = 'player-compare side-by-side';
-
-    compare.innerHTML = compareRoles.map(g => {
-        const a = g.assets[0]; // Show first asset per role
-        if (!a) return '';
-        const fileUrl = `/api/assets/${a.id}/file`;
-        const isVideo = a.media_type === 'video';
-        return `
-            <div class="compare-panel">
-                <div class="compare-panel-header" style="border-bottom-color:${g.role.color}">
-                    ${g.role.icon} <strong style="color:${g.role.color}">${esc(g.role.name)}</strong>
-                    <span style="opacity:.6;font-size:.8em;margin-left:8px;">${esc(a.vault_name)}</span>
-                </div>
-                <div class="compare-panel-media">
-                    ${isVideo 
-                        ? `<video controls loop src="${fileUrl}" style="max-width:100%;max-height:60vh;"></video>`
-                        : `<img src="${fileUrl}" alt="${esc(a.vault_name)}" style="max-width:100%;max-height:60vh;object-fit:contain;">`
-                    }
-                </div>
-                ${g.assets.length > 1 ? `<div class="compare-panel-nav">
-                    ${g.assets.map((aa, j) => `<span class="compare-thumb-pill${j === 0 ? ' active' : ''}" onclick="swapCompareAsset(${compareRoles.indexOf(g)}, ${j})">${j + 1}</span>`).join('')}
-                </div>` : ''}
-            </div>
-        `;
-    }).join('');
-}
-
-function renderToggleView() {
-    const compare = document.getElementById('playerCompare');
-    compare.className = 'player-compare toggle-view';
-
-    const g = compareRoles[compareActiveIdx];
-    if (!g) return;
-    const a = g.assets[0];
-    if (!a) return;
-    const fileUrl = `/api/assets/${a.id}/file`;
-    const isVideo = a.media_type === 'video';
-
-    compare.innerHTML = `
-        <div class="compare-panel full">
-            <div class="compare-panel-header" style="border-bottom-color:${g.role.color}">
-                ${g.role.icon} <strong style="color:${g.role.color}">${esc(g.role.name)}</strong>
-                <span style="opacity:.6;font-size:.8em;margin-left:8px;">${esc(a.vault_name)}</span>
-                <span style="margin-left:auto;font-size:.8em;color:var(--text-dim);">← → to switch roles</span>
-            </div>
-            <div class="compare-panel-media">
-                ${isVideo 
-                    ? `<video controls loop src="${fileUrl}" style="max-width:100%;max-height:65vh;"></video>`
-                    : `<img src="${fileUrl}" alt="${esc(a.vault_name)}" style="max-width:100%;max-height:65vh;object-fit:contain;">`
-                }
-            </div>
-        </div>
-    `;
-}
-
-function setCompareMode(mode) {
-    compareMode = mode;
-    renderRoleCompare();
-}
-
-function setCompareActive(idx) {
-    compareActiveIdx = idx;
-    renderRoleCompare();
-}
-
-function swapCompareAsset(roleIdx, assetIdx) {
-    const g = compareRoles[roleIdx];
-    if (!g || !g.assets[assetIdx]) return;
-    // Move the selected asset to front
-    const selected = g.assets.splice(assetIdx, 1)[0];
-    g.assets.unshift(selected);
-    renderRoleCompare();
-}
-
-function exitCompareMode() {
-    compareMode = null;
-    compareRoles = [];
-    const content = document.getElementById('playerContent');
-    const compare = document.getElementById('playerCompare');
-    const roleBar = document.getElementById('playerRoleBar');
-    content.style.display = '';
-    compare.style.display = 'none';
-    roleBar.style.display = 'none';
-    closePlayer();
-}
 
 /**
  * Open built-in player using whatever is already set in state.playerAssets/playerIndex.
@@ -2160,9 +1940,9 @@ document.addEventListener('contextmenu', async (e) => {
         if (rect.bottom > window.innerHeight) menu.style.top = (window.innerHeight - rect.height - 8) + 'px';
     });
 
-    // Fetch compare targets
+    // Fetch shot siblings (other roles/versions in same shot)
     try {
-        const resp = await fetch(`/api/assets/${asset.id}/compare-targets`);
+        const resp = await fetch(`/api/assets/${asset.id}/shot-siblings`);
         const data = await resp.json();
 
         if (!data.roles || data.roles.length === 0) {
@@ -2187,7 +1967,6 @@ document.addEventListener('contextmenu', async (e) => {
                     + `<div class="ctx-sub-item" data-pctx-play="${a.id}">▶️ Play Here</div>`
                     + `<div class="ctx-sub-item" data-pctx-rv-set="${a.id}">📤 Send to RV</div>`
                     + `<div class="ctx-sub-item" data-pctx-rv-merge="${a.id}">➕ Add to RV</div>`
-                    + `<div class="ctx-sub-item" data-pctx-rv-wipe="${a.id}">🔀 Compare in RV (wipe)</div>`
                     + `</div></div>`;
             } else {
                 // Multiple versions — nested: role → version → actions
@@ -2203,7 +1982,6 @@ document.addEventListener('contextmenu', async (e) => {
                         + `<div class="ctx-sub-item" data-pctx-play="${a.id}">▶️ Play Here</div>`
                         + `<div class="ctx-sub-item" data-pctx-rv-set="${a.id}">📤 Send to RV</div>`
                         + `<div class="ctx-sub-item" data-pctx-rv-merge="${a.id}">➕ Add to RV</div>`
-                        + `<div class="ctx-sub-item" data-pctx-rv-wipe="${a.id}">🔀 Compare in RV (wipe)</div>`
                         + `</div></div>`;
                 }
                 html += `</div></div>`;
@@ -2224,14 +2002,13 @@ document.addEventListener('contextmenu', async (e) => {
 
     // Click handler
     menu.addEventListener('click', (ev) => {
-        const item = ev.target.closest('[data-pctx-play], [data-pctx-rv-set], [data-pctx-rv-merge], [data-pctx-rv-wipe]');
+        const item = ev.target.closest('[data-pctx-play], [data-pctx-rv-set], [data-pctx-rv-merge]');
         if (!item) return;
         dismissPlayerCtxMenu();
 
         const playId = item.dataset.pctxPlay;
         const rvSetId = item.dataset.pctxRvSet;
         const rvMergeId = item.dataset.pctxRvMerge;
-        const rvWipeId = item.dataset.pctxRvWipe;
 
         if (playId) {
             openPlayerById(parseInt(playId));
@@ -2239,17 +2016,6 @@ document.addEventListener('contextmenu', async (e) => {
             sendToRV(parseInt(rvSetId), 'set');
         } else if (rvMergeId) {
             sendToRV(parseInt(rvMergeId), 'merge');
-        } else if (rvWipeId) {
-            // Compare current + selected in RV wipe mode
-            const ids = [asset.id, parseInt(rvWipeId)];
-            fetch('/api/assets/rv-push', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ ids, mode: 'set', compareArgs: ['-wipe'] })
-            }).then(r => r.json()).then(data => {
-                if (data.success) showToast(`Comparing in RV (wipe) — ${data.message}`, 3000);
-                else showToast(data.error || 'Failed to compare in RV', 5000);
-            }).catch(() => showToast('Failed to compare in RV', 5000));
         }
     });
 });
@@ -2273,12 +2039,6 @@ window.openInExternalPlayer = openInExternalPlayer;
 window.openInRV = openInRV;
 window.sendToRV = sendToRV;
 window.sendSelectedToRV = sendSelectedToRV;
-window.openCompareInRV = openCompareInRV;
-window.openRoleCompare = openRoleCompare;
-window.setCompareMode = setCompareMode;
-window.setCompareActive = setCompareActive;
-window.swapCompareAsset = swapCompareAsset;
-window.exitCompareMode = exitCompareMode;
 window.toggleOverlayMaster = toggleOverlayMaster;
 window.toggleOverlayOption = toggleOverlayOption;
 window.editWatermarkText = editWatermarkText;

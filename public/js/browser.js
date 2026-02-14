@@ -360,17 +360,13 @@ function renderProjectDetail(project) {
             if (isActive && s.shots?.length > 0) {
                 shotHtml = `<div class="shot-chips">${s.shots.map(sh => {
                     const isShActive = state.currentShot?.id === sh.id;
-                    let roleHtml = '';
-                    if (isShActive) {
-                        roleHtml = `<button class="shot-chip role-compare-btn" onclick="event.stopPropagation();openRoleCompare(${sh.id})" title="Compare roles side-by-side">🎭 Compare Roles</button>`;
-                    }
                     return `
                     <span class="shot-chip ${isShActive ? 'active' : ''}" 
                           onclick="event.stopPropagation();selectShot(${s.id}, ${sh.id})"
                           oncontextmenu="event.stopPropagation();showShotContextMenu(event, ${s.id}, ${sh.id}, '${esc(sh.name).replace(/'/g, "\\'")}')"
                           ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                           ondrop="event.stopPropagation();onShotDrop(event, ${s.id}, ${sh.id})"
-                          >🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span></span>${roleHtml}`;
+                          >🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span></span>`;
                 }).join('')}
                     <span class="shot-chip shot-add" onclick="event.stopPropagation();showAddShotModal(${s.id})">+ Shot</span>
                 </div>`;
@@ -679,26 +675,6 @@ function updateSelectionToolbar() {
 //  RIGHT-CLICK CONTEXT MENU
 // ═══════════════════════════════════════════
 
-/**
- * Launch RV in compare mode with two specific assets.
- * Called by "Compare To" context menu selections.
- */
-async function launchCompareToInViewer(assetA, assetB) {
-    try {
-        const resp = await fetch('/api/assets/rv-push', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ ids: [assetA, assetB], mode: 'set', compareArgs: ['-wipe'] })
-        });
-        const data = await resp.json();
-        if (!resp.ok) {
-            window.showToast?.(data.error || 'Failed to launch compare', 'error');
-        }
-    } catch (err) {
-        window.showToast?.('Failed to launch RV compare', 'error');
-    }
-}
-
 async function showContextMenu(event, assetIdx) {
     event.preventDefault();
     event.stopPropagation();
@@ -773,14 +749,6 @@ async function showContextMenu(event, assetIdx) {
         }
         html += `<div class="ctx-item" data-action="send-rv">📤 Send to RV</div>`;
 
-        // "Compare To" cascading submenu — loads sibling versions by role on hover
-        if (asset.shot_id) {
-            html += `<div class="ctx-item ctx-item-parent" id="ctxCompareToParent" data-asset-id="${asset.id}">🔀 Compare To`;
-            html += `<div class="ctx-submenu ctx-compare-sub" id="ctxCompareSub">`;
-            html += `<div class="ctx-sub-item ctx-loading">Loading…</div>`;
-            html += `</div></div>`;
-        }
-
         html += `<div class="ctx-item" data-action="star">${asset.starred ? '☆' : '⭐'} ${asset.starred ? 'Unstar' : 'Star'}</div>`;
         html += `<div class="ctx-separator"></div>`;
     }
@@ -792,7 +760,6 @@ async function showContextMenu(event, assetIdx) {
 
     if (count >= 2) {
         html += `<div class="ctx-item" data-action="play-all">▶️ Play All (${count})</div>`;
-        html += `<div class="ctx-item" data-action="compare-rv">🔀 Compare in RV (${count})</div>`;
         html += `<div class="ctx-item" data-action="send-rv-set">📤 Send to RV (${count})</div>`;
         html += `<div class="ctx-item" data-action="send-rv-merge">➕ Add to RV (${count})</div>`;
     }
@@ -810,64 +777,15 @@ async function showContextMenu(event, assetIdx) {
     menu.innerHTML = html;
     document.body.appendChild(menu);
 
-    // Lazy-load "Compare To" submenu on hover
-    const compareParent = menu.querySelector('#ctxCompareToParent');
-    if (compareParent) {
-        let compareLoaded = false;
-        compareParent.addEventListener('mouseenter', async () => {
-            if (compareLoaded) return;
-            compareLoaded = true;
-            const sub = compareParent.querySelector('#ctxCompareSub');
-            try {
-                const resp = await fetch(`/api/assets/${asset.id}/compare-targets`);
-                const data = await resp.json();
-                if (!data.roles || data.roles.length === 0) {
-                    sub.innerHTML = `<div class="ctx-sub-item ctx-muted" style="pointer-events:none">No other versions in this shot</div>`;
-                    return;
-                }
-                let subHtml = '';
-                for (const role of data.roles) {
-                    if (role.assets.length === 1) {
-                        // Single asset in role — show directly, no nested sub
-                        const a = role.assets[0];
-                        const ext = (a.file_ext || '').toLowerCase();
-                        const vLabel = a.version ? `v${String(a.version).padStart(3, '0')}` : ext;
-                        subHtml += `<div class="ctx-sub-item" data-compare-id="${a.id}">`
-                            + `<span>${role.icon} ${role.name}</span>`
-                            + `<span class="ctx-sub-size">${vLabel} ${ext}</span></div>`;
-                    } else {
-                        // Multiple assets — nested submenu per role
-                        subHtml += `<div class="ctx-sub-item ctx-item-parent" style="position:relative">`
-                            + `<span>${role.icon} ${role.name} (${role.assets.length})</span>`
-                            + `<div class="ctx-submenu">`;
-                        for (const a of role.assets) {
-                            const ext = (a.file_ext || '').toLowerCase();
-                            const vLabel = a.version ? `v${String(a.version).padStart(3, '0')}` : a.vault_name;
-                            subHtml += `<div class="ctx-sub-item" data-compare-id="${a.id}">`
-                                + `<span class="ctx-sub-ext">${vLabel}</span>`
-                                + `<span class="ctx-sub-size">${ext}</span></div>`;
-                        }
-                        subHtml += `</div></div>`;
-                    }
-                }
-                sub.innerHTML = subHtml;
-            } catch (err) {
-                sub.innerHTML = `<div class="ctx-sub-item ctx-muted" style="pointer-events:none">Error loading</div>`;
-            }
-        });
-    }
     // Wire up click handlers
     menu.addEventListener('click', (e) => {
-        const item = e.target.closest('[data-action], [data-play-id], [data-rv-id], [data-compare-id]');
+        const item = e.target.closest('[data-action], [data-play-id], [data-rv-id]');
         if (!item) return;
         dismissContextMenu();
 
         const action = item.dataset.action;
         const playId = item.dataset.playId;
         const rvId = item.dataset.rvId;
-        const compareId = item.dataset.compareId;
-
-        if (compareId) { launchCompareToInViewer(asset.id, parseInt(compareId)); return; }
         if (playId) { window.openPlayerById?.(parseInt(playId)); return; }
         if (rvId) { window.openInRV?.(parseInt(rvId)); return; }
 
@@ -880,7 +798,6 @@ async function showContextMenu(event, assetIdx) {
             case 'role': showAssignRoleModal(); break;
             case 'export': window.showExportModal?.(); break;
             case 'play-all': playSelectedAssets(); break;
-            case 'compare-rv': window.openCompareInRV?.(); break;
             case 'send-rv-set': window.sendSelectedToRV?.('set'); break;
             case 'send-rv-merge': window.sendSelectedToRV?.('merge'); break;
             case 'selectAll': selectAllAssets(); break;
