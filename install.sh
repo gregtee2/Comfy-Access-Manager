@@ -98,9 +98,12 @@ else
     echo "         RV / OpenRV not found (optional but recommended)."
     echo "         RV provides professional A/B wipe comparison and EXR/HDR playback."
     echo ""
-    echo "         Download OpenRV from:"
+    echo "         NOTE: The bundled OpenRV zip is Windows-only."
+    echo "         For macOS/Linux, build OpenRV from source:"
+    echo "           https://github.com/AcademySoftwareFoundation/OpenRV"
+    echo "         Or download a pre-built release from:"
     echo "           https://github.com/AcademySoftwareFoundation/OpenRV/releases"
-    echo "         Or set a custom RV path in DMV Settings after launch."
+    echo "         Then set the RV path in DMV Settings after launch."
     echo ""
 fi
 

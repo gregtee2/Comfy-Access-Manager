@@ -171,20 +171,48 @@ if exist "tools\ffmpeg\bin\ffmpeg.exe" (
 :: ─── [5/5] Check RV / OpenRV ───
 echo  [5/5] Checking RV / OpenRV...
 set "RV_FOUND=0"
+if exist "tools\rv\bin\rv.exe" set "RV_FOUND=1"
 if exist "C:\OpenRV\_build\stage\app\bin\rv.exe" set "RV_FOUND=1"
 for /d %%d in ("C:\Program Files\RV-*") do if exist "%%d\bin\rv.exe" set "RV_FOUND=1"
 for /d %%d in ("C:\Program Files\Shotgun*") do if exist "%%d\bin\rv.exe" set "RV_FOUND=1"
 if !RV_FOUND!==1 (
     echo         RV / OpenRV found.
+    goto :done
+)
+
+echo.
+echo         RV / OpenRV not found.
+echo         RV provides professional A/B wipe comparison and EXR/HDR playback.
+echo.
+set /p INSTALL_RV="         Download and install OpenRV for Windows? (~272 MB) (Y/N): "
+if /i not "!INSTALL_RV!"=="Y" (
+    echo         Skipping. You can install RV later from DMV Settings.
+    goto :done
+)
+
+echo         Downloading OpenRV 3.1.0 for Windows...
+if not exist "tools" mkdir tools
+powershell -NoProfile -ExecutionPolicy Bypass -Command ^
+    "$ProgressPreference = 'SilentlyContinue'; " ^
+    "try { " ^
+    "  $url = 'https://github.com/gregtee2/MediaVault/releases/download/rv-3.1.0/OpenRV-3.1.0-win64-mediavault.zip'; " ^
+    "  Write-Host '         Downloading (this may take a few minutes)...'; " ^
+    "  Invoke-WebRequest -Uri $url -OutFile 'tools\rv.zip'; " ^
+    "  Write-Host '         Extracting...'; " ^
+    "  if (Test-Path 'tools\rv') { Remove-Item 'tools\rv' -Recurse -Force }; " ^
+    "  Expand-Archive -Path 'tools\rv.zip' -DestinationPath 'tools\rv' -Force; " ^
+    "  Remove-Item 'tools\rv.zip' -Force; " ^
+    "  Write-Host '         OpenRV installed to tools\rv\'; " ^
+    "} catch { " ^
+    "  Write-Host ('         ERROR: ' + $_.Exception.Message); " ^
+    "}"
+
+if exist "tools\rv\bin\rv.exe" (
+    echo         OpenRV installed successfully!
 ) else (
-    echo.
-    echo         RV / OpenRV not found ^(optional but recommended^).
-    echo         RV provides professional A/B wipe comparison and EXR/HDR playback.
-    echo.
-    echo         Options:
-    echo           1. Download OpenRV from: https://github.com/AcademySoftwareFoundation/OpenRV/releases
-    echo           2. Or set a custom RV path in DMV Settings after launch.
-    echo.
+    echo         WARNING: Download may have failed.
+    echo         You can set a custom RV path in DMV Settings after launch.
+    echo         Or download manually from: https://github.com/AcademySoftwareFoundation/OpenRV/releases
 )
 
 :done

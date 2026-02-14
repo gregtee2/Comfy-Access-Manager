@@ -1091,7 +1091,11 @@ function findRV() {
         if (customPath && fs.existsSync(customPath)) return customPath;
     } catch (e) { /* settings not ready yet */ }
 
-    // 2. Check OpenRV local build (common for self-compiled OpenRV)
+    // 2. Check MediaVault bundled RV (tools/rv/ — installed by install.bat)
+    const bundledRv = path.join(__dirname, '..', '..', 'tools', 'rv', 'bin', isWin ? 'rv.exe' : 'rv');
+    if (fs.existsSync(bundledRv)) return bundledRv;
+
+    // 3. Check OpenRV local build (common for self-compiled OpenRV)
     const openrvBuild = 'C:\\OpenRV\\_build\\stage\\app\\bin\\rv.exe';
     if (isWin && fs.existsSync(openrvBuild)) return openrvBuild;
 
