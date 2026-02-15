@@ -1,15 +1,14 @@
 #!/bin/bash
-# Digital Media Vault — macOS/Linux launcher
+# Comfy Asset Manager — macOS/Linux launcher
 cd "$(dirname "$0")"
 
 echo ""
 echo "  ========================================"
-echo "       MediaVault - Starting Server"
+echo "    Comfy Asset Manager — Starting..."
 echo "  ========================================"
 echo ""
 
 # ─── Ensure Node.js is in PATH ───
-# nvm installs node in a non-standard location — source it if available
 if ! command -v node &>/dev/null; then
     # Try nvm (most common Node version manager)
     export NVM_DIR="${NVM_DIR:-$HOME/.nvm}"
@@ -30,46 +29,51 @@ if ! command -v node &>/dev/null; then
     echo "  Please run the installer first:"
     if [[ "$OSTYPE" == "darwin"* ]]; then
         echo "    Double-click install.command"
-        echo "    — or —"
+    else
+        echo "    chmod +x install.sh && ./install.sh"
     fi
-    echo "    chmod +x install.sh && ./install.sh"
-    echo ""
-    echo "  Or install Node.js manually:"
-    echo "    macOS:  brew install node"
-    echo "    Linux:  sudo apt install nodejs npm"
-    echo "    nvm:    nvm install --lts"
     echo ""
     exit 1
 fi
 
-# ─── [1/4] Kill any existing instance on port 7700 ───
-echo "  [1/4] Clearing port 7700..."
+# ─── [1/3] Clear port ───
+echo "  [1/3] Preparing..."
 PID=$(lsof -ti:7700 2>/dev/null)
 if [ -n "$PID" ]; then
-    echo "         Stopping PID $PID..."
     kill -9 $PID 2>/dev/null
     sleep 1
-else
-    echo "         Port clear."
 fi
+echo "         ✓ Ready."
 
-# ─── [2/4] Auto-install if first run ───
-echo "  [2/4] Checking dependencies..."
+# ─── [2/3] Check dependencies ───
+echo "  [2/3] Checking dependencies..."
 if [ ! -d "node_modules" ]; then
-    echo "         First run — installing npm packages..."
-    npm install --no-audit --no-fund
-    echo ""
-else
-    echo "         Dependencies installed."
+    echo "         First run — installing packages..."
+    npm install --no-audit --no-fund --loglevel=error 2>&1 | tail -1 || true
 fi
+echo "         ✓ Ready."
 
-# ─── [3/4] Create directories if needed ───
-echo "  [3/4] Checking directories..."
+# Create directories if needed
 mkdir -p data thumbnails
 
-# ─── [4/4] Start server ───
+# ─── [3/3] Start server ───
+echo "  [3/3] Starting server..."
 echo ""
-echo "  Starting MediaVault on http://localhost:7700"
-echo "  Node: $(node --version) at $(which node)"
+echo "  ┌──────────────────────────────────────────┐"
+echo "  │                                          │"
+echo "  │   Your browser will open automatically.  │"
+echo "  │                                          │"
+echo "  │   If not, go to: http://localhost:7700   │"
+echo "  │                                          │"
+echo "  │   To stop: press Ctrl+C or close this    │"
+echo "  │   window.                                │"
+echo "  │                                          │"
+echo "  └──────────────────────────────────────────┘"
 echo ""
+
+# Auto-open browser on macOS after a short delay
+if [[ "$OSTYPE" == "darwin"* ]]; then
+    (sleep 2 && open "http://localhost:7700") &
+fi
+
 node src/server.js

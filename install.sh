@@ -1,88 +1,109 @@
 #!/bin/bash
-# Digital Media Vault — macOS/Linux Installer
+# Comfy Asset Manager (CAM) — macOS/Linux Installer
 set -e
 
 cd "$(dirname "$0")"
 
 echo ""
-echo "  ============================================="
-echo "    Digital Media Vault (DMV) — One-Click Installer"
-echo "  ============================================="
+echo "  ============================================"
+echo "    Comfy Asset Manager — Installer"
+echo "  ============================================"
 echo ""
-echo "  This installer handles everything for you."
-echo "  Just sit back — it will install all dependencies"
-echo "  automatically if they are not already present."
+echo "  Sit back — this installs everything you need."
 echo ""
 
 # ─── [1/6] Homebrew (macOS only) ───
 if [[ "$OSTYPE" == "darwin"* ]]; then
     echo "  [1/6] Checking Homebrew..."
     if command -v brew &>/dev/null; then
-        echo "         Homebrew found."
+        echo "         ✓ Homebrew ready."
     else
-        echo "         Homebrew not found. Installing..."
+        echo "         Installing Homebrew (needed to install other tools)..."
+        echo "         You may be asked for your Mac password — that's normal."
+        echo ""
         /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/Homebrew/install/HEAD/install.sh)"
         # Add brew to PATH for this session (Apple Silicon default location)
         if [ -f /opt/homebrew/bin/brew ]; then
             eval "$(/opt/homebrew/bin/brew shellenv)"
         fi
+        echo "         ✓ Homebrew installed."
     fi
 else
-    echo "  [1/6] Linux detected — using apt package manager."
+    echo "  [1/6] Linux detected — using apt."
 fi
 
-# ─── [2/6] Node.js ───
+# ─── [2/6] Node.js (need v18+) ───
 echo "  [2/6] Checking Node.js..."
+NEED_NODE=false
 if command -v node &>/dev/null; then
-    echo "         Found Node.js $(node --version)"
-else
-    echo "         Node.js not found. Installing..."
-    if [[ "$OSTYPE" == "darwin"* ]]; then
-        brew install node
+    NODE_VER_FULL=$(node --version)
+    NODE_VER=$(echo "$NODE_VER_FULL" | sed 's/v//' | cut -d. -f1)
+    if [ "$NODE_VER" -lt 18 ] 2>/dev/null; then
+        echo "         Node.js ${NODE_VER_FULL} is outdated (need v18+). Upgrading..."
+        NEED_NODE=true
     else
-        sudo apt update && sudo apt install -y nodejs npm
+        echo "         ✓ Node.js ${NODE_VER_FULL}"
     fi
-    echo "         Installed Node.js $(node --version)"
+else
+    NEED_NODE=true
+fi
+
+if [ "$NEED_NODE" = true ]; then
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        if brew list node &>/dev/null 2>&1; then
+            brew upgrade node 2>&1 | tail -1 || true
+        else
+            echo "         Installing Node.js..."
+            brew install node 2>&1 | tail -1
+        fi
+        # Ensure Homebrew's node is in PATH
+        export PATH="/opt/homebrew/bin:/usr/local/bin:$PATH"
+        hash -r 2>/dev/null
+    else
+        sudo apt update -qq && sudo apt install -y nodejs npm
+    fi
+    echo "         ✓ Node.js $(node --version)"
 fi
 
 # ─── [3/6] Git ───
 echo "  [3/6] Checking Git..."
 if command -v git &>/dev/null; then
-    echo "         Found $(git --version)"
+    echo "         ✓ Git ready."
 else
-    echo "         Git not found. Installing..."
+    echo "         Installing Git..."
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        brew install git
+        brew install git 2>&1 | tail -1
     else
         sudo apt install -y git
     fi
-    echo "         Installed $(git --version)"
+    echo "         ✓ Git installed."
 fi
 
 # ─── [4/6] FFmpeg ───
 echo "  [4/6] Checking FFmpeg..."
 if command -v ffmpeg &>/dev/null; then
-    echo "         FFmpeg already installed."
+    echo "         ✓ FFmpeg ready."
 else
-    echo "         FFmpeg not found. Installing..."
+    echo "         Installing FFmpeg (for video thumbnails)..."
     if [[ "$OSTYPE" == "darwin"* ]]; then
-        brew install ffmpeg
+        brew install ffmpeg 2>&1 | tail -1
     else
         sudo apt install -y ffmpeg
     fi
-    echo "         FFmpeg installed."
+    echo "         ✓ FFmpeg installed."
 fi
 
-# ─── [5/6] npm packages ───
-echo "  [5/6] Installing npm packages..."
-npm install --no-audit --no-fund
-echo "         Done."
+# ─── [5/6] App dependencies ───
+echo "  [5/6] Installing app dependencies..."
+echo "         This may take a minute on first install..."
+npm install --no-audit --no-fund --loglevel=error 2>&1 | tail -1 || true
+echo "         ✓ Dependencies ready."
 
-# ─── [6/6] Check RV / OpenRV ───
+# ─── [6/6] RV / OpenRV (optional) ───
 echo "  [6/6] Checking RV / OpenRV..."
 RV_FOUND=false
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    # Check bundled macOS RV.app
+    # Bundled, Applications, or system-wide
     if [ -f "tools/rv/RV.app/Contents/MacOS/RV" ]; then
         RV_FOUND=true
     elif ls /Applications/RV*.app &>/dev/null 2>&1; then
@@ -97,24 +118,28 @@ else
 fi
 
 if [ "$RV_FOUND" = true ]; then
-    echo "         RV / OpenRV found."
+    echo "         ✓ RV / OpenRV found."
 else
     echo ""
-    echo "         RV / OpenRV not found (optional but recommended)."
-    echo "         RV provides professional A/B wipe comparison and EXR/HDR playback."
+    echo "         RV is not installed (optional — everything else works without it)."
+    echo "         It adds side-by-side video comparison and professional EXR playback."
     echo ""
 
     if [[ "$OSTYPE" == "darwin"* ]]; then
         MAC_ARCH=$(uname -m)
         if [ "$MAC_ARCH" = "arm64" ]; then
-            read -p "         Download and install OpenRV for macOS? (~642 MB) (y/N): " INSTALL_RV
+            read -p "         Would you like to download OpenRV? (~642 MB) [y/N]: " INSTALL_RV
             if [[ "$INSTALL_RV" =~ ^[Yy]$ ]]; then
                 mkdir -p tools
                 RV_URL="https://github.com/gregtee2/Digital-Media-Vault/releases/download/rv-3.1.0/OpenRV-3.1.0-macos-arm64-mediavault.zip"
-                echo "         Downloading OpenRV 3.1.0 for macOS (Apple Silicon)..."
+                echo ""
+                echo "         Downloading OpenRV 3.1.0..."
+                echo "         (this is a large file — it may take a few minutes)"
+                echo ""
                 curl -L -o tools/rv.zip "$RV_URL" --progress-bar --connect-timeout 15 || true
 
                 if [ -f tools/rv.zip ] && [ -s tools/rv.zip ]; then
+                    echo ""
                     echo "         Extracting..."
                     rm -rf tools/rv 2>/dev/null
                     mkdir -p tools/rv
@@ -123,52 +148,57 @@ else
                     # Remove quarantine so macOS doesn't block it
                     xattr -cr tools/rv/RV.app 2>/dev/null
                     if [ -f "tools/rv/RV.app/Contents/MacOS/RV" ]; then
-                        echo "         ✅ OpenRV installed to tools/rv/"
+                        echo "         ✓ OpenRV installed."
                     else
-                        echo "         ⚠️  Extraction may have failed."
-                        echo "         You can set a custom RV path in DMV Settings after launch."
+                        echo "         ⚠ Extraction may have failed."
+                        echo "         You can set a custom RV path in Settings later."
                     fi
                 else
-                    echo "         ⚠️  Download failed."
-                    echo "         You can set a custom RV path in DMV Settings after launch."
+                    echo "         ⚠ Download failed. You can add RV later from Settings."
                     rm -f tools/rv.zip 2>/dev/null
                 fi
             else
-                echo "         Skipping. You can install RV later from DMV Settings."
+                echo "         Skipped. You can add RV later from Settings."
             fi
         else
-            echo "         NOTE: Pre-built OpenRV is available for Apple Silicon (arm64) only."
-            echo "         For Intel Macs, build OpenRV from source:"
-            echo "           https://github.com/AcademySoftwareFoundation/OpenRV"
-            echo "         See also: docs/BUILD_OPENRV_MACOS.md"
-            echo "         Then set the RV path in DMV Settings after launch."
+            echo "         Pre-built OpenRV is available for Apple Silicon (M1/M2/M3/M4) only."
+            echo "         For Intel Macs, see: docs/BUILD_OPENRV_MACOS.md"
         fi
     else
-        echo "         For Linux, build OpenRV from source:"
-        echo "           https://github.com/AcademySoftwareFoundation/OpenRV"
-        echo "         Or download a pre-built release from:"
-        echo "           https://github.com/AcademySoftwareFoundation/OpenRV/releases"
-        echo "         Then set the RV path in DMV Settings after launch."
+        echo "         For Linux, see: https://github.com/AcademySoftwareFoundation/OpenRV"
+        echo "         Then set the RV path in Settings after launching."
     fi
     echo ""
 fi
 
-# Create directories
+# Create working directories
 mkdir -p data thumbnails
 
 echo ""
-echo "  ============================================="
+echo "  ============================================"
 echo "    ✅ Installation Complete!"
-echo "  ============================================="
+echo "  ============================================"
 echo ""
+
+# Offer to launch immediately
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    echo "  To start DMV:"
-    echo "    Double-click start.command"
-    echo "    — or —"
-    echo "    ./start.sh"
+    read -p "  Launch Comfy Asset Manager now? [Y/n]: " LAUNCH_NOW
+    if [[ ! "$LAUNCH_NOW" =~ ^[Nn]$ ]]; then
+        echo ""
+        exec ./start.sh
+    else
+        echo ""
+        echo "  To start later, double-click:  start.command"
+        echo ""
+    fi
 else
-    echo "  To start DMV, run:  ./start.sh"
+    read -p "  Launch now? [Y/n]: " LAUNCH_NOW
+    if [[ ! "$LAUNCH_NOW" =~ ^[Nn]$ ]]; then
+        echo ""
+        exec ./start.sh
+    else
+        echo ""
+        echo "  To start later:  ./start.sh"
+        echo ""
+    fi
 fi
-echo ""
-echo "  Then open:  http://localhost:7700"
-echo ""
