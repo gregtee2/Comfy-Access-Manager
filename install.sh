@@ -101,24 +101,39 @@ echo "         ✓ Dependencies ready."
 
 # ─── [6/6] RV / OpenRV (optional) ───
 echo "  [6/6] Checking RV / OpenRV..."
-RV_FOUND=false
+RV_BUNDLED=false
+RV_SYSTEM=false
 if [[ "$OSTYPE" == "darwin"* ]]; then
-    # Bundled, Applications, or system-wide
+    # Check for our bundled native arm64 build first
     if [ -f "tools/rv/RV.app/Contents/MacOS/RV" ]; then
-        RV_FOUND=true
-    elif ls /Applications/RV*.app &>/dev/null 2>&1; then
-        RV_FOUND=true
-    elif [ -f /usr/local/bin/rv ]; then
-        RV_FOUND=true
+        RV_BUNDLED=true
+    fi
+    # Check for any system-wide RV (may be old Intel/x86)
+    if ls /Applications/RV*.app &>/dev/null 2>&1 || [ -f /usr/local/bin/rv ]; then
+        RV_SYSTEM=true
     fi
 else
     if [ -f "tools/rv/bin/rv" ] || command -v rv &>/dev/null; then
-        RV_FOUND=true
+        RV_BUNDLED=true
     fi
 fi
 
-if [ "$RV_FOUND" = true ]; then
-    echo "         ✓ RV / OpenRV found."
+if [ "$RV_BUNDLED" = true ]; then
+    echo "         ✓ OpenRV (bundled) ready."
+elif [ "$RV_SYSTEM" = true ] && [[ "$OSTYPE" == "darwin"* ]] && [ "$(uname -m)" = "arm64" ]; then
+    # System RV exists but may be old Intel — offer our native arm64 build
+    echo "         Found an older RV in /Applications (may be Intel-only)."
+    echo "         A native Apple Silicon version with pro codecs is available."
+    echo ""
+    read -p "         Download the native OpenRV? (~642 MB) [Y/n]: " INSTALL_RV
+    # Default to Yes — fall through to download below
+    if [[ "$INSTALL_RV" =~ ^[Nn]$ ]]; then
+        echo "         Keeping existing RV."
+    else
+        INSTALL_RV="y"
+    fi
+elif [ "$RV_SYSTEM" = true ]; then
+    echo "         ✓ RV found."
 else
     echo ""
     echo "         RV is not installed (optional — everything else works without it)."
@@ -130,33 +145,7 @@ else
         if [ "$MAC_ARCH" = "arm64" ]; then
             read -p "         Would you like to download OpenRV? (~642 MB) [y/N]: " INSTALL_RV
             if [[ "$INSTALL_RV" =~ ^[Yy]$ ]]; then
-                mkdir -p tools
-                RV_URL="https://github.com/gregtee2/Digital-Media-Vault/releases/download/rv-3.1.0/OpenRV-3.1.0-macos-arm64-mediavault.zip"
-                echo ""
-                echo "         Downloading OpenRV 3.1.0..."
-                echo "         (this is a large file — it may take a few minutes)"
-                echo ""
-                curl -L -o tools/rv.zip "$RV_URL" --progress-bar --connect-timeout 15 || true
-
-                if [ -f tools/rv.zip ] && [ -s tools/rv.zip ]; then
-                    echo ""
-                    echo "         Extracting..."
-                    rm -rf tools/rv 2>/dev/null
-                    mkdir -p tools/rv
-                    ditto -x -k tools/rv.zip tools/rv/
-                    rm -f tools/rv.zip
-                    # Remove quarantine so macOS doesn't block it
-                    xattr -cr tools/rv/RV.app 2>/dev/null
-                    if [ -f "tools/rv/RV.app/Contents/MacOS/RV" ]; then
-                        echo "         ✓ OpenRV installed."
-                    else
-                        echo "         ⚠ Extraction may have failed."
-                        echo "         You can set a custom RV path in Settings later."
-                    fi
-                else
-                    echo "         ⚠ Download failed. You can add RV later from Settings."
-                    rm -f tools/rv.zip 2>/dev/null
-                fi
+                INSTALL_RV="y"
             else
                 echo "         Skipped. You can add RV later from Settings."
             fi
@@ -169,6 +158,37 @@ else
         echo "         Then set the RV path in Settings after launching."
     fi
     echo ""
+fi
+
+# ─── Download OpenRV if requested ───
+if [[ "$INSTALL_RV" == "y" ]]; then
+    mkdir -p tools
+    RV_URL="https://github.com/gregtee2/Digital-Media-Vault/releases/download/rv-3.1.0/OpenRV-3.1.0-macos-arm64-mediavault.zip"
+    echo ""
+    echo "         Downloading OpenRV 3.1.0..."
+    echo "         (this is a large file — it may take a few minutes)"
+    echo ""
+    curl -L -o tools/rv.zip "$RV_URL" --progress-bar --connect-timeout 15 || true
+
+    if [ -f tools/rv.zip ] && [ -s tools/rv.zip ]; then
+        echo ""
+        echo "         Extracting..."
+        rm -rf tools/rv 2>/dev/null
+        mkdir -p tools/rv
+        ditto -x -k tools/rv.zip tools/rv/
+        rm -f tools/rv.zip
+        # Remove quarantine so macOS doesn't block it
+        xattr -cr tools/rv/RV.app 2>/dev/null
+        if [ -f "tools/rv/RV.app/Contents/MacOS/RV" ]; then
+            echo "         ✓ OpenRV installed (native Apple Silicon)."
+        else
+            echo "         ⚠ Extraction may have failed."
+            echo "         You can set a custom RV path in Settings later."
+        fi
+    else
+        echo "         ⚠ Download failed. You can add RV later from Settings."
+        rm -f tools/rv.zip 2>/dev/null
+    fi
 fi
 
 # Create working directories
