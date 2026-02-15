@@ -40,11 +40,50 @@
             </nav>
         </div>
         <div class="topbar-right">
+            <button id="networkBtn" class="topbar-icon-btn" onclick="toggleServerPanel()" title="Network — find other MediaVault instances">
+                🖧
+            </button>
             <span id="statusIndicator" class="status-dot" title="Green = vault configured and running. Yellow = needs setup."></span>
             <span id="assetCount" class="stat" title="Total assets across all projects">0 assets</span>
             <span id="appVersion" class="stat" style="opacity:0.5; font-size:0.75em;" title="Comfy Asset Manager version"></span>
         </div>
     </header>
+
+    <!-- ═══ SERVER PANEL (network discovery dropdown) ═══ -->
+    <div id="serverPanel" class="server-panel" style="display:none">
+        <div class="server-panel-header">
+            <span>🖧 Network Servers</span>
+            <button onclick="toggleServerPanel()" class="server-panel-close">✕</button>
+        </div>
+        <div class="server-panel-body">
+            <div class="server-panel-section">
+                <div class="server-panel-local">
+                    <span class="server-dot server-dot-active"></span>
+                    <span class="server-name">This machine</span>
+                    <span class="server-badge" id="serverLocalName"></span>
+                </div>
+            </div>
+            <div class="server-panel-section">
+                <div class="server-panel-subhead">
+                    <span>Discovered on Network</span>
+                    <button onclick="scanForServers()" class="server-scan-btn" id="serverScanBtn" title="Scan network">🔍 Scan</button>
+                </div>
+                <div id="serverDiscoveredList" class="server-list">
+                    <div class="server-list-empty">Click Scan to find other MediaVault instances</div>
+                </div>
+            </div>
+            <div class="server-panel-section">
+                <div class="server-panel-subhead"><span>Saved Servers</span></div>
+                <div id="serverSavedList" class="server-list">
+                    <div class="server-list-empty">No saved servers</div>
+                </div>
+                <div class="server-add-row">
+                    <input type="text" id="serverAddUrl" placeholder="http://192.168.1.x:7700" style="flex:1;">
+                    <button onclick="addServerManual()">+ Add</button>
+                </div>
+            </div>
+        </div>
+    </div>
 
     <!-- ═══ MAIN CONTENT ═══ -->
     <main id="mainContent">
@@ -434,6 +473,33 @@
                             <button id="btnApplyUpdate" onclick="applyUpdate()" style="display:none;font-size:0.8rem;background:var(--success);color:#000;">⬇️ Update Now</button>
                         </div>
                         <div id="updateChangelog" style="display:none;margin-top:10px;padding:10px 14px;background:var(--bg-dark);border-radius:6px;font-size:0.78rem;max-height:200px;overflow-y:auto;white-space:pre-wrap;color:var(--text-dim);"></div>
+                    </div>
+                </div>
+
+                <div class="settings-section">
+                    <h3>🖧 Network &amp; Multi-Machine <span class="help-icon" data-tip="Access your MediaVault database from other machines on your network. Give this server a friendly name and configure path mappings for cross-platform file access.">?</span></h3>
+                    <div class="setting-row">
+                        <label>Server Name</label>
+                        <div class="input-row">
+                            <input type="text" id="serverNameInput" placeholder="e.g., Greg's Mac Studio" style="flex:1;">
+                            <button onclick="saveServerName()">Save</button>
+                        </div>
+                        <p class="hint">Friendly name shown to other machines on the network.</p>
+                    </div>
+                    <div class="setting-row">
+                        <label>This Server's Address</label>
+                        <div id="serverAddresses" style="font-size:0.85rem;color:var(--text-dim);">Loading...</div>
+                        <p class="hint">Other machines can open this URL in their browser to access your database.</p>
+                    </div>
+                    <div class="setting-row">
+                        <label>Path Mappings <span class="help-icon" data-tip="Map file paths between operating systems. Example: Windows vault at Z:\Media maps to /Volumes/Media on Mac. This allows assets imported on one OS to be found on another.">?</span></label>
+                        <div id="pathMappingList" class="path-mapping-list"></div>
+                        <div class="input-row" style="margin-top:6px;">
+                            <input type="text" id="pathMapFrom" placeholder="Remote path (e.g., Z:\Media)" style="flex:1;">
+                            <span style="color:var(--text-muted);padding:0 4px;">→</span>
+                            <input type="text" id="pathMapTo" placeholder="Local path (e.g., /Volumes/Media)" style="flex:1;">
+                            <button onclick="addPathMapping()">+ Add</button>
+                        </div>
                     </div>
                 </div>
 

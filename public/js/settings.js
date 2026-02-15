@@ -661,6 +661,280 @@ export function autoCheckForUpdates() {
 }
 
 // ═══════════════════════════════════════════
+//  NETWORK / SERVER DISCOVERY
+// ═══════════════════════════════════════════
+
+let _serverPanelOpen = false;
+
+export function toggleServerPanel() {
+    _serverPanelOpen = !_serverPanelOpen;
+    const panel = document.getElementById('serverPanel');
+    if (!panel) return;
+    panel.style.display = _serverPanelOpen ? 'flex' : 'none';
+    if (_serverPanelOpen) {
+        loadServerInfo();
+        loadSavedServers();
+    }
+}
+
+// Close panel when clicking outside
+document.addEventListener('click', (e) => {
+    if (!_serverPanelOpen) return;
+    const panel = document.getElementById('serverPanel');
+    const btn = document.getElementById('networkBtn');
+    if (panel && !panel.contains(e.target) && btn && !btn.contains(e.target)) {
+        _serverPanelOpen = false;
+        panel.style.display = 'none';
+    }
+});
+
+async function loadServerInfo() {
+    try {
+        const info = await api('/api/servers/info');
+        const nameEl = document.getElementById('serverLocalName');
+        if (nameEl) nameEl.textContent = info.name || info.hostname;
+
+        // Update settings section too
+        const nameInput = document.getElementById('serverNameInput');
+        if (nameInput && !nameInput.value) nameInput.value = info.name || '';
+
+        const addrsEl = document.getElementById('serverAddresses');
+        if (addrsEl && info.ip) {
+            addrsEl.innerHTML = info.ip
+                .map(ip => `<a href="http://${ip}:${info.port}" target="_blank" style="color:var(--accent);text-decoration:none;">http://${ip}:${info.port}</a>`)
+                .join('<br>');
+        }
+    } catch (err) {
+        console.error('[Network] Failed to load server info:', err);
+    }
+}
+
+async function scanForServers() {
+    const btn = document.getElementById('serverScanBtn');
+    const list = document.getElementById('serverDiscoveredList');
+    if (!list) return;
+
+    if (btn) { btn.classList.add('scanning'); btn.textContent = '⏳ Scanning...'; }
+    list.innerHTML = '<div class="server-list-empty">Scanning network...</div>';
+
+    try {
+        const data = await api('/api/servers/discover?timeout=3000');
+        const servers = data.servers || [];
+
+        if (servers.length === 0) {
+            list.innerHTML = '<div class="server-list-empty">No other instances found on this network</div>';
+        } else {
+            // Show green dot on network button
+            document.getElementById('networkBtn')?.classList.add('has-servers');
+
+            list.innerHTML = servers.map((s, i) => `
+                <div class="server-card" ondblclick="window.open('${esc(s.url)}','_blank')">
+                    <span class="server-dot server-dot-active"></span>
+                    <div class="server-card-info">
+                        <div class="server-card-name">${esc(s.name || s.hostname)}</div>
+                        <div class="server-card-meta">${esc(s.ip)}:${s.port} · ${s.assets} assets · ${platformLabel(s.platform)} · v${esc(s.version)}</div>
+                    </div>
+                    <div class="server-card-actions">
+                        <button class="btn-open" onclick="window.open('${esc(s.url)}','_blank')">Open</button>
+                        <button onclick="saveDiscoveredServer(${i})">Save</button>
+                    </div>
+                </div>
+            `).join('');
+        }
+
+        window._discoveredServers = servers;
+    } catch (err) {
+        list.innerHTML = `<div class="server-list-empty" style="color:#e57373;">Scan failed: ${esc(err.message)}</div>`;
+    }
+
+    if (btn) { btn.classList.remove('scanning'); btn.textContent = '🔍 Scan'; }
+}
+
+function platformLabel(p) {
+    if (p === 'win32') return '🪟 Windows';
+    if (p === 'darwin') return '🍎 Mac';
+    if (p === 'linux') return '🐧 Linux';
+    return p || 'Unknown';
+}
+
+async function saveDiscoveredServer(index) {
+    const s = window._discoveredServers?.[index];
+    if (!s) return;
+    try {
+        await api('/api/servers/save', {
+            method: 'POST',
+            body: { name: s.name || s.hostname, url: s.url }
+        });
+        showToast(`Saved ${s.name || s.hostname}`);
+        loadSavedServers();
+    } catch (err) {
+        showToast('Failed to save: ' + err.message);
+    }
+}
+
+async function addServerManual() {
+    const input = document.getElementById('serverAddUrl');
+    const url = input?.value?.trim();
+    if (!url) return;
+
+    try {
+        // Ping first to validate
+        const ping = await api('/api/servers/ping', { method: 'POST', body: { url } });
+
+        const name = ping.online ? (ping.name || ping.hostname || url) : url;
+        await api('/api/servers/save', { method: 'POST', body: { name, url } });
+
+        input.value = '';
+        showToast(ping.online ? `Added ${name} (online)` : `Added ${url} (offline)`);
+        loadSavedServers();
+    } catch (err) {
+        showToast('Failed: ' + err.message);
+    }
+}
+
+async function loadSavedServers() {
+    const list = document.getElementById('serverSavedList');
+    if (!list) return;
+
+    try {
+        const data = await api('/api/servers/saved');
+        const servers = data.servers || [];
+
+        if (servers.length === 0) {
+            list.innerHTML = '<div class="server-list-empty">No saved servers</div>';
+            return;
+        }
+
+        // Ping each server in parallel for status
+        const pings = await Promise.allSettled(
+            servers.map(s =>
+                api('/api/servers/ping', { method: 'POST', body: { url: s.url } })
+                    .catch(() => ({ online: false }))
+            )
+        );
+
+        list.innerHTML = servers.map((s, i) => {
+            const ping = pings[i]?.value || { online: false };
+            const dotClass = ping.online ? 'server-dot-active' : 'server-dot-offline';
+            const statusText = ping.online ? `${ping.assets} assets · v${ping.version}` : 'Offline';
+
+            return `
+                <div class="server-card" ondblclick="window.open('${esc(s.url)}','_blank')">
+                    <span class="server-dot ${dotClass}"></span>
+                    <div class="server-card-info">
+                        <div class="server-card-name">${esc(s.name)}</div>
+                        <div class="server-card-meta">${esc(s.url)} · ${statusText}</div>
+                    </div>
+                    <div class="server-card-actions">
+                        ${ping.online ? `<button class="btn-open" onclick="window.open('${esc(s.url)}','_blank')">Open</button>` : ''}
+                        <button onclick="removeSavedServer(${i})">✕</button>
+                    </div>
+                </div>
+            `;
+        }).join('');
+    } catch (err) {
+        list.innerHTML = '<div class="server-list-empty">Failed to load saved servers</div>';
+    }
+}
+
+async function removeSavedServer(index) {
+    try {
+        await api(`/api/servers/saved/${index}`, { method: 'DELETE' });
+        loadSavedServers();
+    } catch (err) {
+        showToast('Failed to remove: ' + err.message);
+    }
+}
+
+async function saveServerName() {
+    const input = document.getElementById('serverNameInput');
+    const name = input?.value?.trim();
+    if (!name) return;
+    try {
+        await api('/api/servers/name', { method: 'POST', body: { name } });
+        showToast('Server name saved');
+        loadServerInfo();
+    } catch (err) {
+        showToast('Failed: ' + err.message);
+    }
+}
+
+// ─── Path Mappings ───
+
+async function loadPathMappings() {
+    const list = document.getElementById('pathMappingList');
+    if (!list) return;
+    try {
+        const data = await api('/api/servers/path-map');
+        const mappings = data.mappings || [];
+        if (mappings.length === 0) {
+            list.innerHTML = '<div style="font-size:0.82rem;color:var(--text-muted);padding:4px 0;">No path mappings configured</div>';
+            return;
+        }
+        list.innerHTML = mappings.map((m, i) => `
+            <div class="path-mapping-row">
+                <span class="pm-from" title="${esc(m.from)}">${esc(m.from)}</span>
+                <span class="pm-arrow">→</span>
+                <span class="pm-to" title="${esc(m.to)}">${esc(m.to)}</span>
+                <button class="pm-remove" onclick="removePathMapping(${i})" title="Remove">✕</button>
+            </div>
+        `).join('');
+    } catch {}
+}
+
+async function addPathMapping() {
+    const fromEl = document.getElementById('pathMapFrom');
+    const toEl = document.getElementById('pathMapTo');
+    const from = fromEl?.value?.trim();
+    const to = toEl?.value?.trim();
+    if (!from || !to) return showToast('Both paths required');
+
+    try {
+        const data = await api('/api/servers/path-map');
+        const mappings = data.mappings || [];
+        mappings.push({ from, to });
+        await api('/api/servers/path-map', { method: 'POST', body: { mappings } });
+        fromEl.value = '';
+        toEl.value = '';
+        loadPathMappings();
+        showToast('Path mapping added');
+    } catch (err) {
+        showToast('Failed: ' + err.message);
+    }
+}
+
+async function removePathMapping(index) {
+    try {
+        const data = await api('/api/servers/path-map');
+        const mappings = data.mappings || [];
+        mappings.splice(index, 1);
+        await api('/api/servers/path-map', { method: 'POST', body: { mappings } });
+        loadPathMappings();
+    } catch (err) {
+        showToast('Failed: ' + err.message);
+    }
+}
+
+// Load network settings when settings tab is opened
+const _origLoadSettings = loadSettings;
+// Augment loadSettings with network info (called from overridden export)
+function loadNetworkSettings() {
+    loadServerInfo();
+    loadPathMappings();
+}
+// Hook into settings load
+const _settingsTabObserver = new MutationObserver(() => {
+    const settingsTab = document.getElementById('tab-settings');
+    if (settingsTab?.classList.contains('active')) {
+        loadNetworkSettings();
+    }
+});
+setTimeout(() => {
+    const main = document.getElementById('mainContent');
+    if (main) _settingsTabObserver.observe(main, { subtree: true, attributes: true, attributeFilter: ['class'] });
+}, 1000);
+
+// ═══════════════════════════════════════════
 //  EXPOSE ON WINDOW (for HTML onclick handlers)
 // ═══════════════════════════════════════════
 
@@ -686,3 +960,11 @@ window.closeUpdateModal = closeUpdateModal;
 window.dismissUpdateLater = dismissUpdateLater;
 window.dismissUpdateBanner = dismissUpdateBanner;
 window.applyUpdateFromModal = applyUpdateFromModal;
+window.toggleServerPanel = toggleServerPanel;
+window.scanForServers = scanForServers;
+window.saveDiscoveredServer = saveDiscoveredServer;
+window.addServerManual = addServerManual;
+window.removeSavedServer = removeSavedServer;
+window.saveServerName = saveServerName;
+window.addPathMapping = addPathMapping;
+window.removePathMapping = removePathMapping;

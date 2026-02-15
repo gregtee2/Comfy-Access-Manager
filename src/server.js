@@ -63,6 +63,8 @@ const exportRoutes = require('./routes/exportRoutes');
 const flowRoutes = require('./routes/flowRoutes');
 const transcodeRoutes = require('./routes/transcodeRoutes');
 const updateRoutes = require('./routes/updateRoutes');
+const serverRoutes = require('./routes/serverRoutes');
+const DiscoveryService = require('./services/DiscoveryService');
 
 app.use('/api/projects', projectRoutes);
 app.use('/api/assets', assetRoutes);
@@ -73,6 +75,7 @@ app.use('/api/export', exportRoutes);
 app.use('/api/flow', flowRoutes);
 app.use('/api/transcode', transcodeRoutes);
 app.use('/api/update', updateRoutes);
+app.use('/api/servers', serverRoutes);
 
 // ─── SPA fallback ───
 app.get('*', (req, res) => {
@@ -94,8 +97,9 @@ async function start() {
 
     const server = app.listen(PORT, () => {
         console.log('');
+        const version = require('../package.json').version;
         console.log('  ╔══════════════════════════════════════════╗');
-        console.log('  ║   Digital Media Vault (DMV) v1.0.0      ║');
+        console.log(`  ║   Digital Media Vault (DMV) v${version.padEnd(10)}  ║`);
         console.log('  ║   Local Digital Asset Manager            ║');
         console.log(`  ║   http://localhost:${PORT}                  ║`);
         console.log('  ╚══════════════════════════════════════════╝');
@@ -106,11 +110,26 @@ async function start() {
         } catch (err) {
             console.log('[Watcher] Starting watchers deferred:', err.message);
         }
+
+        // Start network discovery so other instances can find us
+        try {
+            const db = require('./database').getDb();
+            const assetCount = db.prepare('SELECT COUNT(*) as count FROM assets').get().count;
+            DiscoveryService.start({
+                name: require('./database').getSetting('server_name') || require('os').hostname(),
+                version,
+                port: PORT,
+                assetCount,
+            });
+        } catch (err) {
+            console.log('[Discovery] Deferred:', err.message);
+        }
     });
 
     // ─── Graceful Shutdown ───
     const shutdown = () => {
         console.log('\n[DMV] Shutting down...');
+        DiscoveryService.stop();
         WatcherService.stopAll();
         closeDb();
         server.close(() => process.exit(0));
