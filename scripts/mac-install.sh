@@ -3,7 +3,7 @@
 #   Comfy Asset Manager — One-Line Mac Installer
 #
 #   Usage (paste into Terminal):
-#     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/gregtee2/Digital-Media-Vault/main/scripts/mac-install.sh)"
+#     /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/gregtee2/Comfy-Access-Manager/main/scripts/mac-install.sh)"
 #
 # ═══════════════════════════════════════════════════════
 set -e
@@ -47,7 +47,7 @@ else
     fi
 
     echo "  Downloading..."
-    git clone https://github.com/gregtee2/Digital-Media-Vault.git "$INSTALL_DIR" 2>&1 | tail -3
+    git clone https://github.com/gregtee2/Comfy-Access-Manager.git "$INSTALL_DIR" 2>&1 | tail -3
     cd "$INSTALL_DIR"
 fi
 

@@ -17,7 +17,7 @@ const { execSync, spawn } = require('child_process');
 const { loadConfig } = require('../database');
 
 const ROOT = path.join(__dirname, '..', '..');
-const GITHUB_REPO = 'gregtee2/Digital-Media-Vault';
+const GITHUB_REPO = 'gregtee2/Comfy-Access-Manager';
 const GITHUB_RAW = `https://raw.githubusercontent.com/${GITHUB_REPO}/stable`;
 const CHECK_CACHE_MS = 5 * 60 * 1000; // 5-minute cache
 

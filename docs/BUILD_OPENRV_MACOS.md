@@ -337,5 +337,5 @@ We'll upload it as a GitHub Release asset alongside the Windows zip, and wire `i
 - **Common build instructions**: https://aswf-openrv.readthedocs.io/en/latest/build_system/config_common_build.html
 - **Build errors reference**: https://aswf-openrv.readthedocs.io/en/latest/build_system/build_errors.html
 - **OpenRV GitHub**: https://github.com/AcademySoftwareFoundation/OpenRV
-- **Our MediaVault repo**: https://github.com/gregtee2/Digital-Media-Vault
-- **Our Windows RV zip (for reference)**: https://github.com/gregtee2/Digital-Media-Vault/releases/tag/rv-3.1.0
+- **Our MediaVault repo**: https://github.com/gregtee2/Comfy-Access-Manager
+- **Our Windows RV zip (for reference)**: https://github.com/gregtee2/Comfy-Access-Manager/releases/tag/rv-3.1.0
