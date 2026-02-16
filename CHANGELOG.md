@@ -2,6 +2,17 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.2.5] - 2026-02-16
+
+### Added
+- **Copy File Path** — right-click context menu now includes "Copy File Path" to copy the resolved absolute path of an asset to the clipboard
+- Asset listing API now resolves `file_path` per platform so paths display correctly on both Mac and Windows
+
+### Fixed
+- **RV auto-audio stripping** — aggressively strips phantom audio that RV's `source_setup` auto-discovers from nearby directories on a NAS, handling separate RVFileSource nodes, `.media.audio`, `.request.audioFile`, and RVSoundTrack nodes
+- **RV plugin connection** — changed `localhost` to `127.0.0.1` to avoid IPv6 resolution failures on macOS
+- **Cross-platform Compare To** — `compare-targets-by-path` endpoint now tries all platform path variants (Mac ↔ Windows) via `getAllPathVariants()`
+
 ## [1.2.4] - 2026-02-16
 
 ### Added
