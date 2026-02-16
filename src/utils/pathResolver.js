@@ -33,30 +33,52 @@ function resolveFilePath(filePath) {
 
         // Normalize separators for comparison
         const normalized = filePath.replace(/\\/g, '/');
+        const isMac = process.platform === 'darwin';
+        const isWin = process.platform === 'win32';
 
         for (const mapping of mappings) {
-            const from = (mapping.from || '').replace(/\\/g, '/').replace(/\/+$/, '');
-            const to = (mapping.to || '').replace(/\\/g, '/').replace(/\/+$/, '');
-            if (!from || !to) continue;
-
-            // Check if the path starts with either side of the mapping
-            if (normalized.toLowerCase().startsWith(from.toLowerCase() + '/') ||
-                normalized.toLowerCase() === from.toLowerCase()) {
-                const remainder = normalized.substring(from.length);
-                const resolved = to + remainder;
-                // Convert to OS-native separators
-                return process.platform === 'win32'
-                    ? resolved.replace(/\//g, '\\')
-                    : resolved;
+            // Support both formats:
+            //   { from, to }  — generic pair
+            //   { windows, mac, linux } — platform-specific keys (saved by the UI)
+            let sides = [];
+            if (mapping.from && mapping.to) {
+                sides = [mapping.from, mapping.to];
+            } else {
+                // Collect all platform paths from the mapping
+                const w = mapping.windows || mapping.win || '';
+                const m = mapping.mac || mapping.macos || '';
+                const l = mapping.linux || '';
+                sides = [w, m, l].filter(Boolean);
             }
+            if (sides.length < 2) continue;
 
-            if (normalized.toLowerCase().startsWith(to.toLowerCase() + '/') ||
-                normalized.toLowerCase() === to.toLowerCase()) {
-                const remainder = normalized.substring(to.length);
-                const resolved = from + remainder;
-                return process.platform === 'win32'
-                    ? resolved.replace(/\//g, '\\')
-                    : resolved;
+            for (let i = 0; i < sides.length; i++) {
+                const src = sides[i].replace(/\\/g, '/').replace(/\/+$/, '');
+                if (!src) continue;
+
+                if (normalized.toLowerCase().startsWith(src.toLowerCase() + '/') ||
+                    normalized.toLowerCase() === src.toLowerCase()) {
+                    // Find the best target for the current platform
+                    let target = null;
+                    if (mapping.from && mapping.to) {
+                        // Generic: swap to the other side
+                        target = (i === 0) ? mapping.to : mapping.from;
+                    } else {
+                        // Platform-specific: pick the current platform's path
+                        if (isMac) target = mapping.mac || mapping.macos;
+                        else if (isWin) target = mapping.windows || mapping.win;
+                        else target = mapping.linux || mapping.mac || mapping.macos;
+                    }
+                    if (!target || target.replace(/\\/g, '/').replace(/\/+$/, '').toLowerCase() === src.toLowerCase()) {
+                        continue; // Don't map to the same path
+                    }
+                    const targetClean = target.replace(/\\/g, '/').replace(/\/+$/, '');
+                    const remainder = normalized.substring(src.length);
+                    const resolved = targetClean + remainder;
+                    return process.platform === 'win32'
+                        ? resolved.replace(/\//g, '\\')
+                        : resolved;
+                }
             }
         }
     } catch (e) {
