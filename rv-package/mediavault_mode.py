@@ -611,13 +611,48 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
     # ── loading ──────────────────────────────────────────────────
 
+    def _stripAutoAudio(self, source_group, intended_path):
+        """Remove any media files RV auto-discovered (e.g. audio from nearby
+        directories) that weren't explicitly loaded. RV's source_setup scans
+        parent directories for audio files, which on a NAS can pull audio
+        from unrelated projects."""
+        try:
+            intended_norm = os.path.normpath(intended_path)
+            for node in rvc.nodesInGroup(source_group):
+                try:
+                    media = rvc.getStringProperty(node + ".media.movie")
+                    if media and len(media) > 1:
+                        clean = [m for m in media
+                                 if os.path.normpath(m) == intended_norm]
+                        if not clean:
+                            clean = [media[0]]  # keep at least the primary
+                        if len(clean) < len(media):
+                            rvc.setStringProperty(
+                                node + ".media.movie", clean, True)
+                            removed = len(media) - len(clean)
+                            print("[MediaVault] Stripped %d auto-loaded "
+                                  "file(s) from %s" % (removed, node))
+                except Exception:
+                    pass  # not all nodes have media.movie
+        except Exception as e:
+            print("[MediaVault] _stripAutoAudio: %s" % e)
+
     def _loadAsCompare(self, filepath):
         """Add filepath as a new source for A/B sequence comparison."""
         if not os.path.exists(filepath):
             rve.displayFeedback("File not found: %s" % os.path.basename(filepath), 4.0)
             return
         try:
+            # Track existing source groups so we can find the new one
+            before = set(rvc.nodesOfType("RVSourceGroup"))
+
             rvc.addSourceVerbose([filepath])
+
+            # Strip any auto-discovered audio from the newly created source
+            after = set(rvc.nodesOfType("RVSourceGroup"))
+            for sg in (after - before):
+                self._stripAutoAudio(sg, filepath)
+
             rvc.setViewNode("defaultSequence")
             rve.displayFeedback(
                 "Compare: %s" % os.path.basename(filepath), 3.0
@@ -636,7 +671,14 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             if not srcs:
                 rve.displayFeedback("No source to replace", 3.0)
                 return
+            # Set only the intended file — no auto-audio
             rvc.setSourceMedia(srcs[0][0], [filepath])
+
+            # Also strip from the source group node level in case
+            # source_setup re-fires and adds audio
+            for sg in rvc.nodesOfType("RVSourceGroup"):
+                self._stripAutoAudio(sg, filepath)
+
             # Invalidate cache since we changed the source
             self._cached_data = None
             self._cached_path = None
