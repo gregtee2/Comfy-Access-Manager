@@ -91,6 +91,10 @@ router.get('/', (req, res) => {
     params.push(parseInt(limit), parseInt(offset));
 
     const assets = db.prepare(query).all(...params);
+    // Resolve file paths so the frontend sees platform-correct absolute paths
+    for (const a of assets) {
+        if (a.file_path) a.file_path = resolveFilePath(a.file_path);
+    }
     const total = db.prepare('SELECT COUNT(*) as count FROM assets').get();
 
     res.json({ assets, total: total.count });

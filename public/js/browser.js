@@ -825,6 +825,11 @@ async function showContextMenu(event, assetIdx) {
         html += `<div class="ctx-item" data-action="deselectAll">☐ Deselect All</div>`;
     }
 
+    if (isSingle && asset.file_path) {
+        html += `<div class="ctx-separator"></div>`;
+        html += `<div class="ctx-item" data-action="copyPath">📋 Copy File Path</div>`;
+    }
+
     html += `<div class="ctx-separator"></div>`;
     html += `<div class="ctx-item ctx-danger" data-action="delete">🗑 Delete${!isSingle ? ` (${count})` : ''}</div>`;
     html += `<div class="ctx-item ctx-muted" data-action="removeDb">🗑 Remove from DB only${!isSingle ? ` (${count})` : ''}</div>`;
@@ -857,6 +862,13 @@ async function showContextMenu(event, assetIdx) {
             case 'send-rv-merge': window.sendSelectedToRV?.('merge'); break;
             case 'selectAll': selectAllAssets(); break;
             case 'deselectAll': clearAssetSelection(); break;
+            case 'copyPath':
+                navigator.clipboard.writeText(asset.file_path).then(() => {
+                    showToast('Path copied to clipboard');
+                }).catch(() => {
+                    prompt('Asset file path:', asset.file_path);
+                });
+                break;
             case 'delete': bulkDeleteAssets(); break;
             case 'removeDb': bulkDeleteAssets(true); break;
         }
