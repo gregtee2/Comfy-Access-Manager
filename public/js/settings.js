@@ -71,6 +71,9 @@ export async function loadSettings() {
 
         // Load shared database config
         loadDbConfig();
+
+        // Load GitHub token status
+        loadGithubTokenStatus();
     } catch (err) {
         console.error('Settings load failed:', err);
     }
@@ -459,6 +462,72 @@ async function deleteRole(id, name) {
         showToast(`Role "${name}" deleted`);
     } catch (err) {
         showToast('Error: ' + err.message, 4000);
+    }
+}
+
+// ═══════════════════════════════════════════
+//  GITHUB TOKEN (private repo auto-updates)
+// ═══════════════════════════════════════════
+
+/** Load current GitHub token status (never returns actual token) */
+async function loadGithubTokenStatus() {
+    try {
+        const res = await fetch('/api/settings/github-token');
+        const data = await res.json();
+        const statusEl = document.getElementById('githubTokenStatus');
+        if (!statusEl) return;
+        if (data.configured) {
+            statusEl.innerHTML = `<span style="color:var(--success);">✓ Token configured</span> <span style="opacity:0.6">(${data.masked})</span>`;
+        } else {
+            statusEl.innerHTML = '<span style="opacity:0.6">No token — update checks require a public repo or a PAT.</span>';
+        }
+    } catch (err) {
+        console.error('[Settings] Failed to load GitHub token status:', err);
+    }
+}
+
+/** Save GitHub PAT to server config */
+async function saveGithubToken() {
+    const input = document.getElementById('githubPatInput');
+    const token = input?.value?.trim();
+    if (!token) {
+        showToast('Enter a GitHub Personal Access Token first.', 3000);
+        return;
+    }
+    try {
+        const res = await fetch('/api/settings/github-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('✅ GitHub token saved!', 3000);
+            input.value = ''; // Clear input after save
+            loadGithubTokenStatus();
+        } else {
+            showToast('Failed: ' + (data.error || 'Unknown error'), 4000);
+        }
+    } catch (err) {
+        showToast('Error saving token: ' + err.message, 4000);
+    }
+}
+
+/** Clear (remove) the stored GitHub PAT */
+async function clearGithubToken() {
+    try {
+        const res = await fetch('/api/settings/github-token', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ token: '' })
+        });
+        const data = await res.json();
+        if (data.success) {
+            showToast('GitHub token removed.', 3000);
+            loadGithubTokenStatus();
+        }
+    } catch (err) {
+        showToast('Error clearing token: ' + err.message, 4000);
     }
 }
 
@@ -1155,3 +1224,6 @@ window.importDatabase = importDatabase;
 window.pullRemoteDatabase = pullRemoteDatabase;
 window.saveSharedDbPath = saveSharedDbPath;
 window.loadDbConfig = loadDbConfig;
+window.saveGithubToken = saveGithubToken;
+window.clearGithubToken = clearGithubToken;
+window.loadGithubTokenStatus = loadGithubTokenStatus;

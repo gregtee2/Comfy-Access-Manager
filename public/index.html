@@ -483,6 +483,20 @@
                 <div class="settings-section">
                     <h3>📊 System Info</h3>
                     <div id="systemInfo"></div>
+
+                    <!-- GitHub Token for private repo updates -->
+                    <div style="margin-top:12px;margin-bottom:12px;">
+                        <label style="display:block;font-size:0.82rem;color:var(--text-dim);margin-bottom:6px;">
+                            🔑 GitHub Token <span class="help-icon" data-tip="A fine-grained Personal Access Token (PAT) with read-only access to the repo. Required if the repository is private. Generate one at: GitHub → Settings → Developer Settings → Fine-grained Personal Access Tokens → Select repo → Contents: Read-only.">?</span>
+                        </label>
+                        <div style="display:flex;gap:6px;align-items:center;">
+                            <input type="password" id="githubPatInput" placeholder="github_pat_..." style="flex:1;font-size:0.82rem;font-family:monospace;">
+                            <button onclick="saveGithubToken()" style="font-size:0.8rem;white-space:nowrap;">💾 Save</button>
+                            <button onclick="clearGithubToken()" style="font-size:0.8rem;white-space:nowrap;background:var(--bg-dark);">✕ Clear</button>
+                        </div>
+                        <div id="githubTokenStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:4px;"></div>
+                    </div>
+
                     <div id="updateSection" style="margin-top:12px;">
                         <div id="updateStatus" style="display:none;margin-bottom:8px;padding:10px 14px;border-radius:6px;font-size:0.85rem;line-height:1.5;"></div>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">

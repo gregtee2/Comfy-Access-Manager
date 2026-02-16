@@ -4,7 +4,7 @@
 
 **Comfy Asset Manager (CAM)** — formerly Digital Media Vault (DMV) — is a local media asset manager for creative production. Organize, browse, import, export, and play media files with a project-based hierarchy following ShotGrid/Flow Production Tracking naming conventions.
 
-**Version**: 1.2.6
+**Version**: 1.2.7
 **Port**: 7700
 **Repo**: `github.com/gregtee2/Digital-Media-Vault` (branches: `main`, `stable`)
 **Status**: Active development (February 2026)
@@ -50,7 +50,7 @@ Comfy-Asset-Manager/
 │   │   ├── exportRoutes.js       # FFmpeg transcode/export (488 lines)
 │   │   ├── comfyuiRoutes.js      # ComfyUI integration endpoints + workflow extraction (515 lines)
 │   │   ├── flowRoutes.js         # Flow/ShotGrid sync (188 lines)
-│   │   ├── updateRoutes.js       # Auto-update from GitHub stable branch (178 lines)
+│   │   ├── updateRoutes.js       # Auto-update from GitHub stable branch + PAT auth (226 lines)
 │   │   ├── serverRoutes.js       # Network discovery, multi-machine (160 lines)
 │   │   ├── transcodeRoutes.js    # Transcode queue management (109 lines)
 │   │   └── roleRoutes.js        # Role CRUD (107 lines)
@@ -186,13 +186,36 @@ These are the ONLY files with `process.platform` checks. When adding features th
 2. Backend fetches `package.json` from GitHub `stable` branch, compares semver
 3. If newer: shows banner "A new version is available" with "Update Now" button
 4. User clicks Update → `POST /api/update/apply`:
+   - Temporarily sets git remote URL to include PAT (if configured)
    - `git fetch origin stable`
    - `git reset --hard origin/stable`
+   - Restores clean remote URL (strips token)
    - `npm install`
    - Server restarts itself
 5. On restart, `RVPluginSync.sync()` deploys any updated RV plugin
 
 **Branches**: `main` = development, `stable` = tested releases pushed to users.
+
+### Private Repository Support (GitHub PAT)
+
+The GitHub repo is **private**. The auto-update system uses a GitHub **Personal Access Token (PAT)** stored in `data/config.json` (machine-local, not shared in DB or git).
+
+**How it works:**
+- `updateRoutes.js` reads `github_pat` from `config.json` via `loadConfig()`
+- All GitHub API fetch() calls include `Authorization: token <PAT>` header
+- `git fetch` temporarily sets the remote URL to `https://<PAT>@github.com/repo.git`, then restores it
+- Token is NEVER committed to git or shared between machines
+
+**Settings UI:**
+- Settings → System Info → "🔑 GitHub Token" field
+- Save/Clear buttons, status shows masked token
+- Endpoints: `GET/POST /api/settings/github-token`
+
+**Generating a PAT:**
+1. GitHub → Settings → Developer Settings → Fine-grained Personal Access Tokens
+2. "Generate new token" → select repo `gregtee2/Digital-Media-Vault`
+3. Permissions: **Contents → Read-only** (that's all you need)
+4. Copy token → paste into Settings UI
 
 **IMPORTANT**: The auto-update system compares the `version` field in `package.json` (semver). If you push code changes without bumping the version, remote installs will report "up to date" even though files changed. **Always bump the version in `package.json` when pushing changes that should reach users via auto-update.** Use patch (`1.2.1`) for fixes, minor (`1.3.0`) for features.
 
@@ -666,6 +689,7 @@ Users pick up updates automatically via the in-app update banner.
 14. **ComfyUI junction/symlink** — `custom_nodes/mediavault` points to CAM's `comfyui/` directory.
 15. **Settings are key-value** — `getSetting(key)` / `setSetting(key, value)` in the `settings` table.
 16. **Activity log** — `logActivity(action, entityType, entityId, details)` for audit trail.
+17. **GitHub PAT for updates** — Repo is private. PAT stored in `data/config.json` (machine-local). See "Private Repository Support" section.
 
 ---
 

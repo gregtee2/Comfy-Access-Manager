@@ -703,4 +703,40 @@ router.post('/pull-db', async (req, res) => {
     }
 });
 
+// ═══════════════════════════════════════════════════════════════════
+//  GITHUB TOKEN (for private repo auto-updates)
+// ═══════════════════════════════════════════════════════════════════
+
+// GET /api/settings/github-token — Check if a PAT is configured (does NOT return token)
+router.get('/github-token', (req, res) => {
+    const config = loadConfig();
+    const token = config.github_pat || '';
+    res.json({
+        configured: !!token,
+        masked: token ? `${token.slice(0, 8)}${'•'.repeat(Math.max(0, token.length - 12))}${token.slice(-4)}` : ''
+    });
+});
+
+// POST /api/settings/github-token — Save a GitHub PAT to config.json
+router.post('/github-token', (req, res) => {
+    const { token } = req.body;
+    const config = loadConfig();
+
+    if (!token || !token.trim()) {
+        delete config.github_pat;
+        saveConfig(config);
+        return res.json({ success: true, configured: false, message: 'GitHub token removed.' });
+    }
+
+    config.github_pat = token.trim();
+    saveConfig(config);
+
+    res.json({
+        success: true,
+        configured: true,
+        masked: `${token.slice(0, 8)}${'•'.repeat(Math.max(0, token.length - 12))}${token.slice(-4)}`,
+        message: 'GitHub token saved. Update checks will now authenticate.'
+    });
+});
+
 module.exports = router;

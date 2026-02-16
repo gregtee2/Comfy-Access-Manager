@@ -14,13 +14,38 @@ const router = express.Router();
 const path = require('path');
 const fs = require('fs');
 const { execSync, spawn } = require('child_process');
+const { loadConfig } = require('../database');
 
 const ROOT = path.join(__dirname, '..', '..');
-const GITHUB_RAW = 'https://raw.githubusercontent.com/gregtee2/Digital-Media-Vault/stable';
+const GITHUB_REPO = 'gregtee2/Digital-Media-Vault';
+const GITHUB_RAW = `https://raw.githubusercontent.com/${GITHUB_REPO}/stable`;
 const CHECK_CACHE_MS = 5 * 60 * 1000; // 5-minute cache
 
 let lastCheck = null;
 let lastCheckTime = 0;
+
+/**
+ * Get GitHub PAT from config.json (for private repo access)
+ */
+function getGitHubToken() {
+    try {
+        const config = loadConfig();
+        return config.github_pat || '';
+    } catch {
+        return '';
+    }
+}
+
+/**
+ * Build fetch headers — adds Authorization if PAT is configured
+ */
+function githubHeaders() {
+    const token = getGitHubToken();
+    if (token) {
+        return { 'Authorization': `token ${token}`, 'Accept': 'application/vnd.github.v3.raw' };
+    }
+    return {};
+}
 
 /**
  * Fetch remote package.json version from GitHub stable branch
@@ -32,14 +57,20 @@ async function fetchRemoteVersion() {
     }
 
     try {
-        const res = await fetch(`${GITHUB_RAW}/package.json?_=${now}`);
-        if (!res.ok) throw new Error(`GitHub responded ${res.status}`);
+        const headers = githubHeaders();
+        const res = await fetch(`${GITHUB_RAW}/package.json?_=${now}`, { headers });
+        if (!res.ok) {
+            if (res.status === 404 || res.status === 401 || res.status === 403) {
+                throw new Error(`GitHub responded ${res.status} — repo may be private. Configure a GitHub PAT in Settings.`);
+            }
+            throw new Error(`GitHub responded ${res.status}`);
+        }
         const remote = await res.json();
 
         // Also try to fetch CHANGELOG
         let changelog = '';
         try {
-            const clRes = await fetch(`${GITHUB_RAW}/CHANGELOG.md?_=${now}`);
+            const clRes = await fetch(`${GITHUB_RAW}/CHANGELOG.md?_=${now}`, { headers });
             if (clRes.ok) changelog = await clRes.text();
         } catch { /* changelog is optional */ }
 
@@ -128,11 +159,27 @@ router.post('/apply', async (req, res) => {
             execSync('git stash', { cwd: ROOT, stdio: 'pipe' });
         } catch { /* no changes to stash */ }
 
-        // 2. Fetch + reset to stable
+        // 2. Configure git remote with PAT if available (for private repos)
+        const token = getGitHubToken();
+        if (token) {
+            const authUrl = `https://${token}@github.com/${GITHUB_REPO}.git`;
+            try {
+                execSync(`git remote set-url origin ${authUrl}`, { cwd: ROOT, stdio: 'pipe' });
+            } catch (e) {
+                console.warn('[Update] Could not set authenticated remote:', e.message);
+            }
+        }
+
+        // 3. Fetch + reset to stable
         execSync('git fetch origin stable', { cwd: ROOT, stdio: 'pipe', timeout: 30000 });
         execSync('git reset --hard origin/stable', { cwd: ROOT, stdio: 'pipe' });
 
-        // 3. Install any new dependencies
+        // 4. Restore remote URL to HTTPS (strip token from persisted git config)
+        try {
+            execSync(`git remote set-url origin https://github.com/${GITHUB_REPO}.git`, { cwd: ROOT, stdio: 'pipe' });
+        } catch { /* non-critical */ }
+
+        // 5. Install any new dependencies
         execSync('npm install --omit=dev', { cwd: ROOT, stdio: 'pipe', timeout: 120000 });
 
         // Clear version cache
