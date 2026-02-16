@@ -485,9 +485,12 @@ router.post('/load-in-comfy/:id', async (req, res) => {
         // 5. POST workflow to ComfyUI's pending endpoint
         const result = await httpPost(comfyUrl + '/mediavault/load-workflow', workflow);
         if (result.status !== 200 || !result.body?.success) {
+            const hint = result.status === 404
+                ? ' — The /mediavault/load-workflow route was not found. Restart ComfyUI to load the updated MediaVault plugin.'
+                : '';
             return res.status(502).json({
                 success: false,
-                error: 'Failed to send workflow to ComfyUI: ' + JSON.stringify(result.body),
+                error: 'Failed to send workflow to ComfyUI (HTTP ' + result.status + ')' + hint,
             });
         }
 
