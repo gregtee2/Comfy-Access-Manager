@@ -229,16 +229,20 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "  Write-Host ('         ERROR: ' + $_.Exception.Message); " ^
     "}"
 :: Use tar instead of Expand-Archive to avoid Windows 260-char path limit
+:: ZIP contains bin/rv.exe at root (not rv/bin/rv.exe), so extract into tools\rv\
 if exist "tools\rv.zip" (
-    tar -xf "tools\rv.zip" -C "tools" 2>nul
+    if not exist "tools\rv" mkdir "tools\rv"
+    tar -xf "tools\rv.zip" -C "tools\rv" 2>nul
     if exist "tools\rv\bin\rv.exe" (
         del "tools\rv.zip" >nul 2>&1
         echo         OpenRV installed to tools\rv\
     ) else (
-        :: tar may extract with a wrapper folder — check and move if needed
-        for /d %%D in (tools\rv-*) do (
+        :: Fallback: check if tar created a wrapper folder
+        for /d %%D in (tools\rv\rv-*) do (
             if exist "%%D\bin\rv.exe" (
-                ren "%%D" "rv" 2>nul || (rd /s /q "tools\rv" 2>nul & ren "%%D" "rv")
+                for %%F in ("%%D\*") do move /y "%%F" "tools\rv\" >nul 2>&1
+                for /d %%S in ("%%D\*") do move /y "%%S" "tools\rv\" >nul 2>&1
+                rd "%%D" 2>nul
             )
         )
         del "tools\rv.zip" >nul 2>&1
