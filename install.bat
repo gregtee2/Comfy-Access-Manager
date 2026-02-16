@@ -28,6 +28,32 @@ if not errorlevel 1 (
     exit /b 1
 )
 
+:: ─── Guard: Detect protected paths (Program Files, Windows, etc.) ───
+echo "%SCRIPT_DIR%" | findstr /i /c:"\Program Files" /c:"\Program Files (x86)" /c:"\Windows" >nul 2>&1
+if not errorlevel 1 (
+    color 0E
+    echo.
+    echo  ============================================================
+    echo    WARNING: Installed in a protected folder!
+    echo  ============================================================
+    echo.
+    echo  You extracted to: %SCRIPT_DIR%
+    echo.
+    echo  Windows blocks writes to Program Files without admin rights.
+    echo  This will cause npm, FFmpeg, and RV downloads to FAIL.
+    echo.
+    echo  RECOMMENDED: Extract to a simpler location like:
+    echo    C:\Comfy-Asset-Manager
+    echo    or your Desktop / Documents folder
+    echo.
+    echo  Or press any key to try anyway with admin elevation...
+    echo.
+    pause
+    :: Try to re-launch as admin
+    powershell -NoProfile -Command "Start-Process -FilePath '%~f0' -Verb RunAs -WorkingDirectory '%~dp0'"
+    exit /b 0
+)
+
 echo.
 echo  =============================================
 echo    Comfy Asset Manager (CAM) — One-Click Installer
