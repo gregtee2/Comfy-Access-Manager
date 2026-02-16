@@ -827,7 +827,7 @@ async function showContextMenu(event, assetIdx) {
 
     if (isSingle && asset.file_path) {
         html += `<div class="ctx-separator"></div>`;
-        html += `<div class="ctx-item" data-action="copyPath">📋 Copy File Path</div>`;
+        html += `<div class="ctx-item" data-action="showPath">📂 Show File Path</div>`;
     }
 
     html += `<div class="ctx-separator"></div>`;
@@ -862,12 +862,8 @@ async function showContextMenu(event, assetIdx) {
             case 'send-rv-merge': window.sendSelectedToRV?.('merge'); break;
             case 'selectAll': selectAllAssets(); break;
             case 'deselectAll': clearAssetSelection(); break;
-            case 'copyPath':
-                navigator.clipboard.writeText(asset.file_path).then(() => {
-                    showToast('Path copied to clipboard');
-                }).catch(() => {
-                    prompt('Asset file path:', asset.file_path);
-                });
+            case 'showPath':
+                showFilePathModal(asset.file_path, asset.vault_name);
                 break;
             case 'delete': bulkDeleteAssets(); break;
             case 'removeDb': bulkDeleteAssets(true); break;
@@ -1696,6 +1692,40 @@ window.showAddSequenceModal = showAddSequenceModal;
 window.createSequence = createSequence;
 window.showAddShotModal = showAddShotModal;
 window.createShot = createShot;
+// ─── Show File Path Modal ───
+function showFilePathModal(filePath, vaultName) {
+    // Remove existing if open
+    document.getElementById('filePathModal')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'filePathModal';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:10000;';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#222;border:1px solid #444;border-radius:8px;padding:20px 24px;max-width:700px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+
+    const title = document.createElement('div');
+    title.textContent = vaultName || 'File Path';
+    title.style.cssText = 'font-size:13px;color:#888;margin-bottom:10px;';
+
+    const pathEl = document.createElement('div');
+    pathEl.textContent = filePath;
+    pathEl.style.cssText = 'font-family:monospace;font-size:13px;color:#ddd;background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:12px 14px;word-break:break-all;user-select:all;cursor:text;line-height:1.5;';
+
+    const hint = document.createElement('div');
+    hint.textContent = 'Select text above to copy  •  Click outside or press Esc to close';
+    hint.style.cssText = 'font-size:11px;color:#555;margin-top:10px;text-align:center;';
+
+    box.append(title, pathEl, hint);
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    // Close on Escape
+    const onKey = (e) => { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', onKey); } };
+    document.addEventListener('keydown', onKey);
+}
+
 window.deleteCurrentProject = deleteCurrentProject;
 window.deleteShot = deleteShot;
 window.deleteSequence = deleteSequence;
