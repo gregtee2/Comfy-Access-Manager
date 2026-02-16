@@ -200,12 +200,25 @@ powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "  Invoke-WebRequest -Uri $url -OutFile 'tools\rv.zip'; " ^
     "  Write-Host '         Extracting...'; " ^
     "  if (Test-Path 'tools\rv') { Remove-Item 'tools\rv' -Recurse -Force }; " ^
-    "  Expand-Archive -Path 'tools\rv.zip' -DestinationPath 'tools\rv' -Force; " ^
-    "  Remove-Item 'tools\rv.zip' -Force; " ^
-    "  Write-Host '         OpenRV installed to tools\rv\'; " ^
     "} catch { " ^
     "  Write-Host ('         ERROR: ' + $_.Exception.Message); " ^
     "}"
+:: Use tar instead of Expand-Archive to avoid Windows 260-char path limit
+if exist "tools\rv.zip" (
+    tar -xf "tools\rv.zip" -C "tools" 2>nul
+    if exist "tools\rv\bin\rv.exe" (
+        del "tools\rv.zip" >nul 2>&1
+        echo         OpenRV installed to tools\rv\
+    ) else (
+        :: tar may extract with a wrapper folder — check and move if needed
+        for /d %%D in (tools\rv-*) do (
+            if exist "%%D\bin\rv.exe" (
+                ren "%%D" "rv" 2>nul || (rd /s /q "tools\rv" 2>nul & ren "%%D" "rv")
+            )
+        )
+        del "tools\rv.zip" >nul 2>&1
+    )
+)
 
 if exist "tools\rv\bin\rv.exe" (
     echo         OpenRV installed successfully!
