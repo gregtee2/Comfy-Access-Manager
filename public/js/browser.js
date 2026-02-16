@@ -489,6 +489,23 @@ function setView(mode) {
     renderAssets();
 }
 
+/**
+ * Lightweight selection update — toggles CSS classes on existing DOM elements
+ * without rebuilding the entire grid. Eliminates flicker/jiggle on click.
+ */
+function updateSelectionClasses() {
+    const container = document.getElementById('assetContainer');
+    if (!container) return;
+    const selectedSet = new Set(state.selectedAssets);
+    container.querySelectorAll('[data-aidx]').forEach(el => {
+        const idx = parseInt(el.dataset.aidx, 10);
+        const asset = state.assets[idx];
+        if (!asset) return;
+        el.classList.toggle('asset-selected', selectedSet.has(asset.id));
+    });
+    updateSelectionToolbar();
+}
+
 function renderAssets() {
     const container = document.getElementById('assetContainer');
 
@@ -579,7 +596,7 @@ document.addEventListener('click', (e) => {
     if (e.target === container && state.selectedAssets.length > 0) {
         state.selectedAssets = [];
         state.lastClickedAsset = -1;
-        renderAssets();
+        updateSelectionClasses();
     }
 });
 
@@ -595,7 +612,7 @@ function handleAssetClick(event, assetIdx) {
     if (event.ctrlKey || event.metaKey) {
         toggleAssetSelection(asset.id);
         state.lastClickedAsset = assetIdx;
-        renderAssets();
+        updateSelectionClasses();
         return;
     }
 
@@ -607,14 +624,14 @@ function handleAssetClick(event, assetIdx) {
         for (let i = start; i <= end; i++) {
             state.selectedAssets.push(state.assets[i].id);
         }
-        renderAssets();
+        updateSelectionClasses();
         return;
     }
 
     // Plain click: select only this asset, deselect everything else
     state.selectedAssets = [asset.id];
     state.lastClickedAsset = assetIdx;
-    renderAssets();
+    updateSelectionClasses();
 }
 
 function handleAssetDblClick(event, assetIdx) {
@@ -665,13 +682,13 @@ function toggleAssetSelection(assetId) {
 
 function selectAllAssets() {
     state.selectedAssets = state.assets.map(a => a.id);
-    renderAssets();
+    updateSelectionClasses();
 }
 
 function clearAssetSelection() {
     state.selectedAssets = [];
     state.lastClickedAsset = -1;
-    renderAssets();
+    updateSelectionClasses();
 }
 
 /** Open built-in player with only the selected assets, starting from the first */
@@ -716,7 +733,7 @@ async function showContextMenu(event, assetIdx) {
     if (event.ctrlKey && !event.metaKey) {
         toggleAssetSelection(asset.id);
         state.lastClickedAsset = assetIdx;
-        renderAssets();
+        updateSelectionClasses();
         return;
     }
 
@@ -724,7 +741,7 @@ async function showContextMenu(event, assetIdx) {
     if (!state.selectedAssets.includes(asset.id)) {
         state.selectedAssets = [asset.id];
         state.lastClickedAsset = assetIdx;
-        renderAssets();
+        updateSelectionClasses();
     }
 
     const count = state.selectedAssets.length;
@@ -1344,7 +1361,7 @@ function onAssetDragStart(event, assetIdx) {
 
     if (!state.selectedAssets.includes(asset.id)) {
         state.selectedAssets = [asset.id];
-        renderAssets();
+        updateSelectionClasses();
     }
 
     const ids = [...state.selectedAssets];
