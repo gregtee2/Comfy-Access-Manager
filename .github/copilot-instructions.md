@@ -4,7 +4,7 @@
 
 **Comfy Asset Manager (CAM)** — formerly Digital Media Vault (DMV) — is a local media asset manager for creative production. Organize, browse, import, export, and play media files with a project-based hierarchy following ShotGrid/Flow Production Tracking naming conventions.
 
-**Version**: 1.1.0
+**Version**: 1.2.5
 **Port**: 7700
 **Repo**: `github.com/gregtee2/Digital-Media-Vault` (branches: `main`, `stable`)
 **Status**: Active development (February 2026)
@@ -44,7 +44,7 @@ Comfy-Asset-Manager/
 │   ├── server.js                 # Express server entry (154 lines)
 │   ├── database.js               # sql.js wrapper, better-sqlite3 compat API (448 lines)
 │   ├── routes/
-│   │   ├── assetRoutes.js        # Import, browse, stream, delete, RV launch, compare (1782 lines)
+│   │   ├── assetRoutes.js        # Import, browse, stream, delete, RV launch, compare (1874 lines)
 │   │   ├── projectRoutes.js      # Project + Sequence + Shot CRUD (349 lines)
 │   │   ├── settingsRoutes.js     # Settings, vault setup, RV plugin sync, DB transfer (656 lines)
 │   │   ├── exportRoutes.js       # FFmpeg transcode/export (488 lines)
@@ -65,6 +65,7 @@ Comfy-Asset-Manager/
 │   │   └── WatcherService.js     # Chokidar folder watching (163 lines)
 │   └── utils/
 │       ├── naming.js             # ShotGrid naming engine (294 lines)
+│       ├── pathResolver.js       # Cross-platform path mapping (149 lines)
 │       ├── sequenceDetector.js   # EXR/DPX frame sequence grouping (150 lines)
 │       └── mediaTypes.js         # File ext → media type mapping (114 lines)
 ├── public/
@@ -73,7 +74,7 @@ Comfy-Asset-Manager/
 │   ├── css/styles.css            # Neutral gray VFX theme (2622 lines)
 │   └── js/
 │       ├── player.js             # Built-in media player modal (2082 lines)
-│       ├── browser.js            # Asset browser, grid/list, tree nav, selection (1647 lines)
+│       ├── browser.js            # Asset browser, grid/list, tree nav, selection, context menu (1713 lines)
 │       ├── settings.js           # Settings tab + network discovery + DB transfer UI (1097 lines)
 │       ├── import.js             # File browser, import flow (764 lines)
 │       ├── export.js             # Export modal (357 lines)
@@ -82,7 +83,7 @@ Comfy-Asset-Manager/
 │       ├── state.js              # Global state singleton (40 lines)
 │       └── api.js                # API client helper (26 lines)
 ├── rv-package/                   # OpenRV plugin (auto-deployed by RVPluginSync)
-│   ├── mediavault_mode.py        # Full Qt asset picker + menus (746 lines)
+│   ├── mediavault_mode.py        # Full Qt asset picker + menus + auto-audio strip (838 lines)
 │   ├── PACKAGE                   # RV package manifest
 │   └── mediavault-1.0.rvpkg     # Pre-built rvpkg zip
 ├── comfyui/
@@ -232,6 +233,19 @@ The Settings → "Database Transfer" section allows copying the full SQLite data
 ### After Pulling a Cross-Platform DB
 Windows file paths (e.g., `Z:\Media\...`) won't resolve on Mac and vice versa. Use **Settings → Path Mappings** to map paths: `/Volumes/NAS` ↔ `Z:\`.
 
+### Path Resolution (pathResolver.js)
+`src/utils/pathResolver.js` handles bidirectional path mapping for cross-platform support:
+
+| Function | Purpose |
+|----------|---------|
+| `resolveFilePath(path)` | Maps a stored DB path to the current platform (e.g., `Z:\MediaVault\...` → `/Volumes/home/AI Projects/MediaVault/...` on Mac) |
+| `getAllPathVariants(path)` | Returns array of ALL platform path variants for a given path — used by `compare-targets-by-path` to find assets regardless of which platform stored them |
+
+Path mappings are stored in the `settings` table as JSON (`path_mappings` key) and configured via Settings → Network → Path Mappings. The listing API (`GET /api/assets`) now resolves `file_path` for every asset so the frontend always sees platform-correct absolute paths.
+
+### Asset Context Menu — Copy File Path
+Right-click any asset → **"📋 Copy File Path"** copies the resolved absolute path to clipboard. Uses `navigator.clipboard.writeText()` with a `prompt()` fallback. Useful for debugging which file an asset actually points to on disk.
+
 ### Dependencies
 - `multer` — multipart file upload handling (installed in `package.json`)
 - `http`/`https` — Node built-ins for pull-from-remote
@@ -379,7 +393,7 @@ Register-in-place assets: `file_path` stores original absolute path, cannot be s
 
 ### RV Plugin (rv-package/mediavault_mode.py)
 
-A 746-line Python plugin that adds a **MediaVault** menu to OpenRV's menu bar:
+An 838-line Python plugin that adds a **MediaVault** menu to OpenRV's menu bar:
 
 | Menu Item | Hotkey | What It Does |
 |-----------|--------|-------------|
@@ -394,7 +408,11 @@ A 746-line Python plugin that adds a **MediaVault** menu to OpenRV's menu bar:
 - Right: Role filter checkboxes
 - Dark theme with teal (#2ec4b6) accent matching CAM's style
 
-**API endpoint**: `GET /api/assets/compare-targets-by-path?path=<filepath>` — returns related assets with hierarchical fallback (shot -> sequence -> project).
+**API endpoint**: `GET /api/assets/compare-targets-by-path?path=<filepath>` — returns related assets with hierarchical fallback (shot -> sequence -> project). Uses `getAllPathVariants()` to try all platform path variants (Mac ↔ Windows) when looking up the asset.
+
+**Connection**: Plugin connects to `http://127.0.0.1:7700` (NOT `localhost` — macOS resolves `localhost` to IPv6 `::1` first, which fails since the server binds IPv4 only).
+
+**Auto-audio stripping**: `_stripAutoAudio()` runs after every Compare/Switch load. RV's built-in `source_setup` package scans nearby directories for audio files; on a NAS with multiple projects, this grabs unrelated audio from other project trees. The stripper handles all three vectors: (a) extra entries in `.media.movie`, (b) `.media.audio` property, (c) separate RVFileSource/RVSoundTrack nodes. Also clears `.request.audioFile`. Does NOT strip audio that's muxed inside the video container itself.
 
 **Deployment**: Auto-deployed by `RVPluginSync.sync()` on server startup. No manual install needed.
 
@@ -657,6 +675,14 @@ UI in Settings tab ready. `flowRoutes.js` + `FlowService.js` + `flow_bridge.py` 
 | `aa71e1b` | Fix RV plugin deployment — copy .py to PlugIns/Python |
 | `690df7f` | Fix RV plugin registration — use rvpkg CLI (`rvpkg -install -force`) |
 | `25bc482` | Database Transfer: export, import, pull-from-remote in Settings UI |
+| `6168f18` | Safari filter dropdown fix (v1.2.1) — inline onchange → addEventListener |
+| `db99519` | Remove card jiggle (v1.2.2) — removed translateY(-1px) from hover/selected |
+| `dc03c69` | Eliminate grid flicker (v1.2.3) — updateSelectionClasses() instead of full DOM rebuild |
+| `79ae23d` | RV image sequence support (v1.2.4) — frame-range notation for sequences |
+| `e4aaad2` | RV plugin 127.0.0.1 fix + getAllPathVariants() cross-platform path lookup |
+| `8912963` | Aggressive auto-audio stripping in RV plugin (_stripAutoAudio handles 3 vectors) |
+| `2e05469` | Copy File Path in asset context menu + resolve file_path in listing API |
+| `3069534` | Version bump to 1.2.5 + CHANGELOG entries |
 
 ---
 
