@@ -147,6 +147,31 @@ try:
             print(f"[MediaVault] thumbnail proxy error: {e}")
             return web.Response(status=404, text="Not found")
 
+    # ── Pending Workflow (one-shot storage for "Load in ComfyUI") ──
+    _pending_workflow = None
+
+    @PromptServer.instance.routes.post("/mediavault/load-workflow")
+    async def mv_store_pending_workflow(request):
+        """Store a workflow JSON sent from CAM. The JS extension picks it up on page load."""
+        global _pending_workflow
+        try:
+            data = await request.json()
+            _pending_workflow = data
+            print(f"[MediaVault] ✓ Pending workflow stored ({len(data.get('nodes', []))} nodes)")
+            return web.json_response({"success": True})
+        except Exception as e:
+            return web.json_response({"success": False, "error": str(e)}, status=400)
+
+    @PromptServer.instance.routes.get("/mediavault/load-workflow")
+    async def mv_get_pending_workflow(request):
+        """Retrieve and clear the pending workflow (one-shot)."""
+        global _pending_workflow
+        if _pending_workflow is not None:
+            data = _pending_workflow
+            _pending_workflow = None
+            return web.json_response({"hasWorkflow": True, "workflow": data})
+        return web.json_response({"hasWorkflow": False})
+
     print("[MediaVault] ✓ Dynamic dropdown routes registered on ComfyUI server")
 
 except ImportError:

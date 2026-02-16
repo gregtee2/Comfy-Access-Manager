@@ -13,11 +13,14 @@ const express = require('express');
 const router = express.Router();
 const path = require('path');
 const fs = require('fs');
+const http = require('http');
+const { execFileSync } = require('child_process');
 const { getDb, getSetting, logActivity } = require('../database');
 const FileService = require('../services/FileService');
 const ThumbnailService = require('../services/ThumbnailService');
 const MediaInfoService = require('../services/MediaInfoService');
 const { detectMediaType, isMediaFile } = require('../utils/mediaTypes');
+const { resolveFilePath } = require('../utils/pathResolver');
 
 // ═══════════════════════════════════════════
 //  LOAD FROM VAULT (ComfyUI reads assets)
@@ -277,6 +280,232 @@ router.post('/save', async (req, res) => {
         res.json(asset);
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+
+// ═══════════════════════════════════════════
+//  COMFYUI WORKFLOW EXTRACTION & LOADING
+// ═══════════════════════════════════════════
+
+/**
+ * Extract embedded ComfyUI workflow JSON from a media file.
+ * - Video (MP4/WebM): Stored in ffprobe format.tags.comment
+ * - PNG: Stored in tEXt chunk with keyword "workflow"
+ * Returns the parsed JSON object or null.
+ */
+function extractWorkflowFromFile(filePath) {
+    const ext = path.extname(filePath).toLowerCase();
+
+    // ── Video files: workflow in comment metadata tag ──
+    if (['.mp4', '.webm', '.mkv', '.mov', '.avi'].includes(ext)) {
+        return extractVideoWorkflow(filePath);
+    }
+
+    // ── PNG files: workflow in tEXt chunk ──
+    if (ext === '.png') {
+        return extractPngWorkflow(filePath);
+    }
+
+    return null;
+}
+
+function extractVideoWorkflow(filePath) {
+    const ffprobe = MediaInfoService.findFFprobe();
+    if (!ffprobe) return null;
+
+    try {
+        const out = execFileSync(ffprobe, [
+            '-v', 'quiet', '-print_format', 'json', '-show_format', filePath
+        ], { maxBuffer: 20 * 1024 * 1024, timeout: 15000 }).toString();
+
+        const info = JSON.parse(out);
+        const comment = info.format?.tags?.comment || info.format?.tags?.Comment;
+        if (!comment) return null;
+
+        const parsed = JSON.parse(comment);
+        // VHS stores the graph directly; some tools wrap in { workflow: {...} }
+        if (parsed.nodes && parsed.links) return parsed;
+        if (parsed.workflow?.nodes) return parsed.workflow;
+        return parsed;
+    } catch (e) {
+        console.error('[ComfyUI] Video workflow extraction failed:', e.message);
+        return null;
+    }
+}
+
+function extractPngWorkflow(filePath) {
+    try {
+        const buffer = fs.readFileSync(filePath);
+        // Verify PNG signature
+        if (buffer.length < 8 || buffer.toString('hex', 0, 4) !== '89504e47') return null;
+
+        let offset = 8; // Skip 8-byte PNG signature
+        while (offset + 8 < buffer.length) {
+            const length = buffer.readUInt32BE(offset);
+            const type = buffer.toString('ascii', offset + 4, offset + 8);
+
+            if (type === 'tEXt' && length > 0) {
+                const chunkData = buffer.slice(offset + 8, offset + 8 + length);
+                const nullIdx = chunkData.indexOf(0);
+                if (nullIdx > 0) {
+                    const keyword = chunkData.toString('ascii', 0, nullIdx);
+                    if (keyword === 'workflow') {
+                        const value = chunkData.toString('utf8', nullIdx + 1);
+                        return JSON.parse(value);
+                    }
+                }
+            }
+
+            if (type === 'IEND') break;
+            offset += 12 + length; // 4 len + 4 type + data + 4 CRC
+        }
+        return null;
+    } catch (e) {
+        console.error('[ComfyUI] PNG workflow extraction failed:', e.message);
+        return null;
+    }
+}
+
+/**
+ * POST JSON data to a URL. Returns a promise.
+ */
+function httpPost(url, data) {
+    return new Promise((resolve, reject) => {
+        const parsed = new URL(url);
+        const postData = JSON.stringify(data);
+        const req = http.request({
+            hostname: parsed.hostname,
+            port: parsed.port,
+            path: parsed.pathname,
+            method: 'POST',
+            headers: {
+                'Content-Type': 'application/json',
+                'Content-Length': Buffer.byteLength(postData),
+            },
+        }, (res) => {
+            let body = '';
+            res.on('data', chunk => body += chunk);
+            res.on('end', () => {
+                try { resolve({ status: res.statusCode, body: JSON.parse(body) }); }
+                catch { resolve({ status: res.statusCode, body }); }
+            });
+        });
+        req.on('error', reject);
+        req.setTimeout(5000, () => { req.destroy(); reject(new Error('Timeout')); });
+        req.write(postData);
+        req.end();
+    });
+}
+
+/**
+ * Check if ComfyUI is running by hitting its root URL.
+ */
+function checkComfyUI(comfyUrl) {
+    return new Promise((resolve) => {
+        const parsed = new URL(comfyUrl);
+        const req = http.request({
+            hostname: parsed.hostname,
+            port: parsed.port,
+            path: '/',
+            method: 'GET',
+        }, (res) => resolve(true));
+        req.on('error', () => resolve(false));
+        req.setTimeout(3000, () => { req.destroy(); resolve(false); });
+        req.end();
+    });
+}
+
+// GET /api/comfyui/status — Check if ComfyUI is reachable
+router.get('/status', async (req, res) => {
+    const comfyUrl = getSetting('comfyui_url') || 'http://127.0.0.1:8188';
+    const running = await checkComfyUI(comfyUrl);
+    res.json({ running, url: comfyUrl });
+});
+
+// GET /api/comfyui/check-workflow/:id — Check if an asset has an embedded workflow
+router.get('/check-workflow/:id', (req, res) => {
+    const db = getDb();
+    const asset = db.prepare('SELECT id, file_path, vault_name, media_type, file_ext FROM assets WHERE id = ?')
+        .get(req.params.id);
+    if (!asset) return res.status(404).json({ error: 'Asset not found' });
+
+    const resolved = resolveFilePath(asset.file_path);
+    if (!fs.existsSync(resolved)) {
+        return res.json({ hasWorkflow: false, reason: 'File not found on disk' });
+    }
+
+    const workflow = extractWorkflowFromFile(resolved);
+    res.json({
+        hasWorkflow: !!workflow,
+        nodeCount: workflow?.nodes?.length || 0,
+    });
+});
+
+// POST /api/comfyui/load-in-comfy/:id — Extract workflow and send to ComfyUI
+router.post('/load-in-comfy/:id', async (req, res) => {
+    try {
+        const comfyUrl = getSetting('comfyui_url') || 'http://127.0.0.1:8188';
+
+        // 1. Check if ComfyUI is running
+        const running = await checkComfyUI(comfyUrl);
+        if (!running) {
+            return res.status(503).json({
+                success: false,
+                error: 'ComfyUI is not running. Start ComfyUI first.',
+            });
+        }
+
+        // 2. Get asset from DB
+        const db = getDb();
+        const asset = db.prepare('SELECT id, file_path, vault_name, media_type, file_ext FROM assets WHERE id = ?')
+            .get(req.params.id);
+        if (!asset) {
+            return res.status(404).json({ success: false, error: 'Asset not found' });
+        }
+
+        // 3. Resolve path and check file exists
+        const resolved = resolveFilePath(asset.file_path);
+        if (!fs.existsSync(resolved)) {
+            return res.status(404).json({
+                success: false,
+                error: 'File not found on disk: ' + resolved,
+            });
+        }
+
+        // 4. Extract workflow from file metadata
+        const workflow = extractWorkflowFromFile(resolved);
+        if (!workflow) {
+            return res.status(422).json({
+                success: false,
+                error: 'No ComfyUI workflow found in this file\'s metadata.',
+            });
+        }
+
+        // 5. POST workflow to ComfyUI's pending endpoint
+        const result = await httpPost(comfyUrl + '/mediavault/load-workflow', workflow);
+        if (result.status !== 200 || !result.body?.success) {
+            return res.status(502).json({
+                success: false,
+                error: 'Failed to send workflow to ComfyUI: ' + JSON.stringify(result.body),
+            });
+        }
+
+        logActivity('comfyui_load', 'asset', asset.id, {
+            name: asset.vault_name,
+            nodes: workflow.nodes?.length || 0,
+        });
+
+        res.json({
+            success: true,
+            comfyUrl,
+            nodeCount: workflow.nodes?.length || 0,
+            assetName: asset.vault_name,
+        });
+
+    } catch (err) {
+        console.error('[ComfyUI] load-in-comfy error:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 

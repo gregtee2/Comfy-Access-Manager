@@ -342,6 +342,39 @@ async function prefillFromLoadNode(saveNode) {
 app.registerExtension({
     name: "MediaVault.DynamicDropdowns",
 
+    /**
+     * setup() runs after the ComfyUI graph is initialized.
+     * If the URL contains ?cam_load=1, fetch the pending workflow
+     * from the Python server and load it into the graph.
+     */
+    async setup() {
+        const params = new URLSearchParams(window.location.search);
+        if (!params.has("cam_load")) return;
+
+        // Clean the URL immediately so a refresh doesn't re-trigger
+        const cleanUrl = new URL(window.location);
+        cleanUrl.searchParams.delete("cam_load");
+        window.history.replaceState({}, "", cleanUrl);
+
+        try {
+            const res = await fetch("/mediavault/load-workflow");
+            if (!res.ok) return;
+            const data = await res.json();
+            if (!data.hasWorkflow) {
+                console.warn("[MediaVault] cam_load param present but no pending workflow");
+                return;
+            }
+
+            // Small delay to let ComfyUI finish initializing the canvas
+            setTimeout(() => {
+                app.loadGraphData(data.workflow);
+                console.log(`[MediaVault] ✓ Loaded workflow (${data.workflow.nodes?.length || 0} nodes)`);
+            }, 500);
+        } catch (e) {
+            console.error("[MediaVault] Failed to load pending workflow:", e);
+        }
+    },
+
     async nodeCreated(node) {
         if (!MV_NODES.includes(node.comfyClass)) return;
 

@@ -28,6 +28,7 @@ export async function loadSettings() {
         document.getElementById('settingAutoThumb').checked = state.settings.auto_thumbnail !== 'false';
         document.getElementById('settingComfyPath').value = state.settings.comfyui_output_path || '';
         document.getElementById('settingComfyWatch').checked = state.settings.comfyui_watch_enabled === 'true';
+        document.getElementById('settingComfyUrl').value = state.settings.comfyui_url || 'http://127.0.0.1:8188';
 
         // External player
         const playerSel = document.getElementById('settingDefaultPlayer');
@@ -83,6 +84,7 @@ async function saveSettings() {
         auto_thumbnail: document.getElementById('settingAutoThumb').checked ? 'true' : 'false',
         comfyui_output_path: document.getElementById('settingComfyPath').value.trim(),
         comfyui_watch_enabled: document.getElementById('settingComfyWatch').checked ? 'true' : 'false',
+        comfyui_url: document.getElementById('settingComfyUrl').value.trim() || 'http://127.0.0.1:8188',
         default_player: document.getElementById('settingDefaultPlayer').value,
         custom_player_path: document.getElementById('settingCustomPlayerPath').value.trim(),
         rv_path: document.getElementById('settingRvPath').value.trim(),

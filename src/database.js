@@ -481,6 +481,7 @@ function runMigrations(wrapper) {
             thumbnail_size: '320',
             proxy_enabled: 'false',
             proxy_resolution: '1280',
+            comfyui_url: 'http://127.0.0.1:8188',
             comfyui_output_path: '',
             comfyui_watch_enabled: 'false',
             auto_thumbnail: 'true',

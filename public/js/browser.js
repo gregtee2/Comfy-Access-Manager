@@ -828,6 +828,11 @@ async function showContextMenu(event, assetIdx) {
     if (isSingle && asset.file_path) {
         html += `<div class="ctx-separator"></div>`;
         html += `<div class="ctx-item" data-action="showPath">📂 Show File Path</div>`;
+        const comfyExts = ['png', 'mp4', 'webm', 'mkv', 'mov', 'avi'];
+        const assetExt = (asset.file_ext || '').replace('.', '').toLowerCase();
+        if (comfyExts.includes(assetExt)) {
+            html += `<div class="ctx-item" data-action="loadComfy">🎨 Load in ComfyUI</div>`;
+        }
     }
 
     html += `<div class="ctx-separator"></div>`;
@@ -864,6 +869,9 @@ async function showContextMenu(event, assetIdx) {
             case 'deselectAll': clearAssetSelection(); break;
             case 'showPath':
                 showFilePathModal(asset.file_path, asset.vault_name);
+                break;
+            case 'loadComfy':
+                loadInComfyUI(asset.id, asset.vault_name);
                 break;
             case 'delete': bulkDeleteAssets(); break;
             case 'removeDb': bulkDeleteAssets(true); break;
@@ -1724,6 +1732,32 @@ function showFilePathModal(filePath, vaultName) {
     // Close on Escape
     const onKey = (e) => { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', onKey); } };
     document.addEventListener('keydown', onKey);
+}
+
+// ─── Load in ComfyUI ───
+async function loadInComfyUI(assetId, assetName) {
+    try {
+        showToast('Extracting workflow…');
+
+        const res = await fetch(`/api/comfyui/load-in-comfy/${assetId}`, { method: 'POST' });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+            showToast(data.error || 'Failed to load in ComfyUI', 5000);
+            return;
+        }
+
+        // Open (or focus) ComfyUI tab with the cam_load trigger param
+        const comfyTab = window.open(data.comfyUrl + '?cam_load=1', 'comfyui');
+        if (!comfyTab) {
+            showToast('Pop-up blocked — allow pop-ups for this site', 5000);
+            return;
+        }
+
+        showToast(`Sent to ComfyUI (${data.nodeCount} nodes)`);
+    } catch (e) {
+        showToast('Error: ' + e.message, 5000);
+    }
 }
 
 window.deleteCurrentProject = deleteCurrentProject;
