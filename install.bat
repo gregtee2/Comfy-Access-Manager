@@ -195,7 +195,7 @@ if not exist "tools" mkdir tools
 powershell -NoProfile -ExecutionPolicy Bypass -Command ^
     "$ProgressPreference = 'SilentlyContinue'; " ^
     "try { " ^
-    \"  $url = 'https://github.com/gregtee2/Comfy-Access-Manager/releases/download/rv-3.1.0/OpenRV-3.1.0-win64-mediavault.zip'; \" ^
+    "  $url = 'https://github.com/gregtee2/Comfy-Access-Manager/releases/download/rv-3.1.0/OpenRV-3.1.0-win64-mediavault.zip'; " ^
     "  Write-Host '         Downloading (this may take a few minutes)...'; " ^
     "  Invoke-WebRequest -Uri $url -OutFile 'tools\rv.zip'; " ^
     "  Write-Host '         Extracting...'; " ^
