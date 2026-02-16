@@ -1,11 +1,11 @@
 @echo off
-title MediaVault - Media Asset Tracker
+title Comfy Asset Manager
 color 0B
 setlocal
 
 echo.
 echo  ========================================
-echo       MediaVault - Starting Server
+echo       Comfy Asset Manager - Starting
 echo  ========================================
 echo.
 
@@ -40,7 +40,7 @@ if not exist "thumbnails" mkdir thumbnails
 
 :: [4/4] Start server
 echo.
-echo  Starting MediaVault on http://localhost:7700 ...
+echo  Starting Comfy Asset Manager on http://localhost:7700 ...
 echo.
 node src/server.js
 

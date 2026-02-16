@@ -1,11 +1,11 @@
 @echo off
-title Digital Media Vault — Installer
+title Comfy Asset Manager — Installer
 color 0B
 setlocal EnableDelayedExpansion
 
 echo.
 echo  =============================================
-echo    Digital Media Vault (DMV) — One-Click Installer
+echo    Comfy Asset Manager (CAM) — One-Click Installer
 echo  =============================================
 echo.
 echo  This installer handles everything for you.
@@ -186,7 +186,7 @@ echo         RV provides professional A/B wipe comparison and EXR/HDR playback.
 echo.
 set /p INSTALL_RV="         Download and install OpenRV for Windows? (~272 MB) (Y/N): "
 if /i not "!INSTALL_RV!"=="Y" (
-    echo         Skipping. You can install RV later from DMV Settings.
+    echo         Skipping. You can install RV later from Settings.
     goto :done
 )
 
@@ -224,7 +224,7 @@ if exist "tools\rv\bin\rv.exe" (
     echo         OpenRV installed successfully!
 ) else (
     echo         WARNING: Download may have failed.
-    echo         You can set a custom RV path in DMV Settings after launch.
+    echo         You can set a custom RV path in Settings after launch.
     echo         Or download manually from: https://github.com/AcademySoftwareFoundation/OpenRV/releases
 )
 
@@ -238,7 +238,7 @@ echo  =============================================
 echo    Installation Complete!
 echo  =============================================
 echo.
-echo  To start DMV, run:  start.bat
+echo  To start CAM, run:  start.bat
 echo  Then open:  http://localhost:7700
 echo.
 pause
