@@ -3,6 +3,31 @@ title Comfy Asset Manager — Installer
 color 0B
 setlocal EnableDelayedExpansion
 
+:: ─── Guard: Detect running from inside a ZIP (temp path) ───
+set "SCRIPT_DIR=%~dp0"
+echo "%SCRIPT_DIR%" | findstr /i /c:"\Temp" /c:"\AppData\Local\Temp" /c:".zip" >nul 2>&1
+if not errorlevel 1 (
+    color 0C
+    echo.
+    echo  ============================================================
+    echo    ERROR: Running from inside a ZIP file!
+    echo  ============================================================
+    echo.
+    echo  Windows is running this from a temporary folder.
+    echo  Nothing installed here will be kept.
+    echo.
+    echo  PLEASE DO THIS FIRST:
+    echo    1. Close this window
+    echo    2. Right-click the downloaded .zip file
+    echo    3. Choose "Extract All..." to a permanent folder
+    echo       ^(e.g., C:\Comfy-Asset-Manager^)
+    echo    4. Open the extracted folder
+    echo    5. THEN double-click install.bat
+    echo.
+    pause
+    exit /b 1
+)
+
 echo.
 echo  =============================================
 echo    Comfy Asset Manager (CAM) — One-Click Installer

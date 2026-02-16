@@ -3,6 +3,23 @@ title Comfy Asset Manager
 color 0B
 setlocal
 
+:: ─── Guard: Detect running from inside a ZIP (temp path) ───
+set "SCRIPT_DIR=%~dp0"
+echo "%SCRIPT_DIR%" | findstr /i /c:"\Temp" /c:"\AppData\Local\Temp" /c:".zip" >nul 2>&1
+if not errorlevel 1 (
+    color 0C
+    echo.
+    echo  ============================================================
+    echo    ERROR: Running from inside a ZIP file!
+    echo  ============================================================
+    echo.
+    echo  Please extract the ZIP first, then run start.bat
+    echo  from the extracted folder.
+    echo.
+    pause
+    exit /b 1
+)
+
 echo.
 echo  ========================================
 echo       Comfy Asset Manager - Starting
