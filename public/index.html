@@ -197,6 +197,17 @@
                 <h2>Import Media <span class="help-icon" data-tip="Browse your filesystem, select files, choose a project/sequence/shot/role, preview the ShotGrid-standard rename, then import. Files are moved, copied, or registered in-place.">?</span></h2>
             </div>
             <div class="import-layout">
+                <!-- Quick Access sidebar -->
+                <div class="import-quickaccess" id="quickAccessPanel">
+                    <h3>⭐ Quick Access</h3>
+                    <div class="qa-list" id="quickAccessList">
+                        <div class="qa-empty">Drag a folder here<br>or right-click &rarr; Add</div>
+                    </div>
+                    <div class="qa-drop-zone" id="qaDropZone">
+                        <span>⭐ Drop to save</span>
+                    </div>
+                </div>
+
                 <!-- File picker panel -->
                 <div class="import-source">
                     <h3>📂 Source Files</h3>
@@ -204,6 +215,7 @@
                         <button onclick="navigateUp()" title="Go up">⬆️</button>
                         <input type="text" id="importPath" placeholder="Browse to select files..." onkeydown="if(event.key==='Enter')browseTo(this.value)">
                         <button onclick="browseTo(document.getElementById('importPath').value)">Go</button>
+                        <button onclick="addCurrentFolderToQuickAccess()" title="Save this folder to Quick Access" style="font-size:0.9rem">⭐</button>
                     </div>
                     <div id="fileBrowser" class="file-browser"></div>
                     <div class="selected-files">

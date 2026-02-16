@@ -28,6 +28,9 @@ export async function loadImportTab() {
     setupInlineAutoCode('newSeqName', 'newSeqCode', 'SQ');
     setupInlineAutoCode('newShotName', 'newShotCode', 'SH');
 
+    // Load Quick Access favorites
+    loadQuickAccess();
+
     // Browse to default location or drives
     if (!state.importBrowsePath) {
         browseTo('');
@@ -74,7 +77,10 @@ function renderFileBrowser(result) {
         const isSelected = state.selectedFiles.some(f => f.path === entry.path);
 
         if (entry.isDirectory) {
-            html += `<div class="fb-entry" ondblclick="browseTo('${escAttr(entry.path)}')">
+            html += `<div class="fb-entry" draggable="true"
+                ondblclick="browseTo('${escAttr(entry.path)}')"
+                ondragstart="onFolderDragStart(event, '${escAttr(entry.path)}', '${escAttr(entry.name)}')"
+                oncontextmenu="onFolderContextMenu(event, '${escAttr(entry.path)}', '${escAttr(entry.name)}')">
                 <span class="fb-icon">${entry.icon || '📁'}</span>
                 <span class="fb-name">${esc(entry.name)}</span>
             </div>`;
@@ -742,6 +748,175 @@ async function createInlineShot() {
 }
 
 // ═══════════════════════════════════════════
+//  QUICK ACCESS (Saved Locations)
+// ═══════════════════════════════════════════
+
+let quickAccessItems = [];
+
+async function loadQuickAccess() {
+    try {
+        const settings = await api('/api/settings');
+        const raw = settings.quick_access;
+        quickAccessItems = raw ? JSON.parse(raw) : [];
+    } catch { quickAccessItems = []; }
+    renderQuickAccess();
+    initQuickAccessDropZone();
+}
+
+async function saveQuickAccess() {
+    try {
+        await api('/api/settings', {
+            method: 'POST',
+            body: { quick_access: JSON.stringify(quickAccessItems) }
+        });
+    } catch (e) { console.error('Failed to save Quick Access:', e); }
+}
+
+function renderQuickAccess() {
+    const list = document.getElementById('quickAccessList');
+    if (!list) return;
+
+    if (quickAccessItems.length === 0) {
+        list.innerHTML = '<div class="qa-empty">Drag a folder here<br>or right-click → Add</div>';
+        return;
+    }
+
+    list.innerHTML = quickAccessItems.map((item, i) => `
+        <div class="qa-item" onclick="browseTo('${escAttr(item.path)}')" title="${esc(item.path)}">
+            <span class="qa-icon">${item.icon || '📁'}</span>
+            <span class="qa-label">${esc(item.label)}</span>
+            <span class="qa-remove" onclick="event.stopPropagation(); removeQuickAccess(${i})" title="Remove">✕</span>
+        </div>
+    `).join('');
+}
+
+function addQuickAccess(path, name) {
+    // Don't add duplicates
+    if (quickAccessItems.some(q => q.path === path)) {
+        showToast('Already in Quick Access', 'info');
+        return;
+    }
+    // Determine icon based on path pattern
+    let icon = '📁';
+    const lp = path.toLowerCase();
+    if (lp.startsWith('\\\\') || lp.startsWith('//') || lp.includes('smb') || lp.includes('nfs')) icon = '🌐';
+    else if (/^[a-z]:\\/i.test(lp)) icon = '💾';
+    else if (lp.startsWith('/volumes/') || lp.startsWith('/mnt/') || lp.startsWith('/media/')) icon = '🗄️';
+
+    quickAccessItems.push({ path, label: name, icon });
+    saveQuickAccess();
+    renderQuickAccess();
+    showToast(`⭐ "${name}" added to Quick Access`, 'success');
+}
+
+function removeQuickAccess(index) {
+    const removed = quickAccessItems.splice(index, 1);
+    saveQuickAccess();
+    renderQuickAccess();
+    if (removed.length) showToast(`Removed "${removed[0].label}"`, 'info');
+}
+
+function addCurrentFolderToQuickAccess() {
+    const currentPath = state.importBrowsePath;
+    if (!currentPath) { showToast('Navigate to a folder first', 'error'); return; }
+    const name = currentPath.split(/[\\/]/).filter(Boolean).pop() || currentPath;
+    addQuickAccess(currentPath, name);
+}
+
+// ─── Drag & Drop onto Quick Access panel ───
+
+function onFolderDragStart(event, path, name) {
+    event.dataTransfer.setData('text/plain', JSON.stringify({ path, name }));
+    event.dataTransfer.effectAllowed = 'copy';
+    // Show the drop zone
+    const dz = document.getElementById('qaDropZone');
+    if (dz) dz.classList.add('active');
+}
+
+function initQuickAccessDropZone() {
+    const panel = document.getElementById('quickAccessPanel');
+    const dropZone = document.getElementById('qaDropZone');
+    if (!panel || !dropZone) return;
+
+    // Hide drop zone when drag ends anywhere
+    document.addEventListener('dragend', () => {
+        dropZone.classList.remove('active');
+    });
+
+    panel.addEventListener('dragover', (e) => {
+        e.preventDefault();
+        e.dataTransfer.dropEffect = 'copy';
+        dropZone.classList.add('active');
+    });
+
+    panel.addEventListener('dragleave', (e) => {
+        // Only hide if leaving the panel entirely
+        if (!panel.contains(e.relatedTarget)) {
+            dropZone.classList.remove('active');
+        }
+    });
+
+    panel.addEventListener('drop', (e) => {
+        e.preventDefault();
+        dropZone.classList.remove('active');
+        try {
+            const data = JSON.parse(e.dataTransfer.getData('text/plain'));
+            if (data.path) addQuickAccess(data.path, data.name || 'Folder');
+        } catch { /* ignore non-folder drops */ }
+    });
+}
+
+// ─── Right-click context menu on folders ───
+
+let _qaContextMenu = null;
+
+function onFolderContextMenu(event, path, name) {
+    event.preventDefault();
+    event.stopPropagation();
+
+    // Remove any existing menu
+    if (_qaContextMenu) { _qaContextMenu.remove(); _qaContextMenu = null; }
+
+    const menu = document.createElement('div');
+    menu.className = 'qa-context-menu';
+    menu.style.cssText = `
+        position: fixed; left: ${event.clientX}px; top: ${event.clientY}px;
+        z-index: 9999; background: #2a2a30; border: 1px solid #444;
+        border-radius: 6px; padding: 4px 0; min-width: 180px;
+        box-shadow: 0 4px 16px rgba(0,0,0,0.5); font-size: 0.82rem;
+    `;
+
+    const addItem = document.createElement('div');
+    addItem.textContent = '⭐ Add to Quick Access';
+    addItem.style.cssText = 'padding: 8px 14px; cursor: pointer; color: #ddd; transition: background .15s;';
+    addItem.onmouseenter = () => addItem.style.background = '#383840';
+    addItem.onmouseleave = () => addItem.style.background = '';
+    addItem.onclick = () => { addQuickAccess(path, name); menu.remove(); _qaContextMenu = null; };
+    menu.appendChild(addItem);
+
+    const openItem = document.createElement('div');
+    openItem.textContent = '📂 Open Folder';
+    openItem.style.cssText = 'padding: 8px 14px; cursor: pointer; color: #ddd; transition: background .15s;';
+    openItem.onmouseenter = () => openItem.style.background = '#383840';
+    openItem.onmouseleave = () => openItem.style.background = '';
+    openItem.onclick = () => { browseTo(path); menu.remove(); _qaContextMenu = null; };
+    menu.appendChild(openItem);
+
+    document.body.appendChild(menu);
+    _qaContextMenu = menu;
+
+    // Close on click elsewhere
+    const closeMenu = (e) => {
+        if (!menu.contains(e.target)) {
+            menu.remove();
+            _qaContextMenu = null;
+            document.removeEventListener('click', closeMenu);
+        }
+    };
+    setTimeout(() => document.addEventListener('click', closeMenu), 0);
+}
+
+// ═══════════════════════════════════════════
 //  EXPOSE ON WINDOW (for HTML onclick handlers)
 // ═══════════════════════════════════════════
 
@@ -762,3 +937,7 @@ window.createInlineSequence = createInlineSequence;
 window.showInlineNewShot = showInlineNewShot;
 window.hideInlineNewShot = hideInlineNewShot;
 window.createInlineShot = createInlineShot;
+window.onFolderDragStart = onFolderDragStart;
+window.onFolderContextMenu = onFolderContextMenu;
+window.removeQuickAccess = removeQuickAccess;
+window.addCurrentFolderToQuickAccess = addCurrentFolderToQuickAccess;

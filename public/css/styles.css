@@ -824,8 +824,94 @@ label {
 /* ─── Import Tab ─── */
 .import-layout {
     display: grid;
-    grid-template-columns: 1fr 380px;
-    gap: 24px;
+    grid-template-columns: 180px 1fr 380px;
+    gap: 16px;
+}
+
+/* ─── Quick Access sidebar ─── */
+.import-quickaccess {
+    background: var(--bg-card);
+    border: 1px solid var(--border);
+    border-radius: var(--radius);
+    padding: 12px;
+    display: flex;
+    flex-direction: column;
+    min-height: 0;
+}
+.import-quickaccess h3 {
+    margin: 0 0 10px 0;
+    font-size: 0.88rem;
+    color: var(--text-dim);
+    white-space: nowrap;
+}
+.qa-list {
+    flex: 1;
+    overflow-y: auto;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+}
+.qa-empty {
+    color: var(--text-muted, #666);
+    font-size: 0.75rem;
+    text-align: center;
+    padding: 20px 4px;
+    line-height: 1.5;
+}
+.qa-item {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    border-radius: var(--radius-sm);
+    cursor: pointer;
+    font-size: 0.78rem;
+    color: var(--text);
+    transition: background .15s;
+    position: relative;
+    user-select: none;
+}
+.qa-item:hover {
+    background: var(--bg-card-hover);
+}
+.qa-item .qa-icon {
+    font-size: 0.9rem;
+    flex-shrink: 0;
+}
+.qa-item .qa-label {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+    white-space: nowrap;
+}
+.qa-item .qa-remove {
+    display: none;
+    color: #888;
+    font-size: 0.7rem;
+    cursor: pointer;
+    padding: 2px;
+    flex-shrink: 0;
+}
+.qa-item:hover .qa-remove { display: block; }
+.qa-item .qa-remove:hover { color: #ff5252; }
+.qa-drop-zone {
+    display: none;
+    align-items: center;
+    justify-content: center;
+    padding: 12px 4px;
+    margin-top: 8px;
+    border: 2px dashed #555;
+    border-radius: var(--radius-sm);
+    color: #888;
+    font-size: 0.75rem;
+    text-align: center;
+    transition: border-color .2s, background .2s;
+}
+.qa-drop-zone.active {
+    display: flex;
+    border-color: #6a6;
+    background: rgba(100, 200, 100, 0.06);
+    color: #8c8;
 }
 .import-source, .import-settings {
     background: var(--bg-card);
@@ -1623,6 +1709,7 @@ label {
 /* ─── Responsive ─── */
 @media (max-width: 900px) {
     .import-layout { grid-template-columns: 1fr; }
+    .import-quickaccess { display: none; }
     .settings-grid { grid-template-columns: 1fr; }
     .project-grid { grid-template-columns: repeat(auto-fill, minmax(220px, 1fr)); }
     .asset-grid { grid-template-columns: repeat(auto-fill, minmax(160px, 1fr)); }
