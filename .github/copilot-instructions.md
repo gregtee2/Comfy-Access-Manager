@@ -31,6 +31,7 @@ Built for artists and studios who work with video, images, EXR sequences, 3D fil
 - **Transcode/Export**: FFmpeg (NVENC GPU on Windows, VideoToolbox on macOS, CPU fallback everywhere)
 - **External Player**: OpenRV 3.1.0 (compiled from source, bundled in `tools/rv/`)
 - **File Watching**: Chokidar (cross-platform)
+- **File Upload**: multer (multipart form handling for DB import)
 - **Network Discovery**: UDP broadcast on port 7701 (dgram, zero dependencies)
 - **RV Plugin**: Python + PySide2/6 Qt dialog (auto-deployed on server start)
 - **ComfyUI**: Custom Python nodes + JS dynamic dropdown extension
@@ -45,7 +46,7 @@ Comfy-Asset-Manager/
 │   ├── routes/
 │   │   ├── assetRoutes.js        # Import, browse, stream, delete, RV launch, compare (1782 lines)
 │   │   ├── projectRoutes.js      # Project + Sequence + Shot CRUD (349 lines)
-│   │   ├── settingsRoutes.js     # Settings, vault setup, RV plugin sync (487 lines)
+│   │   ├── settingsRoutes.js     # Settings, vault setup, RV plugin sync, DB transfer (656 lines)
 │   │   ├── exportRoutes.js       # FFmpeg transcode/export (488 lines)
 │   │   ├── comfyuiRoutes.js      # ComfyUI integration endpoints (283 lines)
 │   │   ├── flowRoutes.js         # Flow/ShotGrid sync (188 lines)
@@ -57,7 +58,7 @@ Comfy-Asset-Manager/
 │   │   ├── TranscodeService.js   # FFmpeg transcode engine (496 lines)
 │   │   ├── FileService.js        # File ops + cross-platform drive detection (474 lines)
 │   │   ├── FlowService.js        # Flow/ShotGrid API client (394 lines)
-│   │   ├── RVPluginSync.js       # Auto-deploy RV plugin to all RV installs (276 lines)
+│   │   ├── RVPluginSync.js       # Auto-deploy RV plugin via rvpkg CLI (341 lines)
 │   │   ├── DiscoveryService.js   # UDP broadcast discovery on LAN (202 lines)
 │   │   ├── ThumbnailService.js   # Thumbnail gen — Sharp + FFmpeg (194 lines)
 │   │   ├── MediaInfoService.js   # Metadata extraction via FFprobe (164 lines)
@@ -67,13 +68,13 @@ Comfy-Asset-Manager/
 │       ├── sequenceDetector.js   # EXR/DPX frame sequence grouping (150 lines)
 │       └── mediaTypes.js         # File ext → media type mapping (114 lines)
 ├── public/
-│   ├── index.html                # SPA shell (636 lines)
+│   ├── index.html                # SPA shell (657 lines)
 │   ├── popout-player.html        # Detachable media player (739 lines)
 │   ├── css/styles.css            # Neutral gray VFX theme (2622 lines)
 │   └── js/
 │       ├── player.js             # Built-in media player modal (2082 lines)
 │       ├── browser.js            # Asset browser, grid/list, tree nav, selection (1647 lines)
-│       ├── settings.js           # Settings tab + network discovery UI (970 lines)
+│       ├── settings.js           # Settings tab + network discovery + DB transfer UI (1097 lines)
 │       ├── import.js             # File browser, import flow (764 lines)
 │       ├── export.js             # Export modal (357 lines)
 │       ├── main.js               # Entry point, tab switching (93 lines)
@@ -156,17 +157,23 @@ These are the ONLY files with `process.platform` checks. When adding features th
 **`src/services/RVPluginSync.js`** automatically deploys the MediaVault RV plugin on every server startup:
 
 1. Builds a fresh `.rvpkg` (zip) from `rv-package/PACKAGE` + `mediavault_mode.py`
-2. Scans for ALL RV installations:
+2. Scans for ALL RV installations via `findRVInstalls()` — returns `[{packagesDir, rvpkgBin}]`:
    - Bundled: `tools/rv/RV.app/Contents/PlugIns/Packages/` (Mac) or `tools/rv/Packages/` (Win)
    - System: `/Applications/RV*.app` (Mac) or `C:\Program Files\*RV*` (Win)
    - Self-compiled: `~/OpenRV/_build/...` or `C:\OpenRV\_build\...`
    - User-level: `~/.rv/Packages/` (all platforms — RV checks this automatically)
 3. Deploys with MD5 hash check — skips if already current
 4. Uses `zip` on Mac/Linux, PowerShell `Compress-Archive` on Windows
+5. **Registers via `rvpkg` CLI** — runs `rvpkg -install -force <filename>` using the `rvpkg` binary found alongside each RV installation. This is required because RV has an internal package registry; just dropping a `.rvpkg` file is NOT enough (`rvpkg -list` would show `- L -` = present but not installed).
+6. Falls back to manual `.py` file copy to `PlugIns/Python/` if no `rvpkg` binary available.
+
+**Key exports**: `{ sync, findRVInstalls, buildRvpkg }`
 
 **Workflow for plugin changes**: Edit `rv-package/mediavault_mode.py` on any platform → commit → push → other platform pulls → server restart auto-deploys the updated plugin to all RV installations.
 
 **Manual re-sync**: `POST /api/settings/sync-rv-plugin`
+
+**Gotcha**: `rvpkg -list` flags: `I` = Installed (registered), `L` = Loaded (file present), `O` = Optional. A package showing `- L -` means the file is there but NOT registered — the plugin won't load until `rvpkg -install` is run.
 
 ---
 
@@ -185,6 +192,47 @@ These are the ONLY files with `process.platform` checks. When adding features th
 5. On restart, `RVPluginSync.sync()` deploys any updated RV plugin
 
 **Branches**: `main` = development, `stable` = tested releases pushed to users.
+
+---
+
+## Database Transfer (Cross-Machine DB Sharing)
+
+The Settings → "Database Transfer" section allows copying the full SQLite database between machines (e.g., PC → Mac). This is the primary way to share project/asset databases across platforms.
+
+### Architecture
+- **Backend**: 4 endpoints in `settingsRoutes.js` using `multer` for file uploads
+- **Frontend**: Settings tab section with Export, Import, and Pull-from-Remote
+- **Safety**: Auto-backup before every import/pull (`data/mediavault.db.backup-<timestamp>`), automatic rollback on failure
+- **Validation**: Pull validates SQLite header (first 6 bytes = "SQLite") before replacing
+
+### Endpoints
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/settings/export-db` | GET | Streams DB as file download with timestamped filename |
+| `/api/settings/db-info` | GET | Returns `{projects, assets, sequences, shots, fileSize, modified, path}` |
+| `/api/settings/import-db` | POST | Multipart file upload (field: `database`), replaces current DB |
+| `/api/settings/pull-db` | POST | `{url}` — downloads from remote CAM server's export endpoint |
+
+### Import/Pull Flow
+1. Backup current DB to `data/mediavault.db.backup-<timestamp>`
+2. `closeDb()` — flush and close current sql.js instance
+3. Replace `data/mediavault.db` with new file
+4. `initDb()` — re-open database
+5. On failure: restore from backup, re-init, return error
+
+### Frontend Functions (settings.js)
+- `loadDbInfo()` — shows current DB stats
+- `exportDatabase()` — browser download via `window.location.href`
+- `importDatabase(input)` — FormData upload with confirm dialog
+- `pullRemoteDatabase()` — POST with URL; quick-pick buttons from discovered servers
+- `loadDiscoveredServersForPull()` — shows saved + LAN-discovered servers as buttons
+
+### After Pulling a Cross-Platform DB
+Windows file paths (e.g., `Z:\Media\...`) won't resolve on Mac and vice versa. Use **Settings → Path Mappings** to map paths: `/Volumes/NAS` ↔ `Z:\`.
+
+### Dependencies
+- `multer` — multipart file upload handling (installed in `package.json`)
+- `http`/`https` — Node built-ins for pull-from-remote
 
 ---
 
@@ -446,6 +494,10 @@ ComfyUI (Python + LiteGraph)
 | `/api/settings/status` | GET | System status (vault configured, asset count) |
 | `/api/settings/setup-vault` | POST | First-time vault setup |
 | `/api/settings/sync-rv-plugin` | POST | Force re-deploy RV plugin to all installations |
+| `/api/settings/export-db` | GET | Download SQLite database file (timestamped filename) |
+| `/api/settings/db-info` | GET | Database stats (projects, assets, sequences, shots, fileSize) |
+| `/api/settings/import-db` | POST | Upload & replace database (multer multipart, auto-backup + rollback) |
+| `/api/settings/pull-db` | POST | Pull database from remote CAM server by URL (validates SQLite header) |
 
 ### Export & Transcode
 | Endpoint | Method | Description |
@@ -600,6 +652,9 @@ UI in Settings tab ready. `flowRoutes.js` + `FlowService.js` + `flow_bridge.py` 
 | `c355051` | Rebrand to Comfy Asset Manager v1.1.0 |
 | `5881a61` | Qt asset picker dialog in RV plugin |
 | `9e26d8a` | Copyright headers + JS obfuscation build step |
+| `aa71e1b` | Fix RV plugin deployment — copy .py to PlugIns/Python |
+| `690df7f` | Fix RV plugin registration — use rvpkg CLI (`rvpkg -install -force`) |
+| `25bc482` | Database Transfer: export, import, pull-from-remote in Settings UI |
 
 ---
 
