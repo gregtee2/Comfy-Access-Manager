@@ -44,7 +44,7 @@ except ImportError:
     except ImportError:
         HAS_QT = False
 
-DMV_URL = "http://localhost:7700"
+DMV_URL = "http://127.0.0.1:7700"
 
 # ─── Dark theme with teal accent ─────────────────────────────────
 # Dark charcoal base with teal (#2ec4b6) highlights.
@@ -573,17 +573,19 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         Falls back: shot -> sequence -> project if no siblings at narrower scope.
         """
         if urllib is None:
+            print("[MediaVault] urllib not available — cannot connect to server")
             return None
         try:
             encoded = urllib.parse.quote(filepath, safe="")
             url = "%s/api/assets/compare-targets-by-path?path=%s" % (DMV_URL, encoded)
+            print("[MediaVault] Fetching: %s" % url)
             req = urllib.request.Request(url, headers={"Accept": "application/json"})
             with urllib.request.urlopen(req, timeout=5) as resp:
                 data = json.loads(resp.read().decode("utf-8"))
                 return data
         except Exception as e:
             print("[MediaVault] _fetchShotRoles error: %s" % e)
-            return None
+            return {"error": str(e)}
 
     def _getRolesData(self, force_refresh=False):
         """Fetch roles for the current source, with simple caching."""
@@ -599,6 +601,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         data = self._fetchShotRoles(filepath)
         if not data or "error" in data:
             msg = data.get("error", "Could not connect") if data else "Could not connect to MediaVault (port 7700)"
+            print("[MediaVault] Connection failed: %s (path: %s)" % (msg, filepath))
             rve.displayFeedback("MediaVault: %s" % msg, 4.0)
             return None, None
 

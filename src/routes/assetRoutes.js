@@ -20,7 +20,7 @@ const ThumbnailService = require('../services/ThumbnailService');
 const MediaInfoService = require('../services/MediaInfoService');
 const { detectMediaType, isMediaFile } = require('../utils/mediaTypes');
 const { generateVaultName, getVaultDirectory } = require('../utils/naming');
-const { resolveFilePath } = require('../utils/pathResolver');
+const { resolveFilePath, getAllPathVariants } = require('../utils/pathResolver');
 
 // Multer for file uploads (temp storage)
 const upload = multer({
@@ -249,23 +249,17 @@ router.get('/compare-targets-by-path', (req, res) => {
     const filePath = req.query.path;
     if (!filePath) return res.status(400).json({ error: 'Provide ?path= parameter' });
 
-    const normalized = filePath.replace(/\\/g, '/');
-    let asset = db.prepare(`
+    // Try all possible path variants (Mac path ↔ Windows path ↔ Linux path)
+    const variants = getAllPathVariants(filePath);
+    let asset = null;
+    const stmt = db.prepare(`
         SELECT id, shot_id, sequence_id, project_id, role_id, vault_name
         FROM assets
         WHERE replace(file_path, '\\', '/') = ?
-    `).get(normalized);
-
-    // If not found, try reverse-resolving the path (Mac path → Windows path stored in DB, or vice versa)
-    if (!asset) {
-        const reversedPath = resolveFilePath(filePath).replace(/\\/g, '/');
-        if (reversedPath !== normalized) {
-            asset = db.prepare(`
-                SELECT id, shot_id, sequence_id, project_id, role_id, vault_name
-                FROM assets
-                WHERE replace(file_path, '\\', '/') = ?
-            `).get(reversedPath);
-        }
+    `);
+    for (const variant of variants) {
+        asset = stmt.get(variant);
+        if (asset) break;
     }
     if (!asset) return res.status(404).json({ error: 'Asset not found in vault' });
 

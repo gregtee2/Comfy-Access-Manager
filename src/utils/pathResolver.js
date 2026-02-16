@@ -88,4 +88,62 @@ function resolveFilePath(filePath) {
     return filePath;
 }
 
-module.exports = { resolveFilePath };
+/**
+ * Return all possible path representations for a file path.
+ * Given a Mac path, also returns the Windows/Linux equivalents (and vice versa)
+ * by applying every configured mapping in both directions.
+ * Used for DB lookups where the stored platform may differ from the current one.
+ *
+ * @param {string} filePath - Any platform's file path
+ * @returns {string[]} - Array of normalized (forward-slash) path variants
+ */
+function getAllPathVariants(filePath) {
+    if (!filePath) return [];
+    const variants = new Set();
+    const normalized = filePath.replace(/\\/g, '/');
+    variants.add(normalized);
+
+    try {
+        const raw = getSetting('path_mappings');
+        if (!raw) return [...variants];
+        const mappings = JSON.parse(raw);
+        if (!Array.isArray(mappings) || mappings.length === 0) return [...variants];
+
+        for (const mapping of mappings) {
+            let sides = [];
+            if (mapping.from && mapping.to) {
+                sides = [mapping.from, mapping.to];
+            } else {
+                const w = mapping.windows || mapping.win || '';
+                const m = mapping.mac || mapping.macos || '';
+                const l = mapping.linux || '';
+                sides = [w, m, l].filter(Boolean);
+            }
+            if (sides.length < 2) continue;
+
+            for (let i = 0; i < sides.length; i++) {
+                const src = sides[i].replace(/\\/g, '/').replace(/\/+$/, '');
+                if (!src) continue;
+
+                if (normalized.toLowerCase().startsWith(src.toLowerCase() + '/') ||
+                    normalized.toLowerCase() === src.toLowerCase()) {
+                    const remainder = normalized.substring(src.length);
+                    // Add variants for ALL other sides (cross-platform paths)
+                    for (let j = 0; j < sides.length; j++) {
+                        if (j === i) continue;
+                        const target = sides[j].replace(/\\/g, '/').replace(/\/+$/, '');
+                        if (target) {
+                            variants.add(target + remainder);
+                        }
+                    }
+                }
+            }
+        }
+    } catch {
+        // If mappings can't be parsed, return what we have
+    }
+
+    return [...variants];
+}
+
+module.exports = { resolveFilePath, getAllPathVariants };
