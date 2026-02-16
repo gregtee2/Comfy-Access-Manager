@@ -1,89 +1,271 @@
-# Digital Media Vault (DMV) — AI Coding Instructions
+# Comfy Asset Manager (CAM) — AI Agent Instructions
 
-## 🎯 Project Overview
+## Project Overview
 
-**Digital Media Vault (DMV)** is a local media asset manager for creative production — organize, browse, import, export, and play media files with a project-based hierarchy following ShotGrid/Flow Production Tracking naming conventions.
+**Comfy Asset Manager (CAM)** — formerly Digital Media Vault (DMV) — is a local media asset manager for creative production. Organize, browse, import, export, and play media files with a project-based hierarchy following ShotGrid/Flow Production Tracking naming conventions.
 
-**Version**: 1.0.0  
-**Location**: `C:\MediaVault`  
-**Port**: 7700  
+**Version**: 1.1.0
+**Port**: 7700
+**Repo**: `github.com/gregtee2/Digital-Media-Vault` (branches: `main`, `stable`)
 **Status**: Active development (February 2026)
+**Platforms**: macOS (primary dev), Windows (production users), Linux (supported)
+
+### Install Locations (per platform)
+| Platform | Install Dir | How Launched |
+|----------|-------------|-------------|
+| **macOS** | `~/Comfy-Asset-Manager/` | `/Applications/Comfy Asset Manager.app` (native Cocoa wrapper) or `./start.sh` |
+| **Windows** | `C:\MediaVault` or `C:\Comfy-Asset-Manager` | `start.bat` |
+| **Linux** | `~/Comfy-Asset-Manager/` | `./start.sh` |
 
 Built for artists and studios who work with video, images, EXR sequences, 3D files, and audio, and want a fast way to manage them without cloud services.
 
 ---
 
-## 🏗️ Architecture
+## Architecture
 
 ### Tech Stack
-- **Frontend**: Vanilla JavaScript ES6 modules, HTML, CSS (no build step)
-- **Backend**: Node.js + Express (server.js)
-- **Database**: sql.js v1.11.0 (WASM SQLite — no native compilation)
+- **Frontend**: Vanilla JavaScript ES6 modules, HTML, CSS (no build step, no framework)
+- **Backend**: Node.js + Express
+- **Database**: sql.js v1.11.0 (WASM SQLite — no native compilation needed)
 - **Thumbnails**: Sharp (images), FFmpeg (video)
-- **Transcode/Export**: FFmpeg with NVENC GPU acceleration
-- **Compare To**: OpenRV (compiled from source at `C:\OpenRV\_build\stage\app\bin\rv.exe`)
-- **File Watching**: Chokidar
+- **Transcode/Export**: FFmpeg (NVENC GPU on Windows, VideoToolbox on macOS, CPU fallback everywhere)
+- **External Player**: OpenRV 3.1.0 (compiled from source, bundled in `tools/rv/`)
+- **File Watching**: Chokidar (cross-platform)
+- **Network Discovery**: UDP broadcast on port 7701 (dgram, zero dependencies)
+- **RV Plugin**: Python + PySide2/6 Qt dialog (auto-deployed on server start)
 - **ComfyUI**: Custom Python nodes + JS dynamic dropdown extension
-- **GPU**: NVIDIA RTX PRO 6000 Blackwell (for NVENC and VisionService)
+- **macOS Native App**: Objective-C / Cocoa framework wrapper
 
-### File Structure
+### File Structure (current, with line counts)
 ```
-MediaVault/
+Comfy-Asset-Manager/
 ├── src/
-│   ├── server.js              # Express server (95 lines, port 7700)
-│   ├── database.js            # sql.js wrapper with better-sqlite3–compatible API (419 lines)
+│   ├── server.js                 # Express server entry (154 lines)
+│   ├── database.js               # sql.js wrapper, better-sqlite3 compat API (448 lines)
 │   ├── routes/
-│   │   ├── projectRoutes.js   # Project + Sequence + Shot CRUD (~324 lines)
-│   │   ├── assetRoutes.js     # Asset import, browse, streaming, delete (~1125 lines)
-│   │   ├── exportRoutes.js    # FFmpeg transcode/export
-│   │   ├── roleRoutes.js      # Role CRUD
-│   │   ├── settingsRoutes.js  # Settings API + vault setup
-│   │   ├── comfyuiRoutes.js   # ComfyUI integration endpoints (266 lines)
-│   │   └── flowRoutes.js      # Flow/ShotGrid sync (pinned feature)
+│   │   ├── assetRoutes.js        # Import, browse, stream, delete, RV launch, compare (1782 lines)
+│   │   ├── projectRoutes.js      # Project + Sequence + Shot CRUD (349 lines)
+│   │   ├── settingsRoutes.js     # Settings, vault setup, RV plugin sync (487 lines)
+│   │   ├── exportRoutes.js       # FFmpeg transcode/export (488 lines)
+│   │   ├── comfyuiRoutes.js      # ComfyUI integration endpoints (283 lines)
+│   │   ├── flowRoutes.js         # Flow/ShotGrid sync (188 lines)
+│   │   ├── updateRoutes.js       # Auto-update from GitHub stable branch (178 lines)
+│   │   ├── serverRoutes.js       # Network discovery, multi-machine (160 lines)
+│   │   ├── transcodeRoutes.js    # Transcode queue management (109 lines)
+│   │   └── roleRoutes.js        # Role CRUD (107 lines)
 │   ├── services/
-│   │   ├── ThumbnailService.js  # Thumbnail generation (Sharp + FFmpeg)
-│   │   ├── MediaInfoService.js  # Metadata extraction (FFprobe)
-│   │   ├── FileService.js       # File operations
-│   │   ├── WatcherService.js    # Folder watching (Chokidar)
-│   │   └── FlowService.js      # Flow/ShotGrid API client
+│   │   ├── TranscodeService.js   # FFmpeg transcode engine (496 lines)
+│   │   ├── FileService.js        # File ops + cross-platform drive detection (474 lines)
+│   │   ├── FlowService.js        # Flow/ShotGrid API client (394 lines)
+│   │   ├── RVPluginSync.js       # Auto-deploy RV plugin to all RV installs (276 lines)
+│   │   ├── DiscoveryService.js   # UDP broadcast discovery on LAN (202 lines)
+│   │   ├── ThumbnailService.js   # Thumbnail gen — Sharp + FFmpeg (194 lines)
+│   │   ├── MediaInfoService.js   # Metadata extraction via FFprobe (164 lines)
+│   │   └── WatcherService.js     # Chokidar folder watching (163 lines)
 │   └── utils/
-│       ├── naming.js          # ShotGrid naming engine (245 lines)
-│       └── mediaTypes.js      # File ext → media type mapping
+│       ├── naming.js             # ShotGrid naming engine (294 lines)
+│       ├── sequenceDetector.js   # EXR/DPX frame sequence grouping (150 lines)
+│       └── mediaTypes.js         # File ext → media type mapping (114 lines)
 ├── public/
-│   ├── index.html             # Single-page app shell (442 lines)
-│   ├── css/styles.css         # Neutral gray theme for VFX work (1696+ lines)
-│   └── js/                    # Frontend ES6 modules
-│       ├── main.js            # Entry point, tab switching (100 lines)
-│       ├── browser.js         # Asset browser, grid/list, tree nav (1330 lines)
-│       ├── import.js          # File browser, import flow (392 lines)
-│       ├── export.js          # Export modal (352 lines)
-│       ├── player.js          # Media player modal
-│       ├── settings.js        # Settings tab
-│       ├── api.js             # API client helper
-│       ├── state.js           # Global state singleton
-│       └── utils.js           # Shared utilities (esc, formatSize, showToast)
-├── comfyui/
-│   ├── __init__.py            # ComfyUI node package init
-│   ├── mediavault_node.py     # 3 custom nodes (692 lines)
+│   ├── index.html                # SPA shell (636 lines)
+│   ├── popout-player.html        # Detachable media player (739 lines)
+│   ├── css/styles.css            # Neutral gray VFX theme (2622 lines)
 │   └── js/
-│       └── mediavault_dynamic.js  # Dynamic cascading dropdowns (192 lines)
-├── data/
-│   └── mediavault.db          # SQLite database (auto-created)
-├── thumbnails/                # Generated thumbnails
-├── scripts/                   # Migration scripts
+│       ├── player.js             # Built-in media player modal (2082 lines)
+│       ├── browser.js            # Asset browser, grid/list, tree nav, selection (1647 lines)
+│       ├── settings.js           # Settings tab + network discovery UI (970 lines)
+│       ├── import.js             # File browser, import flow (764 lines)
+│       ├── export.js             # Export modal (357 lines)
+│       ├── main.js               # Entry point, tab switching (93 lines)
+│       ├── utils.js              # Shared utilities (82 lines)
+│       ├── state.js              # Global state singleton (40 lines)
+│       └── api.js                # API client helper (26 lines)
+├── rv-package/                   # OpenRV plugin (auto-deployed by RVPluginSync)
+│   ├── mediavault_mode.py        # Full Qt asset picker + menus (746 lines)
+│   ├── PACKAGE                   # RV package manifest
+│   └── mediavault-1.0.rvpkg     # Pre-built rvpkg zip
+├── comfyui/
+│   ├── mediavault_node.py        # 3 custom ComfyUI nodes (873 lines)
+│   ├── js/mediavault_dynamic.js  # Cascading dropdown extension (423 lines)
+│   └── __init__.py
+├── scripts/
+│   ├── macos/main.m              # Native Cocoa .app source (397 lines)
+│   ├── create-macos-app.sh       # Builds .app bundle for /Applications (291 lines)
+│   ├── mac-install.sh            # One-line curl installer (59 lines)
+│   ├── build.js                  # JS obfuscation for production (133 lines)
+│   ├── flow_bridge.py            # Flow/ShotGrid Python bridge (311 lines)
+│   ├── launch_player.ps1         # Windows force-foreground helper (85 lines) — DEAD CODE
+│   ├── fix_collision_names.js    # DB migration utility (126 lines)
+│   └── fix_timestamps.js         # DB migration utility (85 lines)
+├── docs/
+│   └── BUILD_OPENRV_MACOS.md     # macOS OpenRV compile guide (341 lines)
+├── tools/rv/                     # Bundled OpenRV (downloaded during install)
+├── data/mediavault.db            # SQLite database (auto-created)
+├── thumbnails/                   # Generated thumbnails
+├── logs/                         # Server logs (macOS .app)
+├── install.sh                    # macOS/Linux installer (241 lines)
+├── install.bat                   # Windows installer (231 lines)
+├── install.command               # macOS Finder double-click wrapper
+├── start.sh / start.command      # macOS/Linux launcher (79 lines)
+├── start.bat                     # Windows launcher (51 lines)
+├── MediaVault-AutoRestart.bat    # Windows watchdog (38 lines)
+├── Getting Started.html          # Visual install guide (409 lines)
 ├── package.json
-├── start.bat / start.sh
-└── install.bat / install.sh
+└── .github/copilot-instructions.md  # THIS FILE
 ```
 
 ---
 
-## 📊 Database Schema
+## Cross-Platform Development Guide
 
-The database uses sql.js (WASM SQLite). All queries go through `database.js` which wraps the raw sql.js API to be compatible with better-sqlite3's `.prepare().run/get/all()` pattern.
+### CRITICAL: Keeping Mac and Windows Congruent
+
+The codebase is architected so that **95% of code is automatically cross-platform**. The Node.js backend and entire frontend have zero OS-specific logic. Platform differences are isolated to exactly 5 backend files and the installer/launcher scripts.
+
+### Where Platform Branches Live
+
+These are the ONLY files with `process.platform` checks. When adding features that touch these areas, **always add both platform branches in the same commit**:
+
+| File | What Branches | Lines |
+|------|---------------|-------|
+| `FileService.js` `getDrives()` | Drive letter scan (Win) vs `/Volumes` + `mount` parse (Mac) vs `/mnt`+`/media` (Linux) | ~100 lines |
+| `assetRoutes.js` `findRV()` | `rv.exe` paths (Win) vs `RV.app` bundle paths (Mac) vs `/usr/local/rv` (Linux) | ~90 lines |
+| `assetRoutes.js` `findRvPush()`, `isRvRunning()` | `tasklist` (Win) vs `pgrep` (Mac/Linux) | ~15 lines |
+| `ThumbnailService.js` `findFFmpeg()` | `C:\ffmpeg\` (Win) vs `/opt/homebrew/bin/` (Mac) vs `/usr/bin/` (Linux) | ~25 lines |
+| `MediaInfoService.js` `findFFprobe()` | Same pattern as FFmpeg | ~20 lines |
+| `FlowService.js` `_executeCommand()` | `python` (Win) vs `python3` (Mac/Linux) | 1 line |
+| `assetRoutes.js` `findFontFile()` | `C:/Windows/Fonts/` (Win) vs `/System/Library/Fonts/` (Mac) | ~10 lines |
+
+### Platform-Specific Files (not shared)
+
+| macOS Only | Windows Only |
+|------------|-------------|
+| `install.sh` (241 lines) | `install.bat` (231 lines) |
+| `start.sh` / `start.command` | `start.bat` (51 lines) |
+| `scripts/macos/main.m` (Cocoa .app) | `MediaVault-AutoRestart.bat` |
+| `scripts/create-macos-app.sh` | `scripts/launch_player.ps1` (DEAD CODE) |
+| `scripts/mac-install.sh` (curl installer) | — |
+
+### Everything Else is Shared
+- All route files, all services, all frontend JS/HTML/CSS
+- The `rv-package/mediavault_mode.py` plugin (Python + Qt, no OS branches)
+- All npm dependencies (Sharp ships pre-built binaries for all OS)
+
+### RV Plugin Auto-Sync System
+
+**`src/services/RVPluginSync.js`** automatically deploys the MediaVault RV plugin on every server startup:
+
+1. Builds a fresh `.rvpkg` (zip) from `rv-package/PACKAGE` + `mediavault_mode.py`
+2. Scans for ALL RV installations:
+   - Bundled: `tools/rv/RV.app/Contents/PlugIns/Packages/` (Mac) or `tools/rv/Packages/` (Win)
+   - System: `/Applications/RV*.app` (Mac) or `C:\Program Files\*RV*` (Win)
+   - Self-compiled: `~/OpenRV/_build/...` or `C:\OpenRV\_build\...`
+   - User-level: `~/.rv/Packages/` (all platforms — RV checks this automatically)
+3. Deploys with MD5 hash check — skips if already current
+4. Uses `zip` on Mac/Linux, PowerShell `Compress-Archive` on Windows
+
+**Workflow for plugin changes**: Edit `rv-package/mediavault_mode.py` on any platform → commit → push → other platform pulls → server restart auto-deploys the updated plugin to all RV installations.
+
+**Manual re-sync**: `POST /api/settings/sync-rv-plugin`
+
+---
+
+## Auto-Update System
+
+**`src/routes/updateRoutes.js`** + frontend in `settings.js` provide one-click updates:
+
+1. Frontend calls `GET /api/update/check` on page load
+2. Backend fetches `package.json` from GitHub `stable` branch, compares semver
+3. If newer: shows banner "A new version is available" with "Update Now" button
+4. User clicks Update → `POST /api/update/apply`:
+   - `git fetch origin stable`
+   - `git reset --hard origin/stable`
+   - `npm install`
+   - Server restarts itself
+5. On restart, `RVPluginSync.sync()` deploys any updated RV plugin
+
+**Branches**: `main` = development, `stable` = tested releases pushed to users.
+
+---
+
+## Network Discovery & Multi-Machine
+
+### DiscoveryService (UDP port 7701)
+- `src/services/DiscoveryService.js` — binds UDP socket, responds to discovery broadcasts
+- Protocol: JSON with magic `"DMV_DISCOVER"` header
+- Returns: server name, version, platform, asset count, port, local IPs
+
+### serverRoutes (/api/servers/*)
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/servers/info` | GET | This server's identity |
+| `/api/servers/discover` | GET | Scan LAN for other instances (2s timeout) |
+| `/api/servers/saved` | GET | Bookmarked servers from settings |
+| `/api/servers/save` | POST | Save a discovered server |
+| `/api/servers/saved/:index` | DELETE | Remove a saved server |
+| `/api/servers/ping` | POST | Check if a server is reachable |
+| `/api/servers/name` | POST | Set this server's friendly name |
+| `/api/servers/path-map` | GET/POST | Cross-OS path mappings (e.g. `/Volumes/NAS` = `Z:\`) |
+
+### Frontend
+- Network button in top bar opens server panel dropdown
+- Scan for servers, save favorites, manual add by IP
+- Path mapping UI for cross-platform NAS access (Mac sees `/Volumes/media`, Windows sees `Z:\media`)
+
+---
+
+## Network Drive Detection (FileService.getDrives)
+
+Smart volume detection for NAS/SAN/external drives:
+
+| Platform | How | What It Finds |
+|----------|-----|---------------|
+| **macOS** | Parses `mount` output, classifies by filesystem type | SMB/CIFS (Synology, etc), AFP, NFS, USB/Thunderbolt externals, APFS local |
+| **Windows** | Scans drive letters A-Z, runs `net use` for mapped network drives | Network mapped drives, local drives |
+| **Linux** | Scans `/mnt/*`, `/media/*`, parses `mount -t cifs,nfs,nfs4` | CIFS/NFS mounts, USB drives |
+
+Returns objects with `{ path, name, type, icon, server }` — `type` is `network`, `external`, or `local`. Sorted network-first. Filters out hidden volumes, .dmg mounts, system partitions.
+
+---
+
+## macOS Native .app Bundle
+
+### Architecture
+`/Applications/Comfy Asset Manager.app` is a native Cocoa binary that:
+1. Finds Node.js (checks homebrew `/opt/homebrew/bin/`, nvm, fnm, system PATH)
+2. Starts `node src/server.js` as a child process (NSTask)
+3. Shows a "Starting..." window with spinner while server boots
+4. Polls `http://localhost:7700` until ready
+5. Opens the default browser
+6. Lives in the Dock with a proper icon
+7. Menu bar: About, Open in Browser, Hide, Quit (Cmd+Q)
+8. Cmd+Q sends SIGTERM to the Node process, waits for clean shutdown
+9. Crash detection: if Node exits unexpectedly, offers restart dialog
+
+### Source Files
+- `scripts/macos/main.m` — Objective-C Cocoa AppDelegate (397 lines)
+- `scripts/create-macos-app.sh` — Build script:
+  - Compiles with `cc -framework Cocoa -fobjc-arc -mmacosx-version-min=12.0`
+  - Generates icon via Python3 (dark gradient + folder + play button triangle)
+  - Creates iconset with `sips` + `iconutil` -> `.icns`
+  - Assembles `.app` bundle with `Info.plist` + `PkgInfo`
+  - Ad-hoc code signs (`codesign --force --deep -s -`)
+  - Registers with Launch Services for Spotlight
+
+### Building
+```bash
+cd ~/Comfy-Asset-Manager
+bash scripts/create-macos-app.sh
+```
+Requires Xcode Command Line Tools (`xcode-select --install`).
+
+---
+
+## Database Schema
+
+sql.js (WASM SQLite). All queries go through `database.js` which wraps the raw sql.js API to be compatible with better-sqlite3's `.prepare().run/get/all()` pattern.
 
 ### Tables
-
 | Table | Purpose | Key Columns |
 |-------|---------|-------------|
 | `projects` | Top-level containers | id, name, code, type, flow_id |
@@ -93,33 +275,24 @@ The database uses sql.js (WASM SQLite). All queries go through `database.js` whi
 | `roles` | Pipeline steps (Comp, Light, Anim...) | id, name, code, color, icon, flow_id |
 | `settings` | Key-value configuration | key, value |
 | `watch_folders` | Monitored directories | id, path, project_id |
-| `comfyui_mappings` | ComfyUI node→asset persistence | workflow_id, node_id, asset_id |
+| `comfyui_mappings` | ComfyUI node->asset persistence | workflow_id, node_id, asset_id |
 | `activity_log` | Action audit trail | action, entity_type, entity_id, details |
 
-### ⚠️ CRITICAL: Shot Table Has BOTH sequence_id AND project_id
-
+### CRITICAL: Shot Table Has BOTH sequence_id AND project_id
 The `shots` table has both `sequence_id` and `project_id`. This is intentional because the shots query in `projectRoutes.js` filters on **both** columns:
-
 ```sql
 SELECT * FROM shots WHERE sequence_id = ? AND project_id = ?
 ```
-
-**If you migrate/restructure the hierarchy, you MUST update `project_id` on shots too!** Otherwise the shot dropdown in the Import tab will be empty. This was a real bug (January 2026).
+**If you migrate/restructure the hierarchy, you MUST update `project_id` on shots too!**
 
 ### Default Roles (seeded on first run)
 Comp, Light, Anim, FX, Enviro, Layout, Matchmove, Roto
 
 ---
 
-## 🏷️ ShotGrid Naming Convention
-
-All imported files follow ShotGrid/Flow Production Tracking naming standards.
+## ShotGrid Naming Convention
 
 ### Templates (naming.js)
-
-The folder path encodes the full hierarchy (Project/Sequence/Shot/), so filenames only
-need the most-specific identifier + step + version:
-
 | Context | Template | Example |
 |---------|----------|--------|
 | Shot + Role | `{shot}_{step}_v{version}` | `EDA1500_comp_v001.exr` |
@@ -127,126 +300,120 @@ need the most-specific identifier + step + version:
 | Project + Role | `{project}_{step}_v{version}` | `AP1_edit_v001.mov` |
 | Legacy (no role) | `{shot}_{take}_{counter}` | `EDA1500_T01_0001.mov` |
 
-### Available Tokens
-
-| Token | Description | Example |
-|-------|-------------|---------|
-| `{project}` | Project code | `AP1` |
-| `{sequence}` | Sequence code | `EDA` |
-| `{shot}` | Shot code | `EDA1500` |
-| `{step}` | Role/pipeline step (lowercase) | `comp` |
-| `{version}` | 3-digit zero-padded version | `001` |
-| `{take}` | Take number | `T01` |
-| `{type}` | Media type | `video` |
-| `{date}` | Date YYYYMMDD | `20260211` |
-| `{original}` | Original filename | `render_v5` |
-| `{counter}` | Auto-increment counter | `0001` |
-
-### ⚠️ CRITICAL: generateVaultName() Returns an Object
-
+### CRITICAL: generateVaultName() Returns an Object
 ```javascript
-const naming = require('./utils/naming');
-
-// ❌ WRONG — returns { vaultName, ext } object, not a string!
+// WRONG — returns { vaultName, ext } object, not a string!
 const vaultName = naming.generateVaultName({ ... });
 
-// ✅ CORRECT — destructure the result
+// CORRECT — destructure the result
 const nameResult = naming.generateVaultName({ ... });
 const vaultName = nameResult.vaultName;  // "AP1_EDA_EDA1500_comp_v001.exr"
 const ext = nameResult.ext;              // ".exr"
 ```
 
-This was a real bug that caused `[object Object]` in the database (February 2026).
+---
+
+## Import Modes
+
+| Mode | Behavior | `is_linked` |
+|------|----------|-------------|
+| **Move** (default) | Files moved into vault folder structure. Originals removed. | 0 |
+| **Copy** | Files copied into vault. Originals stay at source. | 0 |
+| **Register in Place** | Files stay where they are. Only DB reference created. | 1 |
+
+Register-in-place assets: `file_path` stores original absolute path, cannot be safely deleted from disk.
 
 ---
 
-## 📥 Import Modes
+## OpenRV Integration
 
-The import system supports three modes:
+### RV Plugin (rv-package/mediavault_mode.py)
 
-| Mode | Behavior | Use Case |
-|------|----------|----------|
-| **Move** (default) | Files are moved into the vault folder structure. Originals are removed. | Normal workflow |
-| **Copy** | Files are copied into the vault. Originals stay at source. | When you need to keep originals |
-| **Register in Place** | Files stay where they are. Only a DB reference is created. `is_linked = 1` | Network drives, large files |
+A 746-line Python plugin that adds a **MediaVault** menu to OpenRV's menu bar:
 
-### Register-in-Place Key Details
-- Sets `is_linked = 1` in the assets table
-- `file_path` stores the original absolute path (not a vault path)
-- `vault_name` still gets the ShotGrid-standard name (for display/search)
-- Protected from deletion — bulk delete warns if asset is linked
-- Must call `generateVaultName()` and destructure properly
+| Menu Item | Hotkey | What It Does |
+|-----------|--------|-------------|
+| Compare to... | Alt+V | Opens Qt asset picker dialog, loads selected asset as A/B wipe source |
+| Switch to... | Alt+Shift+V | Opens Qt asset picker dialog, replaces current source |
+| Prev Version | Alt+Left | Steps to previous version within same role |
+| Next Version | Alt+Right | Steps to next version within same role |
+
+**AssetPickerDialog**: Full Qt dialog (PySide2/PySide6) with:
+- Left: Project/Sequence/Shot hierarchy tree
+- Center: Scrollable asset table (Name, Role, Version, Date) with sorting
+- Right: Role filter checkboxes
+- Dark theme with teal (#2ec4b6) accent matching CAM's style
+
+**API endpoint**: `GET /api/assets/compare-targets-by-path?path=<filepath>` — returns related assets with hierarchical fallback (shot -> sequence -> project).
+
+**Deployment**: Auto-deployed by `RVPluginSync.sync()` on server startup. No manual install needed.
+
+### findRV() Path Priority (assetRoutes.js)
+1. User-configured `rv_path` setting
+2. Bundled: `tools/rv/RV.app/Contents/MacOS/RV` (Mac) or `tools/rv/bin/rv.exe` (Win)
+3. Self-compiled: `~/OpenRV/_build/...` (Mac) or `C:\OpenRV\_build\...` (Win)
+4. System installs: `/Applications/RV*.app` (Mac) or `C:\Program Files\*RV*` (Win) or `/opt/rv` (Linux)
+
+### OpenRV Build Status
+| Platform | Status | Binary Location |
+|----------|--------|----------------|
+| **macOS arm64** | Compiled from source, bundled as zip on GitHub Release `rv-3.1.0` | `tools/rv/RV.app` (642 MB zip) |
+| **Windows x64** | Compiled from source, bundled as zip on GitHub Release `rv-3.1.0` | `tools/rv/bin/rv.exe` (272 MB zip) |
+| **Linux** | Not pre-built — user compiles from OpenRV source | — |
+
+Both builds include ProRes, DNxHD, AAC, AC3 codecs enabled.
+
+### OpenRV macOS Build Reference
+Full build guide: `docs/BUILD_OPENRV_MACOS.md`
+- Build environment: Xcode 16.4, CMake, Qt 5.15.17, Python 3.11 (VFX CY2024)
+- Uses `rvcmds.sh` helper script for bootstrap/configure/build cycle
+- Pro codec flags: `-DRV_FFMPEG_NON_FREE_DECODERS_TO_ENABLE="dnxhd;prores;aac;aac_fixed;aac_latm;ac3;qtrle"`
+
+### OpenRV Windows Build Reference
+- Build environment: VS 2022 Build Tools, CMake 4.0.3, Qt 6.5.3, MSYS2, Strawberry Perl
+- **Must run from MSYS2 MinGW64 shell** (FFmpeg configure is a bash script)
+- `PKG_CONFIG_LIBDIR` must point to only OpenRV's built deps (not system OpenSSL)
+- `CMAKE_POLICY_VERSION_MINIMUM=3.5` required for CMake 4.x compatibility
+- AJA plugin disabled (moved `src/plugins/output/AJADevices` out of source tree)
 
 ---
 
-## 🎨 ComfyUI Integration
+## ComfyUI Integration
 
 ### Architecture
 ```
 ComfyUI (Python + LiteGraph)
-    ↓ junction link: custom_nodes\mediavault → C:\MediaVault\comfyui
-    ↓
-├── mediavault_node.py (3 nodes)
-│   ├── LoadFromMediaVault — Load image from vault by hierarchy selection
-│   ├── LoadVideoFrameFromMediaVault — Load video frame by frame number
-│   └── SaveToMediaVault — Save ComfyUI output back to vault
-│
-├── js/mediavault_dynamic.js (frontend extension, 258 lines)
-│   ├── Cascading dropdowns: Project → Sequence → Shot → Role → Asset
-│   ├── prefillFromLoadNode(saveNode) — auto-copies Project/Seq/Shot from Load node
-│   ├── "📂 Copy from Load Node" button on Save nodes
-│   ├── 🔄 Refresh button — re-queries projects, roles, and all dropdowns
-│   └── mvFetch() calls proxy routes on ComfyUI's PromptServer
-│
-└── Proxy Routes (registered in mediavault_node.py via PromptServer)
-    ├── /mediavault/projects
-    ├── /mediavault/sequences?project_id=X
-    ├── /mediavault/shots?project_id=X&sequence_id=Y
-    ├── /mediavault/roles
-    └── /mediavault/assets?project_id=X&...
+    |
+    custom_nodes/mediavault -> symlink to CAM's comfyui/ directory
+    |
+    ├── mediavault_node.py (3 nodes)
+    │   ├── LoadFromMediaVault — Load image by hierarchy selection
+    │   ├── LoadVideoFrameFromMediaVault — Load video frame by number
+    │   └── SaveToMediaVault — Save ComfyUI output back to vault
+    │
+    ├── js/mediavault_dynamic.js (frontend extension)
+    │   ├── Cascading dropdowns: Project -> Sequence -> Shot -> Role -> Asset
+    │   ├── prefillFromLoadNode(saveNode) — auto-copies hierarchy from Load node
+    │   ├── "Copy from Load Node" button on Save nodes
+    │   └── Refresh button — re-queries all dropdowns without restart
+    │
+    └── Proxy Routes (registered via PromptServer)
+        ├── /mediavault/projects
+        ├── /mediavault/sequences?project_id=X
+        ├── /mediavault/shots?project_id=X&sequence_id=Y
+        ├── /mediavault/roles
+        └── /mediavault/assets?project_id=X&...
 ```
 
-### ⚠️ CRITICAL: INPUT_TYPES Runs Once at Startup
+**CRITICAL**: `INPUT_TYPES` classmethod runs once at node registration. New projects require ComfyUI restart or the Refresh button.
 
-The Python `INPUT_TYPES` classmethod is called **once** when ComfyUI registers the node class. This means:
-- Project/sequence/shot lists are **baked in** at startup
-- New projects added to MediaVault won't appear until ComfyUI restarts
-- **WORKAROUND**: The 🔄 Refresh button in `mediavault_dynamic.js` now updates **projects and roles** via live API calls without restarting ComfyUI
-
-### ComfyUI File Locations
-- **Python path**: `C:\ComfyUI_windows_portable\python_embeded\python.exe`
-- **ComfyUI root**: `C:\ComfyUI_windows_portable\ComfyUI`
-- **Junction link**: `mklink /J ComfyUI\custom_nodes\mediavault C:\MediaVault\comfyui`
-
-### 3-Tier Asset Resolution (mediavault_node.py)
-When loading an asset, the node tries:
-1. **ComfyUI mapping** — persistent per-node memory (`comfyui_mappings` table)
-2. **Exact vault_name match** — search by filename
-3. **Fuzzy match** — partial filename search across the project
-
-### Save Node Auto-Populate from Load Node
-
-When a **SaveToMediaVault** node is added to the graph, `mediavault_dynamic.js` automatically scans `app.graph._nodes` for any existing Load node (`LoadFromMediaVault`, `LoadVideoFrameFromMediaVault`, `LoadVideoFromMediaVault`). If one is found with a real project selected, it copies the Project, Sequence, and Shot values to the Save node so you don't set them twice.
-
-- **Auto on creation**: `setTimeout(() => prefillFromLoadNode(node), 500)` runs after the graph settles
-- **Manual button**: "📂 Copy from Load Node" lets you re-sync at any time
-- `LOAD_NODE_TYPES` array lists all recognized Load node class names
-- Uses `cascadeUpdate()` to trigger the dropdown chain, then re-applies sequence/shot after the cascade resets them
+**Symlink setup**:
+- Windows: `mklink /J ComfyUI\custom_nodes\mediavault C:\MediaVault\comfyui`
+- Mac/Linux: `ln -s ~/Comfy-Asset-Manager/comfyui ~/ComfyUI/custom_nodes/mediavault`
 
 ---
 
-## 🎬 Export System
-
-- GPU-accelerated: H.264 NVENC, H.265/HEVC NVENC
-- CPU fallbacks: libx264, libx265
-- ProRes: 422 HQ, 422 LT, 422 Proxy
-- Resolution presets: Original, 4K, 1440p, 1080p, 720p, 540p, 480p
-- Copy mode (no re-encode) for container changes
-- Exported files auto-register back into the vault
-
----
-
-## 🔌 API Endpoints
+## API Endpoints Reference
 
 ### Projects
 | Endpoint | Method | Description |
@@ -255,62 +422,70 @@ When a **SaveToMediaVault** node is added to the graph, `mediavault_dynamic.js` 
 | `/api/projects` | POST | Create project |
 | `/api/projects/:id` | GET | Get project with stats |
 | `/api/projects/:id` | DELETE | Delete project + assets |
-| `/api/projects/:id/sequences` | GET | List sequences |
-| `/api/projects/:id/sequences` | POST | Create sequence |
-| `/api/projects/:projectId/sequences/:seqId/shots` | GET | List shots (filters on **both** seq + project) |
-| `/api/projects/:projectId/sequences/:seqId/shots` | POST | Create shot |
+| `/api/projects/:id/sequences` | GET/POST | List/create sequences |
+| `/api/projects/:projectId/sequences/:seqId/shots` | GET/POST | List/create shots |
 
 ### Assets
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/assets` | GET | List/filter assets |
 | `/api/assets/import` | POST | Import files (move/copy/register) |
-| `/api/assets/browse` | GET | Browse filesystem |
-| `/api/assets/:id` | GET | Get single asset |
-| `/api/assets/:id` | DELETE | Delete asset |
+| `/api/assets/browse` | GET | Browse filesystem (drives + directories) |
+| `/api/assets/:id` | GET/DELETE | Get/delete single asset |
 | `/api/assets/bulk-delete` | POST | Bulk delete |
 | `/api/assets/:id/stream` | GET | Stream media file |
 | `/api/assets/:id/thumbnail` | GET | Get thumbnail |
-
-### Roles
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/roles` | GET | List all roles |
-| `/api/roles` | POST | Create role |
-| `/api/roles/:id` | PUT | Update role |
-| `/api/roles/:id` | DELETE | Delete role |
+| `/api/assets/open-compare` | POST | Launch RV with A/B wipe comparison |
+| `/api/assets/compare-targets-by-path` | GET | Find related assets for RV plugin |
+| `/api/assets/viewer-status` | GET | Check if RV is running/available |
 
 ### Settings
 | Endpoint | Method | Description |
 |----------|--------|-------------|
-| `/api/settings` | GET | Get all settings |
-| `/api/settings` | POST | Save settings |
+| `/api/settings` | GET/POST | Get/save all settings |
 | `/api/settings/status` | GET | System status (vault configured, asset count) |
 | `/api/settings/setup-vault` | POST | First-time vault setup |
+| `/api/settings/sync-rv-plugin` | POST | Force re-deploy RV plugin to all installations |
 
-### ComfyUI
-| Endpoint | Method | Description |
-|----------|--------|-------------|
-| `/api/comfyui/projects` | GET | Projects for dropdown |
-| `/api/comfyui/sequences` | GET | Sequences (filterable) |
-| `/api/comfyui/shots` | GET | Shots (filterable) |
-| `/api/comfyui/roles` | GET | All roles |
-| `/api/comfyui/assets` | GET | Assets (filterable by hierarchy) |
-| `/api/comfyui/save` | POST | Save ComfyUI output to vault |
-
-### Export
+### Export & Transcode
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/export/presets` | GET | Available codecs + resolutions |
 | `/api/export/probe/:id` | GET | FFprobe asset info |
 | `/api/export` | POST | Start export job |
+| `/api/transcode` | POST | Start transcode job |
+
+### Update
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/update/check` | GET | Check GitHub stable branch for new version |
+| `/api/update/version` | GET | Current local version |
+| `/api/update/apply` | POST | Pull latest + npm install + restart |
+| `/api/update/health` | GET | Health check (for restart detection) |
+
+### Network Discovery
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/servers/info` | GET | This server's identity |
+| `/api/servers/discover` | GET | Scan LAN for other instances |
+| `/api/servers/saved` | GET/POST | Bookmarked servers |
+| `/api/servers/ping` | POST | Check server reachability |
+| `/api/servers/path-map` | GET/POST | Cross-OS path mappings |
+
+### Roles, ComfyUI, Flow
+| Endpoint | Method | Description |
+|----------|--------|-------------|
+| `/api/roles` | GET/POST | List/create roles |
+| `/api/roles/:id` | PUT/DELETE | Update/delete role |
+| `/api/comfyui/*` | GET/POST | ComfyUI dropdown data + save |
+| `/api/flow/*` | GET/POST | Flow/ShotGrid sync (awaiting credentials) |
 
 ---
 
-## 🖥️ Frontend Architecture
+## Frontend Architecture
 
 ### Module Structure
-All frontend code uses ES6 modules loaded from `/js/main.js`:
+All frontend code uses ES6 modules loaded from `/js/main.js`. **No React, no build step, no JSX.** Use `document.createElement()` or template literals.
 
 | Module | Purpose | Key Exports |
 |--------|---------|-------------|
@@ -320,295 +495,47 @@ All frontend code uses ES6 modules loaded from `/js/main.js`:
 | `browser.js` | Projects grid, tree nav, asset grid/list, selection, drag-drop | `loadProjects()`, `loadTree()` |
 | `import.js` | File browser, import flow, rename preview | `loadImportTab()` |
 | `export.js` | Export modal with codec/resolution selection | `showExportModal()` |
-| `player.js` | Built-in media player modal | `openPlayer()` |
-| `settings.js` | Settings tab, roles, watch folders | `loadSettings()`, `loadRoles()` |
+| `player.js` | Built-in media player modal + popout | `openPlayer()` |
+| `settings.js` | Settings tab, roles, watch folders, network discovery, update banner | `loadSettings()`, `loadRoles()` |
 | `utils.js` | Shared utilities | `esc()`, `formatSize()`, `showToast()` |
 
 ### Tab System
-4 tabs controlled by `data-tab` attributes:
-- **Projects** — Project cards grid
-- **Browser** — Tree + asset grid/list with filter bar and selection toolbar
-- **Import** — File browser + import settings with ShotGrid naming preview
-- **Settings** — Vault config, naming, player, ComfyUI, Flow, roles, watch folders
+4 tabs: **Projects**, **Browser**, **Import**, **Settings** — controlled by `data-tab` attributes.
 
 ### CSS Theme
-Neutral gray theme designed for VFX / color-critical work:
-- No saturated accent colors that could bias color perception
+Neutral gray for VFX / color-critical work. No saturated accent colors.
 - Variables: `--bg-dark: #1a1a1a`, `--bg-card: #222222`, `--accent: #888888`
 - Media type colors: video (#88aacc), image (#88aa88), audio (#aa88aa), EXR (#bb9966)
 
-### Tooltip System (February 2026)
-Two approaches available:
-1. **`title=""` attribute** — Native browser tooltip, simple hover
-2. **`.has-tip` class + `data-tip`** — Custom styled CSS tooltip (positioned above, max 280px)
-3. **`.help-icon`** — Small "?" circle next to labels with hover tooltip
-
-```html
-<!-- Simple native tooltip -->
-<button title="Click to refresh the asset list">🔄</button>
-
-<!-- Custom styled tooltip -->
-<span class="has-tip" data-tip="Detailed explanation here">Label</span>
-
-<!-- Help icon next to a label -->
-<label>Role <span class="help-icon" data-tip="Pipeline step (Comp, Light, Anim). Drives the {step} token.">?</span></label>
-```
+### All onclick handlers must be on `window`
+ES6 modules scope functions. Expose via `window.functionName = functionName` for onclick in HTML.
 
 ---
 
-## 📁 Global State (state.js)
+## Server Startup Sequence
 
-```javascript
-export const state = {
-    currentTab: 'projects',
-    currentProject: null,
-    currentSequence: null,
-    currentShot: null,
-    currentRole: null,       // { id, name, code, color, icon }
-    projects: [],
-    assets: [],
-    roles: [],
-    viewMode: 'grid',         // 'grid' or 'list'
-    
-    // Import
-    importBrowsePath: '',
-    selectedFiles: [],        // { name, path, size, mediaType, icon }
-    browsedFiles: [],
-    lastClickedIndex: -1,
-    
-    // Player
-    playerAssets: [],
-    playerIndex: 0,
-    
-    // Selection (bulk operations)
-    selectedAssets: [],       // Array of asset IDs
-    lastClickedAsset: -1,
-    
-    settings: {},
-    vaultConfigured: false,
-};
-```
+When `node src/server.js` runs (or the .app launches it):
+
+1. `initDb()` — Initialize sql.js WASM SQLite
+2. `app.listen(PORT)` — Start Express on port 7700
+3. `WatcherService.start()` — Resume folder watching
+4. **`RVPluginSync.sync()`** — Build and deploy MediaVault RV plugin to all detected RV installations
+5. `DiscoveryService.start()` — Bind UDP 7701 for network discovery
+6. Register SIGINT/SIGTERM handlers for graceful shutdown
 
 ---
 
-## 🐛 Known Issues & Lessons Learned
-
-### Register-in-Place Import (4 bugs fixed February 2026)
-1. `imported` variable was undefined in register-in-place branch (only defined in move/copy)
-2. Register-in-place wasn't calling `generateVaultName()` — used raw `originalName`
-3. `generateVaultName()` returns `{ vaultName, ext }` but was assigned directly to a string variable
-4. Thumbnail generation and activity logging referenced wrong variable (`imported.vaultPath` vs local `vaultPath`)
-
-### Shot Dropdown Empty After DB Migration
-When restructuring the hierarchy (moving shots between projects), you must update `project_id` on the shots table. The API filters on `WHERE sequence_id = ? AND project_id = ?`.
-
-### ComfyUI Projects Not Appearing
-`INPUT_TYPES` classmethod runs once at node registration. New projects require a ComfyUI restart or the 🔄 Refresh button (which now fetches projects too).
-
----
-
-## ⚠️ Important Rules for AI Agents
-
-1. **Port is 7700** — `http://localhost:7700`
-2. **Database is sql.js (WASM)** — NOT better-sqlite3. The wrapper in database.js provides compatibility, but the raw API is different.
-3. **`generateVaultName()` returns `{ vaultName, ext }`** — Always destructure! Never assign directly to a string.
-4. **Shots have both `sequence_id` AND `project_id`** — Update both when migrating.
-5. **Frontend is plain ES6 modules** — No React, no build step, no JSX. Use `document.createElement()` or template literals.
-6. **All onclick handlers must be on `window`** — ES6 modules scope functions; expose via `window.functionName = functionName`.
-7. **Database auto-saves on every write** — `_save()` is called after each prepared statement `.run()`. Batch operations should use `wrapper.transaction()`.
-8. **ComfyUI junction link** — `custom_nodes\mediavault` → `C:\MediaVault\comfyui`. Don't break this symlink.
-9. **Neutral gray theme** — No saturated accent colors. This is for VFX color-critical work.
-10. **FFmpeg is required** — For thumbnails, transcoding, streaming, and export.
-11. **`is_linked = 1` means register-in-place** — These assets can't be safely deleted from disk. Warn the user.
-12. **Settings are key-value pairs in the `settings` table** — Use `getSetting(key)` / `setSetting(key, value)`.
-13. **Activity log** — Use `logActivity(action, entityType, entityId, details)` for audit trail.
-14. **Always test with the server running** — `node src/server.js` from the MediaVault directory.
-
----
-
-## 🎬 OpenRV — Compare To Viewer (February 2026)
-
-**Status**: ✅ BUILT FROM SOURCE — rv.exe compiled and integrated  
-**Location**: `C:\OpenRV` (source), `C:\OpenRV\_build\stage\app\bin\rv.exe` (binary, 12.4 MB)  
-**License**: Apache 2.0 (free, open-source alternative to commercial ShotGrid RV)
-
-### What OpenRV Is
-OpenRV is a professional media review tool with A/B wipe comparison. It's the open-source version of Autodesk's ShotGrid RV. We compiled it from source and it is now MediaVault's **default and only external player** (mrViewer2 was fully removed in February 2026).
-
-### Build Environment (DO NOT CHANGE without full rebuild)
-| Component | Version | Location |
-|-----------|---------|----------|
-| CMake | 4.0.3 | `C:\Program Files\CMake` |
-| MSVC | v14.40.33807 | VS 2022 Build Tools |
-| Qt | 6.5.3 | `C:\Qt6\6.5.3\msvc2019_64` |
-| Strawberry Perl | latest | `C:\Strawberry` |
-| VFX Platform | CY2024 | Boost 1.82, Python 3.11 |
-| MSYS2 | latest | Required for FFmpeg configure step |
-
-### Build Commands (run in MSYS2 MinGW64 shell)
-```bash
-# CRITICAL environment variables (MUST be set before any build)
-export PKG_CONFIG_LIBDIR="/c/OpenRV/_build/RV_DEPS_DAV1D/install/lib/pkgconfig:/c/OpenRV/_build/RV_DEPS_OPENSSL/install/lib/pkgconfig:/c/OpenRV/_build/RV_DEPS_ZLIB/install/share/pkgconfig:/c/OpenRV/_build/RV_DEPS_JPEGTURBO/install/lib/pkgconfig"
-unset PKG_CONFIG_PATH
-export CMAKE_POLICY_VERSION_MINIMUM=3.5
-
-# CMake configure
-cmake -B _build -G "Visual Studio 17 2022" -A x64 \
-    -DCMAKE_BUILD_TYPE=Release \
-    -DRV_VFX_CY=CY2024 \
-    -DRV_DEPS_QT_LOCATION="C:/Qt6/6.5.3/msvc2019_64" \
-    -DRV_DEPS_STRAWBERRY_PERL_LOCATION="C:/Strawberry"
-
-# Build (full suite: rv.exe, rvio.exe, rvshell.exe, etc.)
-cmake --build _build --target main_executable --config Release -j 4
-cmake --build _build --target executables_with_plugins --config Release -j 4
-```
-
-### Build Scripts
-| Script | Purpose |
-|--------|---------|
-| `C:\OpenRV\build_no_aja.sh` | Original successful build (AJA disabled, default codecs) |
-| `C:\OpenRV\build_enable_codecs.sh` | Rebuild with ProRes, DNxHD, AAC, AC3 enabled |
-
-### AJA Plugin Disabled
-The AJA professional video I/O plugin was causing link errors (`ajantv2_vs143_MT.lib` not found). Fixed by:
-1. Moving `src/plugins/output/AJADevices` → `C:\OpenRV\AJADevices.disabled` (out of source tree)
-2. Commenting out `INCLUDE(aja.cmake)` in `cmake/dependencies/CMakeLists.txt`
-- Result: "no output plugins found" warning on launch — harmless, just means no AJA hardware output
-
-### FFmpeg Codec Support
-OpenRV's FFmpeg build disables some codecs by default (licensing). To enable them, pass CMake flags:
-```bash
-# Enable ProRes, DNxHD, AAC, AC3, QT Animation
-cmake -B _build ... \
-    -DRV_FFMPEG_NON_FREE_DECODERS_TO_ENABLE="dnxhd;prores;aac;aac_fixed;aac_latm;ac3;qtrle" \
-    -DRV_FFMPEG_NON_FREE_ENCODERS_TO_ENABLE="dnxhd;prores;qtrle"
-```
-
-**Current codec status (after codec rebuild):**
-| Codec | Status | Notes |
-|-------|--------|-------|
-| H.264 (MP4) | ✅ Works | Enabled by default |
-| H.265/HEVC | ✅ Works | Enabled by default |
-| ProRes | ✅ Enabled | Via `build_enable_codecs.sh` |
-| DNxHD/DNxHR | ✅ Enabled | Via `build_enable_codecs.sh` |
-| AAC audio | ✅ Enabled | MP4 audio support |
-| EXR/PNG/JPEG/TIFF/DPX | ✅ Works | Native I/O plugins (no FFmpeg needed) |
-| VP9 | ❌ Disabled | Licensing |
-
-**If codec rebuild hasn't run yet**, only H.264/H.265 and image formats work. ProRes/DNxHD will show "Unsupported codec_id" error.
-
-### ⚠️ Build Gotchas (Lessons Learned the Hard Way)
-1. **PKG_CONFIG_LIBDIR is critical** — Without it, FFmpeg's configure finds MSYS2 MinGW's OpenSSL instead of OpenRV's, causing "openssl not found" errors. Must point to only OpenRV's built deps.
-2. **CMAKE_POLICY_VERSION_MINIMUM=3.5** — CMake 4.x breaks without this. OpenRV's CMakeLists.txt uses old policy syntax.
-3. **Build must be run from MSYS2 MinGW64** — FFmpeg's configure is a bash script, won't work in PowerShell.
-4. **AJA directory must be physically moved out** — Renaming to `.disabled` doesn't work because CMake's `FILE(GLOB)` still finds its CMakeLists.txt.
-5. **Don't delete FFmpeg stamp files from PowerShell while rv.exe is running** — File locks prevent copy operations.
-6. **To force FFmpeg rebuild**: Delete stamp files in `_build/cmake/dependencies/RV_DEPS_FFMPEG-prefix/src/RV_DEPS_FFMPEG-stamp/Release/` (configure, build, install, done).
-
-### MediaVault Integration (Compare To)
-
-**Modified files:**
-| File | Changes |
-|------|---------|
-| `src/routes/assetRoutes.js` | `findRV()` with 3-tier path discovery; `launchInRV()` launcher; `POST /api/assets/open-compare` with `viewer: 'rv'` and `-wipe` flag |
-| `public/index.html` | "🔀 Compare in RV" button in selection toolbar; "RV / OpenRV Path" setting field |
-| `public/js/browser.js` | `launchCompareToInViewer()` opens compare in RV; "Compare To" submenu uses RV |
-| `public/js/settings.js` | `rv_path` in settings load/save |
-
-**How Compare To works:**
-1. User selects 2+ assets → clicks "🔀 Compare in RV" (or right-click → Compare To → pick second asset)
-2. Frontend calls `POST /api/assets/open-compare` with `{ assetIds: [id1, id2], viewer: 'rv' }`
-3. Backend resolves file paths, kills existing rv.exe, launches `rv.exe file1 file2 -wipe`
-4. RV opens in wipe comparison mode
-
-**`findRV()` path priority:**
-1. Settings → `rv_path` (user-configured)
-2. `C:\OpenRV\_build\stage\app\bin\rv.exe` (our build)
-3. Standard install locations (`C:\Program Files\...`)
-
-**`launchCompareToInViewer()`:**
-1. Calls `POST /api/assets/open-compare` with `{ assetIds, viewer: 'rv' }`
-2. RV opens with `-wipe` flag for side-by-side comparison
-3. If RV not found → shows error toast
-
-### ⚠️ Known Issue: Route Order Bug (Pre-existing)
-`router.get('/:id')` at line ~157 in `assetRoutes.js` catches before `router.get('/viewer-status')` at line ~1450. The viewer-status endpoint works from browser.js code but fails on direct API calls. Fix: move `/viewer-status` route above `/:id`.
-
----
-
-## 📌 Pinned Future Features
-
-### 🔀 Flow/ShotGrid API Integration
-**Status**: Pinned — awaiting credentials  
-**Goal**: Sync project structure from Autodesk Flow (ShotGrid)  
-**Files**: `src/routes/flowRoutes.js`, `src/services/FlowService.js`  
-Already has UI in Settings tab (Site URL, Script Name, API Key fields + Test/Sync buttons).
-
-### 🤖 VisionService Camera Integration
-**Status**: Separate project at `C:\VisionService` (port 5100)  
-**Goal**: AI object detection (YOLO) on camera feeds  
-Potential future link: auto-import detected clips into DMV.
-
-### 📋 Review Mode — FFmpeg Burn-In Overlays
-**Status**: Pinned — blocked by FFmpeg drawtext bug  
-**Goal**: Open assets in RV with burned-in review overlays (project hierarchy, frame counter, resolution, watermark, safe areas)  
-**Commit so far**: `bb8f8e8` — endpoint working. Now launches in RV instead of mrViewer2.
-
-**What's done:**
-- `POST /api/assets/:id/open-review` endpoint in `assetRoutes.js` (generates temp file with overlays, opens in RV)
-- `buildReviewFilters(opts)` function generates FFmpeg `-vf` drawtext/drawbox chain
-- `findFontFile()` helper resolves platform font paths for FFmpeg
-
-**The Bug:**
-FFmpeg's drawtext filter fails when chaining 3+ filters that use expressions (`y=ih-26`, `x=w-text_w-10`). Error: `Failed to configure input pad on Parsed_drawtext_N`. Static numeric x/y values work fine; expressions break it. Same result with `-vf` and `-filter_complex`. Tested extensively — it's an FFmpeg filtergraph issue, not escaping.
-
-**Fix approaches when resuming:**
-1. **Pre-calculate expressions** — ffprobe the video dimensions first, compute `ih-26` as actual pixels, use static values
-2. **`-filter_script`** — write filters to a temp `.txt` file (may bypass parser)
-3. **Two-pass** — render in 2 FFmpeg calls (2 drawtext max per pass)
-
-**Cleanup needed:** Delete `test_ffmpeg_filter.js` and `test_arial.ttf` from project root.
-
----
-
-## 🧪 Development Commands
-
-```bash
-# Start server (port 7700)
-cd C:\MediaVault
-node src/server.js
-
-# Or use launcher
-start.bat       # Windows
-./start.sh      # Mac/Linux
-
-# Dev mode with auto-restart
-npm run dev
-
-# Install dependencies
-npm install
-```
-
-### Common Issues
-- **Port 7700 in use**: `start.bat` auto-clears it. Manual: `Get-NetTCPConnection -LocalPort 7700 | ForEach-Object { Stop-Process -Id $_.OwningProcess -Force }`
-- **Database locked**: Only one server process can access the DB. Kill other node processes.
-- **ComfyUI node not loading**: Check junction link exists: `dir ComfyUI\custom_nodes\mediavault`
-- **Thumbnails not generating**: Verify FFmpeg is on PATH: `ffmpeg -version`
-
----
-
-## 🔄 Git Workflow
+## Git Workflow & Deployment
 
 ```bash
 # Development on main
-git add -A
-git commit -m "feat: Description"
-git push origin main
+git add -A && git commit -m "feat: Description" && git push origin main
 
-# Deploy to stable
-git push origin main:stable
+# Deploy to stable (triggers auto-update for users)
+git checkout stable && git merge main --ff-only && git push origin stable && git checkout main
 ```
+
+Users pick up updates automatically via the in-app update banner.
 
 ### Commit Prefixes
 - `feat:` — New feature
@@ -619,4 +546,61 @@ git push origin main:stable
 
 ---
 
-*Built for VFX artists who need fast, local media management without cloud services.* 🗄️
+## Important Rules for AI Agents
+
+1. **Port is 7700** — `http://localhost:7700`
+2. **Database is sql.js (WASM)** — NOT better-sqlite3. The wrapper in database.js provides compatibility.
+3. **`generateVaultName()` returns `{ vaultName, ext }`** — Always destructure! Never assign to a string.
+4. **Shots have both `sequence_id` AND `project_id`** — Update both when migrating.
+5. **Frontend is plain ES6 modules** — No React, no build step. `document.createElement()` or template literals.
+6. **All onclick must be on `window`** — ES6 modules scope functions.
+7. **Database auto-saves on every write** — `_save()` called after each `.run()`. Use `wrapper.transaction()` for batches.
+8. **Neutral gray theme** — No saturated accent colors. VFX color-critical work.
+9. **FFmpeg is required** — For thumbnails, transcoding, streaming, export.
+10. **`is_linked = 1` = register-in-place** — Cannot safely delete from disk. Warn the user.
+11. **Platform branches in exactly 5 files** — See "Cross-Platform Development Guide" above. Always add both branches.
+12. **RV plugin auto-deploys** — Edit `rv-package/mediavault_mode.py`, commit, push. Server restart deploys everywhere.
+13. **Auto-update via stable branch** — Push to `stable` = users get the update.
+14. **ComfyUI junction/symlink** — `custom_nodes/mediavault` points to CAM's `comfyui/` directory.
+15. **Settings are key-value** — `getSetting(key)` / `setSetting(key, value)` in the `settings` table.
+16. **Activity log** — `logActivity(action, entityType, entityId, details)` for audit trail.
+
+---
+
+## Known Issues & Pinned Features
+
+### FFmpeg Burn-In Bug (Pinned)
+FFmpeg's drawtext fails when chaining 3+ filters with expressions (`y=ih-26`). Fix: pre-calculate dimensions with ffprobe, use static pixel values.
+
+### Flow/ShotGrid Integration (Pinned — awaiting credentials)
+UI in Settings tab ready. `flowRoutes.js` + `FlowService.js` + `flow_bridge.py` implemented. Needs ShotGrid API credentials.
+
+### Route Order Bug (Known)
+`router.get('/:id')` catches before `/viewer-status` in assetRoutes.js. Move `/viewer-status` above `/:id` to fix.
+
+### Dead Code
+- `scripts/launch_player.ps1` — Windows force-foreground helper, never called from any JS code.
+- `test_ffmpeg_filter.js`, `test_arial.ttf` — Cleanup needed from root directory.
+
+---
+
+## Recent Development History (February 2026)
+
+| Commit | What Changed |
+|--------|-------------|
+| `8913e48` | Auto-deploy RV plugin on server startup (cross-platform sync) |
+| `dc69339` | Native macOS .app bundle for /Applications |
+| `58aceae` | Network discovery & multi-machine server switcher |
+| `879ffb9` | Smart network drive detection (Synology, SMB, AFP, NFS) |
+| `e02e6e8` | Detect Intel RV, offer arm64 download |
+| `f4b71da` | Getting Started.html visual install guide |
+| `cbe5327` | One-line Mac installer (curl pipe) |
+| `b32a7ca` | Idiot-proof installer UX |
+| `64584ba` | macOS OpenRV support + cross-platform findRV() |
+| `c355051` | Rebrand to Comfy Asset Manager v1.1.0 |
+| `5881a61` | Qt asset picker dialog in RV plugin |
+| `9e26d8a` | Copyright headers + JS obfuscation build step |
+
+---
+
+*Built for VFX artists who need fast, local media management without cloud services.*
