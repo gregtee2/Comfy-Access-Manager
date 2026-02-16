@@ -191,12 +191,20 @@ function findRVPackageDirs() {
 }
 
 /**
- * Deploy the plugin rvpkg to a target Packages directory.
+ * Deploy the plugin rvpkg to a target Packages directory AND
+ * extract the loose .py to the sibling Python/ directory.
+ *
+ * RV requires BOTH:
+ *   PlugIns/Packages/mediavault-1.0.rvpkg   (package archive)
+ *   PlugIns/Python/mediavault_mode.py        (loose file RV actually imports)
+ *
+ * For ~/.rv/Packages the Python dir is ~/.rv/Python.
+ *
  * Returns true if deployed, false if skipped/failed.
  */
 function deployTo(rvpkgBuffer, targetDir, hash) {
     try {
-        // Ensure directory exists
+        // Ensure Packages directory exists
         if (!fs.existsSync(targetDir)) {
             fs.mkdirSync(targetDir, { recursive: true });
         }
@@ -204,15 +212,18 @@ function deployTo(rvpkgBuffer, targetDir, hash) {
         const targetFile = path.join(targetDir, RVPKG_FILENAME);
         const hashFile = path.join(targetDir, `.${PLUGIN_NAME}.hash`);
 
-        // Check if already up to date
-        if (fs.existsSync(targetFile) && fs.existsSync(hashFile)) {
+        // Check if already up to date (both rvpkg AND loose .py must exist)
+        const pythonDir = path.join(targetDir, '..', 'Python');
+        const loosePy = path.join(pythonDir, 'mediavault_mode.py');
+
+        if (fs.existsSync(targetFile) && fs.existsSync(hashFile) && fs.existsSync(loosePy)) {
             const existingHash = fs.readFileSync(hashFile, 'utf8').trim();
             if (existingHash === hash) {
                 return false; // Already current
             }
         }
 
-        // Remove any old versions of our plugin
+        // Remove any old versions of our plugin rvpkg
         try {
             for (const f of fs.readdirSync(targetDir)) {
                 if (f.startsWith(PLUGIN_NAME) && f.endsWith('.rvpkg')) {
@@ -224,6 +235,16 @@ function deployTo(rvpkgBuffer, targetDir, hash) {
         // Write the new rvpkg and hash marker
         fs.writeFileSync(targetFile, rvpkgBuffer);
         fs.writeFileSync(hashFile, hash);
+
+        // Also deploy the loose .py into sibling Python/ directory
+        // This is what RV actually imports at startup
+        const pySrc = path.join(PLUGIN_SRC, 'mediavault_mode.py');
+        if (fs.existsSync(pySrc)) {
+            if (!fs.existsSync(pythonDir)) {
+                fs.mkdirSync(pythonDir, { recursive: true });
+            }
+            fs.copyFileSync(pySrc, loosePy);
+        }
 
         return true;
     } catch (err) {
@@ -258,7 +279,8 @@ function sync() {
         const result = deployTo(rvpkgBuffer, dir, hash);
         if (result) {
             deployed++;
-            console.log(`[RVPlugin] ✓ Deployed to ${dir}`);
+            const pyDir = path.join(dir, '..', 'Python');
+            console.log(`[RVPlugin] ✓ Deployed to ${dir} + ${pyDir}`);
         } else {
             skipped++;
         }
