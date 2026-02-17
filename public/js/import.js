@@ -52,7 +52,14 @@ async function browseTo(dirPath) {
 
 function navigateUp() {
     if (!state.importBrowsePath) return;
-    const parent = state.importBrowsePath.replace(/[\\/][^\\/]+$/, '') || '';
+    const current = state.importBrowsePath;
+    // Detect drive root: "C:\" or "C:" on Windows, "/" on Mac/Linux
+    const isDriveRoot = /^[A-Z]:[\\/]?$/i.test(current) || current === '/';
+    if (isDriveRoot) {
+        browseTo('');  // Back to drive/volume list
+        return;
+    }
+    const parent = current.replace(/[\\/][^\\/]+$/, '') || '';
     browseTo(parent);
 }
 
@@ -61,8 +68,8 @@ function renderFileBrowser(result) {
 
     let html = '';
 
-    // Parent directory
-    if (result.parent) {
+    // Parent directory (parent='' means "go to drive list", parent=null means "already at top")
+    if (result.parent != null) {
         html += `<div class="fb-entry" ondblclick="browseTo('${escAttr(result.parent)}')">
             <span class="fb-icon">⬆️</span>
             <span class="fb-name">..</span>

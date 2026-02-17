@@ -131,9 +131,12 @@ router.get('/browse', (req, res) => {
     }
     const parentDir = path.dirname(dir);
 
+    // If parentDir === dir, we're at a filesystem root (e.g. C:\ or /).
+    // Return parent='' to signal "go back to drive/volume list".
+    const isRoot = parentDir === dir || parentDir === '.';
     res.json({
         path: dir,
-        parent: parentDir !== dir ? parentDir : null,
+        parent: isRoot ? '' : parentDir,
         entries,
     });
 });
