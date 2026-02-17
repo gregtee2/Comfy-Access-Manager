@@ -245,6 +245,12 @@
                     <div class="qa-drop-zone" id="qaDropZone">
                         <span>⭐ Drop to save</span>
                     </div>
+
+                    <!-- Inbox Section -->
+                    <div class="inbox-section" id="inboxSection" style="display:none">
+                        <h3>📥 Inboxes</h3>
+                        <div id="inboxList" class="inbox-list"></div>
+                    </div>
                 </div>
 
                 <!-- File picker panel -->
@@ -578,11 +584,14 @@
                 </div>
 
                 <div class="settings-section">
-                    <h3>👁️ Watch Folders <span class="help-icon" data-tip="Monitored directories that trigger notifications when new files appear. Great for render farm outputs or shared drives.">?</span></h3>
+                    <h3>� Watch Folders <span class="help-icon" data-tip="Set up inbox folders for content ingestion. Link a folder to a project, then use the Import tab to ingest files with proper naming conventions. Great for Grok/AI-generated content or render outputs.">?</span></h3>
                     <div id="watchFolderList" class="watch-list"></div>
-                    <div class="input-row">
-                        <input type="text" id="newWatchPath" placeholder="Folder path to watch...">
+                    <div class="input-row" style="flex-wrap:wrap;gap:6px;">
+                        <input type="text" id="newWatchPath" placeholder="Folder path to watch..." style="flex:1;min-width:200px;">
                         <button class="btn-browse" onclick="openFolderPicker('newWatchPath')" title="Browse...">📁</button>
+                        <select id="newWatchProject" style="flex:0.5;min-width:140px;">
+                            <option value="">-- Project --</option>
+                        </select>
                         <button onclick="addWatchFolder()">+ Add</button>
                     </div>
                 </div>

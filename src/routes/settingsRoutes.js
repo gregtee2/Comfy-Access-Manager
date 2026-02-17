@@ -22,7 +22,7 @@ const FileService = require('../services/FileService');
 const MediaInfoService = require('../services/MediaInfoService');
 const ThumbnailService = require('../services/ThumbnailService');
 const RVPluginSync = require('../services/RVPluginSync');
-const { detectMediaType } = require('../utils/mediaTypes');
+const { detectMediaType, isMediaFile } = require('../utils/mediaTypes');
 
 // GET /api/settings — All settings
 router.get('/', (req, res) => {
@@ -319,6 +319,112 @@ router.post('/watches', (req, res) => {
 router.delete('/watches/:id', (req, res) => {
     WatcherService.removeWatch(parseInt(req.params.id));
     res.json({ success: true });
+});
+
+// GET /api/settings/watches/inbox — Watch folders with file counts for Import tab inbox
+router.get('/watches/inbox', (req, res) => {
+    const watches = WatcherService.getAll();
+    const results = [];
+
+    for (const w of watches) {
+        let fileCount = 0;
+        try {
+            if (fs.existsSync(w.path)) {
+                const entries = fs.readdirSync(w.path);
+                fileCount = entries.filter(f => {
+                    try {
+                        const fullPath = path.join(w.path, f);
+                        return fs.statSync(fullPath).isFile() && isMediaFile(f);
+                    } catch { return false; }
+                }).length;
+            }
+        } catch {}
+        results.push({ ...w, file_count: fileCount });
+    }
+
+    res.json(results);
+});
+
+// GET /api/settings/watches/:id/files — List media files in a watch folder
+router.get('/watches/:id/files', (req, res) => {
+    const db = getDb();
+    const watch = db.prepare('SELECT * FROM watch_folders WHERE id = ?').get(parseInt(req.params.id));
+    if (!watch) return res.status(404).json({ error: 'Watch folder not found' });
+
+    try {
+        if (!fs.existsSync(watch.path)) {
+            return res.json({ files: [], watch, error: 'Folder not found on disk' });
+        }
+
+        const entries = fs.readdirSync(watch.path);
+        const files = entries
+            .filter(f => {
+                try {
+                    const fullPath = path.join(watch.path, f);
+                    return fs.statSync(fullPath).isFile() && isMediaFile(f);
+                } catch { return false; }
+            })
+            .map(f => {
+                const fullPath = path.join(watch.path, f);
+                const stat = fs.statSync(fullPath);
+                const ext = path.extname(f).toLowerCase();
+                const { type, icon } = detectMediaType(f);
+                return {
+                    name: f,
+                    path: fullPath,
+                    size: stat.size,
+                    modified: stat.mtime.toISOString(),
+                    mediaType: type,
+                    icon: icon || '📎',
+                };
+            })
+            .sort((a, b) => new Date(b.modified) - new Date(a.modified));
+
+        res.json({ files, watch });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/settings/watches/:id/cleanup — Move ingested files to _ingested/ subfolder
+router.post('/watches/:id/cleanup', (req, res) => {
+    const db = getDb();
+    const watch = db.prepare('SELECT * FROM watch_folders WHERE id = ?').get(parseInt(req.params.id));
+    if (!watch) return res.status(404).json({ error: 'Watch folder not found' });
+
+    const { files } = req.body;
+    if (!files || !files.length) return res.status(400).json({ error: 'No files provided' });
+
+    const ingestedDir = path.join(watch.path, '_ingested');
+    if (!fs.existsSync(ingestedDir)) {
+        fs.mkdirSync(ingestedDir, { recursive: true });
+    }
+
+    const moved = [];
+    const errors = [];
+
+    for (const filePath of files) {
+        try {
+            const fileName = path.basename(filePath);
+            let destPath = path.join(ingestedDir, fileName);
+
+            // Handle collision in _ingested/
+            let counter = 1;
+            while (fs.existsSync(destPath)) {
+                const ext = path.extname(fileName);
+                const base = path.basename(fileName, ext);
+                destPath = path.join(ingestedDir, `${base}_${counter}${ext}`);
+                counter++;
+            }
+
+            fs.renameSync(filePath, destPath);
+            moved.push(fileName);
+        } catch (err) {
+            errors.push({ file: filePath, error: err.message });
+        }
+    }
+
+    res.json({ moved: moved.length, errors: errors.length, details: errors });
 });
 
 // ═══════════════════════════════════════════

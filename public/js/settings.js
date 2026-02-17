@@ -56,12 +56,23 @@ export async function loadSettings() {
 
         // Watch folders
         const watches = await api('/api/settings/watches');
-        document.getElementById('watchFolderList').innerHTML = watches.map(w => `
+        document.getElementById('watchFolderList').innerHTML = watches.map(w => {
+            const folderName = w.path.split(/[\\/]/).filter(Boolean).pop() || w.path;
+            return `
             <div class="watch-item">
-                <span>📂 ${esc(w.path)} ${w.project_name ? `→ ${esc(w.project_name)}` : ''}</span>
-                <button onclick="removeWatch(${w.id})">✕</button>
-            </div>
-        `).join('') || '<div style="color:var(--text-muted);font-size:0.8rem;">No watch folders configured.</div>';
+                <span>📥 <strong>${esc(folderName)}</strong> ${w.project_name ? `→ ${esc(w.project_name)}` : '<em style="color:var(--text-muted)">(no project)</em>'}</span>
+                <span style="color:var(--text-dim);font-size:0.75rem;">${esc(w.path)}</span>
+                <button onclick="removeWatch(${w.id})" title="Remove">✕</button>
+            </div>`;
+        }).join('') || '<div style="color:var(--text-muted);font-size:0.8rem;">No watch folders configured.</div>';
+
+        // Populate watch folder project dropdown
+        const watchProjectSel = document.getElementById('newWatchProject');
+        if (watchProjectSel) {
+            const projects = await api('/api/projects');
+            watchProjectSel.innerHTML = '<option value="">-- Project --</option>' +
+                projects.map(p => `<option value="${p.id}">${esc(p.name)}</option>`).join('');
+        }
 
         // Check if files need migration to new vault root
         const vaultRoot = state.settings.vault_root;
@@ -240,16 +251,21 @@ async function saveSharedDbPath() {
 
 async function addWatchFolder() {
     const pathInput = document.getElementById('newWatchPath');
+    const projectSel = document.getElementById('newWatchProject');
     const folderPath = pathInput.value.trim();
     if (!folderPath) return;
+
+    const projectId = projectSel?.value ? parseInt(projectSel.value) : null;
 
     try {
         await api('/api/settings/watches', {
             method: 'POST',
-            body: { path: folderPath, auto_import: true },
+            body: { path: folderPath, project_id: projectId, auto_import: true },
         });
         pathInput.value = '';
+        if (projectSel) projectSel.value = '';
         loadSettings();
+        showToast('📥 Watch folder added', 'success');
     } catch (err) {
         alert('Error: ' + err.message);
     }

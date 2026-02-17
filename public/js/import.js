@@ -111,6 +111,9 @@ export async function loadImportTab() {
     // Load Quick Access favorites
     loadQuickAccess();
 
+    // Load inbox watch folders
+    loadInboxes();
+
     // Browse to default location or drives
     if (!state.importBrowsePath) {
         browseTo('');
@@ -1010,6 +1013,303 @@ function onFolderContextMenu(event, path, name) {
 }
 
 // ═══════════════════════════════════════════
+//  INBOX (Watch Folder Ingest)
+// ═══════════════════════════════════════════
+
+let inboxWatches = [];
+let activeInboxId = null;
+let inboxFiles = [];
+
+/**
+ * Load inbox watch folders and render in Quick Access sidebar
+ */
+async function loadInboxes() {
+    try {
+        inboxWatches = await api('/api/settings/watches/inbox');
+    } catch { inboxWatches = []; }
+    renderInboxes();
+}
+
+function renderInboxes() {
+    const section = document.getElementById('inboxSection');
+    const list = document.getElementById('inboxList');
+    if (!section || !list) return;
+
+    if (inboxWatches.length === 0) {
+        section.style.display = 'none';
+        return;
+    }
+
+    section.style.display = 'block';
+    list.innerHTML = inboxWatches.map(w => {
+        const folderName = w.path.split(/[\\/]/).filter(Boolean).pop() || w.path;
+        const isActive = activeInboxId === w.id;
+        const badgeClass = w.file_count > 0 ? 'inbox-badge active' : 'inbox-badge';
+        return `
+        <div class="inbox-item ${isActive ? 'selected' : ''}" onclick="openInbox(${w.id})" title="${esc(w.path)}">
+            <span class="inbox-icon">📥</span>
+            <span class="inbox-label">${esc(folderName)}</span>
+            ${w.project_name ? `<span class="inbox-project">${esc(w.project_name)}</span>` : ''}
+            <span class="${badgeClass}">${w.file_count}</span>
+        </div>`;
+    }).join('');
+}
+
+/**
+ * Open an inbox — load its files into the center panel
+ */
+async function openInbox(watchId) {
+    activeInboxId = watchId;
+    renderInboxes(); // highlight active
+
+    const watch = inboxWatches.find(w => w.id === watchId);
+    if (!watch) return;
+
+    // Clear normal file selection
+    state.selectedFiles = [];
+
+    try {
+        const result = await api(`/api/settings/watches/${watchId}/files`);
+        inboxFiles = result.files || [];
+    } catch (err) {
+        inboxFiles = [];
+        showToast('Failed to load inbox: ' + err.message, 'error');
+    }
+
+    renderInboxFileList(watch);
+
+    // Pre-fill project dropdown if watch folder has a project
+    if (watch.project_id) {
+        const projSel = document.getElementById('importProject');
+        if (projSel) {
+            projSel.value = String(watch.project_id);
+            await onImportProjectChange();
+        }
+    }
+
+    // Update the import button to say Ingest
+    updateIngestButton();
+}
+
+function renderInboxFileList(watch) {
+    const browser = document.getElementById('fileBrowser');
+    const folderName = watch.path.split(/[\\/]/).filter(Boolean).pop() || watch.path;
+
+    if (inboxFiles.length === 0) {
+        browser.innerHTML = `
+            <div style="padding:20px;text-align:center;color:var(--text-muted);">
+                <div style="font-size:2rem;margin-bottom:8px;">📭</div>
+                <div>No media files in this inbox</div>
+                <div style="font-size:0.8rem;margin-top:4px;">${esc(watch.path)}</div>
+            </div>`;
+        // Hide select bar
+        const selBar = document.getElementById('fileBrowserSelectBar');
+        if (selBar) selBar.style.display = 'none';
+        return;
+    }
+
+    // Select all files by default
+    state.selectedFiles = inboxFiles.map(f => ({
+        path: f.path, name: f.name, size: f.size,
+        mediaType: f.mediaType || '', icon: f.icon || '📎'
+    }));
+
+    let html = `<div class="inbox-header-bar">
+        <span>📥 <strong>${esc(folderName)}</strong> — ${inboxFiles.length} file${inboxFiles.length !== 1 ? 's' : ''}</span>
+        <button class="btn-small" onclick="refreshInbox()" title="Refresh" style="font-size:0.75rem;padding:3px 8px;cursor:pointer;">🔄 Refresh</button>
+    </div>`;
+
+    for (const f of inboxFiles) {
+        const isSelected = state.selectedFiles.some(s => s.path === f.path);
+        html += `<div class="fb-entry ${isSelected ? 'selected' : ''}" onclick="toggleInboxFile('${escAttr(f.path)}')">
+            <span class="fb-icon">${f.icon || '📎'}</span>
+            <span class="fb-name">${esc(f.name)}</span>
+            <span class="fb-size">${formatSize(f.size)}</span>
+        </div>`;
+    }
+
+    browser.innerHTML = html;
+
+    // Show select bar
+    const selBar = document.getElementById('fileBrowserSelectBar');
+    if (selBar) selBar.style.display = 'flex';
+
+    // Update path bar to show inbox path
+    document.getElementById('importPath').value = watch.path;
+
+    updateSelectedList();
+}
+
+function toggleInboxFile(filePath) {
+    const idx = state.selectedFiles.findIndex(f => f.path === filePath);
+    if (idx >= 0) {
+        state.selectedFiles.splice(idx, 1);
+    } else {
+        const file = inboxFiles.find(f => f.path === filePath);
+        if (file) {
+            state.selectedFiles.push({
+                path: file.path, name: file.name, size: file.size,
+                mediaType: file.mediaType || '', icon: file.icon || '📎'
+            });
+        }
+    }
+    // Re-render checkmarks
+    const entries = document.querySelectorAll('#fileBrowser .fb-entry[onclick]');
+    entries.forEach(el => {
+        const onclick = el.getAttribute('onclick');
+        if (!onclick) return;
+        const match = onclick.match(/toggleInboxFile\('(.+?)'\)/);
+        if (match) {
+            const p = match[1].replace(/\\'/g, "'");
+            el.classList.toggle('selected', state.selectedFiles.some(f => f.path === p));
+        }
+    });
+    updateSelectedList();
+    updateIngestButton();
+}
+
+function updateIngestButton() {
+    const btn = document.getElementById('importBtn');
+    if (!btn) return;
+
+    if (activeInboxId) {
+        btn.textContent = '🚀 Ingest Selected';
+        btn.onclick = executeIngest;
+        btn.disabled = state.selectedFiles.length === 0 || !document.getElementById('importProject').value;
+    } else {
+        const keepOrig = document.getElementById('keepOriginalNames')?.checked;
+        btn.textContent = keepOrig ? '📥 Import' : '📥 Import & Rename';
+        btn.onclick = executeImport;
+    }
+}
+
+async function refreshInbox() {
+    if (activeInboxId) {
+        await openInbox(activeInboxId);
+        showToast('Inbox refreshed', 'info');
+    }
+}
+
+/**
+ * Ingest: import selected files via the standard import endpoint (copy mode),
+ * then move originals to _ingested/ subfolder.
+ */
+async function executeIngest() {
+    const projectId = document.getElementById('importProject').value;
+    if (!projectId || !state.selectedFiles.length || !activeInboxId) return;
+
+    const seqId = document.getElementById('importSequence')?.value || undefined;
+    const shotId = document.getElementById('importShot')?.value || undefined;
+    const roleId = document.getElementById('importRole')?.value || undefined;
+    const take = document.getElementById('importTake')?.value || 1;
+
+    const btn = document.getElementById('importBtn');
+    const progress = document.getElementById('importProgress');
+    const progressFill = document.getElementById('importProgressFill');
+    const progressText = document.getElementById('importProgressText');
+    const resultDiv = document.getElementById('importResult');
+
+    btn.disabled = true;
+    btn.textContent = '⏳ Ingesting...';
+    progress.style.display = 'block';
+    progressFill.style.width = '0%';
+    if (progressText) progressText.textContent = `0 / ${state.selectedFiles.length}`;
+    resultDiv.style.display = 'none';
+
+    const filePaths = state.selectedFiles.map(f => f.path);
+
+    try {
+        const body = {
+            files: filePaths,
+            project_id: parseInt(projectId),
+            sequence_id: seqId ? parseInt(seqId) : undefined,
+            shot_id: shotId ? parseInt(shotId) : undefined,
+            role_id: roleId ? parseInt(roleId) : undefined,
+            take_number: parseInt(take),
+            keep_originals: true,  // Copy mode — originals stay for cleanup step
+        };
+
+        // Use SSE for 2+ files
+        const useStream = filePaths.length >= 2;
+        let result;
+
+        if (useStream) {
+            result = await importWithProgress(body, progressFill, progressText);
+        } else {
+            result = await api('/api/assets/import', { method: 'POST', body });
+            progressFill.style.width = '100%';
+            if (progressText) progressText.textContent = '';
+        }
+
+        // Only clean up files that were successfully imported
+        if (result.imported > 0) {
+            try {
+                await api(`/api/settings/watches/${activeInboxId}/cleanup`, {
+                    method: 'POST',
+                    body: { files: filePaths },
+                });
+            } catch (cleanupErr) {
+                console.warn('Cleanup failed:', cleanupErr);
+            }
+        }
+
+        resultDiv.style.display = 'block';
+        if (result.imported > 0) {
+            resultDiv.className = 'import-result success';
+            resultDiv.innerHTML = `✅ Ingested ${result.imported} file(s) — named by convention and moved to vault.` +
+                (result.errors > 0 ? `<br>⚠️ ${result.errors} error(s)` : '');
+        } else {
+            resultDiv.className = 'import-result error';
+            resultDiv.innerHTML = `❌ No files ingested. ` +
+                (result.errors_detail?.map(e => e.error).join(', ') || '');
+        }
+
+        // Refresh inbox to show updated file list
+        state.selectedFiles = [];
+        updateSelectedList();
+        await openInbox(activeInboxId);
+
+        // Refresh global counts
+        if (window.checkSetup) window.checkSetup();
+
+    } catch (err) {
+        resultDiv.style.display = 'block';
+        resultDiv.className = 'import-result error';
+        resultDiv.innerHTML = `❌ Ingest failed: ${err.message}`;
+    }
+
+    btn.disabled = false;
+    btn.textContent = '🚀 Ingest Selected';
+    setTimeout(() => { progress.style.display = 'none'; }, 2000);
+}
+
+/**
+ * Exit inbox mode and return to normal file browser
+ */
+function exitInbox() {
+    activeInboxId = null;
+    inboxFiles = [];
+    renderInboxes();
+
+    const btn = document.getElementById('importBtn');
+    if (btn) {
+        const keepOrig = document.getElementById('keepOriginalNames')?.checked;
+        btn.textContent = keepOrig ? '📥 Import' : '📥 Import & Rename';
+        btn.onclick = executeImport;
+    }
+
+    state.selectedFiles = [];
+    updateSelectedList();
+
+    // Return to file browser
+    if (state.importBrowsePath) {
+        browseTo(state.importBrowsePath);
+    } else {
+        browseTo('');
+    }
+}
+
+// ═══════════════════════════════════════════
 //  EXPOSE ON WINDOW (for HTML onclick handlers)
 // ═══════════════════════════════════════════
 
@@ -1034,3 +1334,8 @@ window.onFolderDragStart = onFolderDragStart;
 window.onFolderContextMenu = onFolderContextMenu;
 window.removeQuickAccess = removeQuickAccess;
 window.addCurrentFolderToQuickAccess = addCurrentFolderToQuickAccess;
+window.openInbox = openInbox;
+window.toggleInboxFile = toggleInboxFile;
+window.refreshInbox = refreshInbox;
+window.executeIngest = executeIngest;
+window.exitInbox = exitInbox;
