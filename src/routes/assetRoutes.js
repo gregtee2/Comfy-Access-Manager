@@ -87,6 +87,10 @@ router.get('/', (req, res) => {
         params.push(term, term, term, term);
     }
 
+    // Count matching assets BEFORE applying LIMIT/OFFSET
+    const countQuery = query.replace(/SELECT a\.\*.*?FROM/s, 'SELECT COUNT(*) as count FROM');
+    const filteredTotal = db.prepare(countQuery).get(...params).count;
+
     query += ' ORDER BY a.created_at DESC LIMIT ? OFFSET ?';
     params.push(parseInt(limit), parseInt(offset));
 
@@ -97,7 +101,7 @@ router.get('/', (req, res) => {
     }
     const total = db.prepare('SELECT COUNT(*) as count FROM assets').get();
 
-    res.json({ assets, total: total.count });
+    res.json({ assets, total: total.count, filteredTotal });
 });
 
 // ═══════════════════════════════════════════

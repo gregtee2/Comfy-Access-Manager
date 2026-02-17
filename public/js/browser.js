@@ -477,6 +477,9 @@ export async function loadProjectAssets(projectId) {
         const result = await api(`/api/assets?${params}`);
         state.assets = result.assets;
         renderAssets();
+        // Update asset count indicator
+        const countEl = document.getElementById('assetCount');
+        if (countEl) countEl.textContent = `${result.assets.length} asset${result.assets.length !== 1 ? 's' : ''}`;
     } catch (err) {
         console.error('Failed to load assets:', err);
     }

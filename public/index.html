@@ -155,6 +155,7 @@
                     </select>
                     <input type="text" id="searchInput" placeholder="Search assets..." title="Search by filename, vault name, or tags">
                     <button class="btn-tiny" onclick="refreshAssets()" title="Reload assets from the database">🔄</button>
+                    <span id="assetCount" class="asset-count-label"></span>
                     <div class="view-toggle">
                         <button class="active" onclick="setView('grid')" title="Grid view — thumbnails with metadata">▦</button>
                         <button onclick="setView('list')" title="List view — compact table with columns">≡</button>

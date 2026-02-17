@@ -607,6 +607,7 @@ label {
 .view-toggle button:first-child { border-radius: var(--radius-sm) 0 0 var(--radius-sm); }
 .view-toggle button:last-child { border-radius: 0 var(--radius-sm) var(--radius-sm) 0; }
 .view-toggle button.active { background: var(--accent-dim); color: var(--accent-light); border-color: var(--accent); }
+.asset-count-label { font-size: 0.78rem; color: var(--text-dim); margin-left: 6px; white-space: nowrap; }
 
 /* ─── Asset Grid ─── */
 .asset-grid {
