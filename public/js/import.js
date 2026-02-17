@@ -14,6 +14,82 @@ import { api } from './api.js';
 import { esc, escAttr, formatSize, showToast } from './utils.js';
 
 // ═══════════════════════════════════════════
+//  SSE Import Progress Helper
+// ═══════════════════════════════════════════
+
+/**
+ * POST to /api/assets/import?stream=1 and read SSE progress events.
+ * Updates progress bar in real-time, returns the final result JSON.
+ */
+async function importWithProgress(body, progressFill, progressText) {
+    return new Promise(async (resolve, reject) => {
+        try {
+            const response = await fetch('/api/assets/import?stream=1', {
+                method: 'POST',
+                headers: { 'Content-Type': 'application/json' },
+                body: JSON.stringify(body),
+            });
+
+            if (!response.ok) {
+                const err = await response.json().catch(() => ({ error: response.statusText }));
+                return reject(new Error(err.error || 'Import failed'));
+            }
+
+            const reader = response.body.getReader();
+            const decoder = new TextDecoder();
+            let buffer = '';
+            let finalResult = null;
+
+            while (true) {
+                const { done, value } = await reader.read();
+                if (done) break;
+
+                buffer += decoder.decode(value, { stream: true });
+
+                // Parse SSE events from buffer
+                const lines = buffer.split('\n');
+                buffer = lines.pop(); // keep incomplete line
+
+                let eventType = 'message';
+                for (const line of lines) {
+                    if (line.startsWith('event: ')) {
+                        eventType = line.slice(7).trim();
+                    } else if (line.startsWith('data: ')) {
+                        const data = line.slice(6);
+                        try {
+                            const parsed = JSON.parse(data);
+                            if (eventType === 'done') {
+                                finalResult = parsed;
+                            } else {
+                                // Progress update
+                                const pct = Math.round((parsed.current / parsed.total) * 100);
+                                if (progressFill) progressFill.style.width = pct + '%';
+                                if (progressText) {
+                                    const shortName = parsed.file?.length > 40
+                                        ? '...' + parsed.file.slice(-37) : parsed.file;
+                                    progressText.textContent = `${parsed.current} / ${parsed.total}  —  ${shortName || ''}`;
+                                }
+                            }
+                        } catch {}
+                        eventType = 'message'; // reset after data line
+                    }
+                }
+            }
+
+            if (finalResult) {
+                if (progressFill) progressFill.style.width = '100%';
+                if (progressText) progressText.textContent = `✅ ${finalResult.imported} imported`;
+                resolve(finalResult);
+            } else {
+                reject(new Error('Import stream ended without result'));
+            }
+        } catch (err) {
+            reject(err);
+        }
+    });
+}
+
+// ═══════════════════════════════════════════
 //  IMPORT TAB
 // ═══════════════════════════════════════════
 
@@ -390,7 +466,9 @@ async function executeImport() {
     btn.disabled = true;
     btn.textContent = '⏳ Importing...';
     progress.style.display = 'block';
-    progressFill.style.width = '10%';
+    progressFill.style.width = '0%';
+    const progressText = document.getElementById('importProgressText');
+    if (progressText) progressText.textContent = `0 / ${state.selectedFiles.length}`;
     resultDiv.style.display = 'none';
 
     try {
@@ -406,26 +484,34 @@ async function executeImport() {
         }
         const derivativeFps = parseInt(document.getElementById('derivativeFps')?.value) || 24;
 
-        const result = await api('/api/assets/import', {
-            method: 'POST',
-            body: {
-                files: state.selectedFiles.map(f => f.path),
-                project_id: parseInt(projectId),
-                sequence_id: seqId ? parseInt(seqId) : undefined,
-                shot_id: shotId ? parseInt(shotId) : undefined,
-                role_id: roleId ? parseInt(roleId) : undefined,
-                take_number: parseInt(take),
-                custom_name: customName,
-                keep_originals: keepOriginals,
-                keep_original_names: !!document.getElementById('keepOriginalNames')?.checked,
-                register_in_place: registerInPlace,
-                generate_derivatives: generateDerivatives,
-                derivative_formats: derivativeFormats,
-                derivative_fps: derivativeFps,
-            },
-        });
+        const body = {
+            files: state.selectedFiles.map(f => f.path),
+            project_id: parseInt(projectId),
+            sequence_id: seqId ? parseInt(seqId) : undefined,
+            shot_id: shotId ? parseInt(shotId) : undefined,
+            role_id: roleId ? parseInt(roleId) : undefined,
+            take_number: parseInt(take),
+            custom_name: customName,
+            keep_originals: keepOriginals,
+            keep_original_names: !!document.getElementById('keepOriginalNames')?.checked,
+            register_in_place: registerInPlace,
+            generate_derivatives: generateDerivatives,
+            derivative_formats: derivativeFormats,
+            derivative_fps: derivativeFps,
+        };
 
-        progressFill.style.width = '100%';
+        // Use SSE streaming for progress on imports with 2+ files
+        const useStream = state.selectedFiles.length >= 2;
+        let result;
+
+        if (useStream) {
+            result = await importWithProgress(body, progressFill, progressText);
+        } else {
+            const r = await api('/api/assets/import', { method: 'POST', body });
+            progressFill.style.width = '100%';
+            if (progressText) progressText.textContent = '';
+            result = r;
+        }
 
         resultDiv.style.display = 'block';
         let resultHtml = '';

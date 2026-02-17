@@ -395,6 +395,7 @@ router.get('/:id', (req, res) => {
 
 // POST /api/assets/import — Import files from filesystem paths
 // Supports: individual files, frame sequences (auto-detected), and derivative generation
+// Add ?stream=1 for SSE progress events during large imports
 router.post('/import', async (req, res) => {
     const { files, project_id, sequence_id, shot_id, role_id, take_number, custom_name, template } = req.body;
 
@@ -403,6 +404,24 @@ router.post('/import', async (req, res) => {
     }
     if (!project_id) {
         return res.status(400).json({ error: 'Project ID required' });
+    }
+
+    // ── SSE progress streaming (opt-in via ?stream=1) ──
+    const streaming = req.query.stream === '1';
+    if (streaming) {
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+        });
+    }
+    const totalFiles = files.length;
+    let importedSoFar = 0;
+    function sendProgress(filename) {
+        importedSoFar++;
+        if (streaming) {
+            res.write(`data: ${JSON.stringify({ current: importedSoFar, total: totalFiles, file: filename })}\n\n`);
+        }
     }
 
     const db = getDb();
@@ -593,6 +612,8 @@ router.post('/import', async (req, res) => {
             const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId);
             results.push(asset);
 
+            sendProgress(`${seqOriginalName} (${seq.frameCount} frames)`);
+
             // Queue derivatives for this sequence if requested
             if (generateDerivatives && derivativeFormats.length > 0) {
                 const TranscodeService = require('../services/TranscodeService');
@@ -607,6 +628,7 @@ router.post('/import', async (req, res) => {
 
         } catch (err) {
             errors.push({ file: `${seq.baseName}${seq.ext} (${seq.frameCount} frames)`, error: err.message });
+            sendProgress(`${seq.baseName}${seq.ext} (error)`);
         }
     }
 
@@ -721,6 +743,8 @@ router.post('/import', async (req, res) => {
             const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId);
             results.push(asset);
 
+            sendProgress(originalName);
+
             // Queue derivatives for video/exr single files if requested
             if (generateDerivatives && derivativeFormats.length > 0) {
                 const { type: srcType } = detectMediaType(vaultName);
@@ -738,6 +762,7 @@ router.post('/import', async (req, res) => {
 
         } catch (err) {
             errors.push({ file: filePath, error: err.message });
+            sendProgress(path.basename(filePath) + ' (error)');
         }
     }
 
@@ -747,7 +772,7 @@ router.post('/import', async (req, res) => {
     const sequenceCount = detectedSeqs.length;
     const singleCount = singles.length;
 
-    res.json({
+    const resultPayload = {
         imported: results.length,
         errors: errors.length,
         assets: results,
@@ -755,7 +780,14 @@ router.post('/import', async (req, res) => {
         sequences_detected: sequenceCount,
         singles_imported: singleCount,
         derivative_jobs: derivativeJobIds,
-    });
+    };
+
+    if (streaming) {
+        res.write(`event: done\ndata: ${JSON.stringify(resultPayload)}\n\n`);
+        res.end();
+    } else {
+        res.json(resultPayload);
+    }
 });
 
 // POST /api/assets/upload — Upload via HTTP multipart
