@@ -15,8 +15,11 @@ const path = require('path');
 const fs = require('fs');
 const { execSync, spawn } = require('child_process');
 const { loadConfig } = require('../database');
+const os = require('os');
 
 const ROOT = path.join(__dirname, '..', '..');
+const TOOLS_RV = path.join(ROOT, 'tools', 'rv');
+const RV_BUILD_FILE = path.join(TOOLS_RV, '.rv_build');
 const GITHUB_REPO = 'gregtee2/Comfy-Access-Manager';
 const GITHUB_RAW = `https://raw.githubusercontent.com/${GITHUB_REPO}/stable`;
 const CHECK_CACHE_MS = 5 * 60 * 1000; // 5-minute cache
@@ -134,6 +137,109 @@ function extractChangelog(fullChangelog, fromVersion, toVersion) {
     return result.join('\n').trim();
 }
 
+// ─── RV Binary Update ───
+
+/**
+ * RV download URLs by platform.
+ * Tag is rv-3.1.0; filenames match install.sh / install.bat.
+ */
+const RV_RELEASE_TAG = 'rv-3.1.0';
+const RV_URLS = {
+    darwin_arm64: `https://github.com/${GITHUB_REPO}/releases/download/${RV_RELEASE_TAG}/OpenRV-3.1.0-macos-arm64-mediavault.zip`,
+    win32_x64:   `https://github.com/${GITHUB_REPO}/releases/download/${RV_RELEASE_TAG}/OpenRV-3.1.0-win64-mediavault.zip`
+};
+
+/**
+ * Get the locally installed RV build stamp, or null if none.
+ */
+function getLocalRvBuild() {
+    try { return fs.readFileSync(RV_BUILD_FILE, 'utf8').trim(); } catch { return null; }
+}
+
+/**
+ * Check whether the RV binary needs updating after a code pull.
+ * Compares package.json rv_build vs tools/rv/.rv_build.
+ * Returns the new rv_build string if an update is needed, else null.
+ */
+function rvNeedsUpdate() {
+    try {
+        // Re-read package.json fresh (cache already cleared by caller)
+        const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+        const wanted = pkg.rv_build;
+        if (!wanted) return null;                // rv_build not in package.json — skip
+        const local = getLocalRvBuild();
+        if (local === wanted) return null;       // already current
+        return wanted;
+    } catch { return null; }
+}
+
+/**
+ * Download and extract the RV binary for the current platform.
+ * Uses the user's GitHub PAT if configured (for private repos).
+ * Returns { success, message }.
+ */
+async function updateRvBinary(newBuild) {
+    const platform = process.platform;           // 'darwin' or 'win32'
+    const arch = process.arch;                   // 'arm64' or 'x64'
+    const key = `${platform}_${arch}`;
+    const url = RV_URLS[key];
+
+    if (!url) {
+        console.log(`[RV-Update] No pre-built RV for ${key} — skipping.`);
+        return { success: false, message: `No RV binary available for ${key}` };
+    }
+
+    console.log(`[RV-Update] Updating RV binary (${getLocalRvBuild() || 'none'} → ${newBuild})...`);
+
+    const zipPath = path.join(ROOT, 'tools', 'rv.zip');
+    try {
+        // Build auth header for the GitHub release asset
+        const token = getGitHubToken();
+        const headers = token
+            ? { 'Authorization': `token ${token}`, 'Accept': 'application/octet-stream' }
+            : {};
+
+        // Download
+        console.log(`[RV-Update] Downloading from ${url} ...`);
+        const res = await fetch(url, { headers, redirect: 'follow' });
+        if (!res.ok) throw new Error(`Download failed: HTTP ${res.status}`);
+
+        const arrayBuf = await res.arrayBuffer();
+        fs.writeFileSync(zipPath, Buffer.from(arrayBuf));
+        console.log(`[RV-Update] Downloaded ${(arrayBuf.byteLength / 1048576).toFixed(1)} MB`);
+
+        // Remove old RV directory
+        if (fs.existsSync(TOOLS_RV)) {
+            fs.rmSync(TOOLS_RV, { recursive: true, force: true });
+        }
+        fs.mkdirSync(TOOLS_RV, { recursive: true });
+
+        // Extract — platform-specific
+        if (platform === 'darwin') {
+            execSync(`ditto -x -k "${zipPath}" "${TOOLS_RV}"`, { stdio: 'pipe', timeout: 120000 });
+            // Remove macOS quarantine
+            try { execSync(`xattr -cr "${TOOLS_RV}/RV.app"`, { stdio: 'pipe' }); } catch {}
+        } else {
+            // Windows: use tar (handles long paths better than Expand-Archive)
+            execSync(`tar -xf "${zipPath}" -C "${TOOLS_RV}"`, { stdio: 'pipe', timeout: 120000 });
+        }
+
+        // Clean up zip
+        try { fs.unlinkSync(zipPath); } catch {}
+
+        // Write build stamp
+        fs.writeFileSync(RV_BUILD_FILE, newBuild, 'utf8');
+
+        console.log(`[RV-Update] RV binary updated to build ${newBuild}`);
+        return { success: true, message: `RV updated to build ${newBuild}` };
+
+    } catch (err) {
+        console.error('[RV-Update] Failed:', err.message);
+        try { fs.unlinkSync(zipPath); } catch {}
+        return { success: false, message: err.message };
+    }
+}
+
 // ─── GET /api/update/check ───
 router.get('/check', async (req, res) => {
     if (req.query.force) {
@@ -189,10 +295,20 @@ router.post('/apply', async (req, res) => {
 
         const newVersion = require('../../package.json').version;
 
+        // 6. Check if RV binary needs updating (rv_build changed)
+        let rvMessage = '';
+        const newRvBuild = rvNeedsUpdate();
+        if (newRvBuild) {
+            const rvResult = await updateRvBinary(newRvBuild);
+            rvMessage = rvResult.success
+                ? ` RV viewer also updated.`
+                : ` (RV update skipped: ${rvResult.message})`;
+        }
+
         res.json({
             success: true,
             version: newVersion,
-            message: `Updated to v${newVersion}. Restarting server...`
+            message: `Updated to v${newVersion}.${rvMessage} Restarting server...`
         });
 
         // 4. Restart the server after response is sent
@@ -221,5 +337,28 @@ router.post('/apply', async (req, res) => {
 router.get('/health', (req, res) => {
     res.json({ ok: true, version: require('../../package.json').version });
 });
+
+// ─── Startup: ensure .rv_build stamp exists if RV is already installed ───
+(function ensureRvBuildStamp() {
+    try {
+        const pkg = JSON.parse(fs.readFileSync(path.join(ROOT, 'package.json'), 'utf8'));
+        const wanted = pkg.rv_build;
+        if (!wanted) return;
+
+        // Check if RV binary exists
+        const rvBinMac = path.join(TOOLS_RV, 'RV.app', 'Contents', 'MacOS', 'RV');
+        const rvBinWin = path.join(TOOLS_RV, 'bin', 'rv.exe');
+        const rvExists = fs.existsSync(rvBinMac) || fs.existsSync(rvBinWin);
+        if (!rvExists) return;
+
+        // If stamp is missing or outdated, write it (assumes current install matches)
+        const local = getLocalRvBuild();
+        if (!local) {
+            fs.mkdirSync(TOOLS_RV, { recursive: true });
+            fs.writeFileSync(RV_BUILD_FILE, wanted, 'utf8');
+            console.log(`[RV-Update] Wrote initial .rv_build stamp: ${wanted}`);
+        }
+    } catch {}
+})();
 
 module.exports = router;
