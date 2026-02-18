@@ -4,6 +4,14 @@ All notable changes to Comfy Asset Manager (CAM) will be documented in this file
 
 ## [1.3.1] - 2026-02-17
 
+### Added
+- **DaVinci Resolve integration (Phase 1)** — Right-click assets → "🎬 Send to Resolve" to push media into Resolve's Media Pool
+  - `scripts/resolve_bridge.py` — Python bridge with 4 commands: `status`, `list_bins`, `send_to_bin`, `get_projects`
+  - `src/routes/resolveRoutes.js` — REST API: `GET /status`, `POST /send`, `GET /bins`, `GET /projects`
+  - Auto-bin-by-hierarchy creates Project/Sequence/Shot folder structure in Resolve Media Pool
+  - Cross-platform: Windows (fusionscript.dll) + macOS (fusionscript.so)
+  - Resolve must be running; status check shows connection state
+
 ### Fixed
 - **Naming convention used codes instead of names** — `generateFromConvention()` was receiving `sequence.code` (SQ050) and `shot.code` (SH010) instead of `sequence.name` (BPT) and `shot.name` (0010). Fixed all 3 call sites in `assetRoutes.js` to use `?.name || ?.code` fallback.
 - **Copy mode was deleting originals** — `executeIngest()` in `import.js` was hardcoded to always call the cleanup endpoint, which moved originals to `_ingested/`. Now respects the import mode radio: Copy mode keeps originals, Move mode runs cleanup (with confirmation), Register mode keeps originals.
