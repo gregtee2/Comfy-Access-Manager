@@ -2,6 +2,47 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.3.1] - 2026-02-17
+
+### Fixed
+- **Naming convention used codes instead of names** — `generateFromConvention()` was receiving `sequence.code` (SQ050) and `shot.code` (SH010) instead of `sequence.name` (BPT) and `shot.name` (0010). Fixed all 3 call sites in `assetRoutes.js` to use `?.name || ?.code` fallback.
+- **Copy mode was deleting originals** — `executeIngest()` in `import.js` was hardcoded to always call the cleanup endpoint, which moved originals to `_ingested/`. Now respects the import mode radio: Copy mode keeps originals, Move mode runs cleanup (with confirmation), Register mode keeps originals.
+- **Tree navigation text invisible on dark background** — Role colors like `#121212` (nearly black) were applied as inline styles in the tree nav, making shot labels invisible. Added `ensureReadableColor()` helper in `browser.js` that auto-lightens dark colors. Updated Grok_Imagine role color to `#80cbc4`.
+- **Tree label CSS reinforcement** — Added explicit `color: #aaa` to `.tree-node` and `.tree-label` classes as baseline.
+- **CSS cache-busting** — Added `?v=1.3.1` parameter to CSS link in `index.html`.
+
+## [1.3.0] - 2026-02-17
+
+### Added
+- **Smart Ingest system** — Inbox workflow in Import tab with watch folders per project
+  - Files in watch folders appear in Inbox panel with live rename preview using naming convention
+  - Import mode respected: Move (cleanup originals), Copy (keep originals), Register (link only)
+  - `GET /api/settings/watches/inbox` scans all watch folders for new files
+  - `POST /api/settings/watches/:id/cleanup` moves originals to `_ingested/` subfolder (Move mode only)
+- **Multi-user profiles** with user picker overlay on launch
+- **PIN protection** (SHA-256 hashed) to prevent profile impersonation
+- **Blacklist project hiding** — admin hides specific projects from specific users via `project_hidden` table
+- **User CRUD** — `userRoutes.js` with full user management + PIN auth + project visibility endpoints
+- **`X-CAM-User` header** injected on all API requests for access filtering
+- **"Hide from Users"** checkboxes in Edit Project modal
+- **Team management** in Settings — add/edit/remove users, set/change/remove PINs
+- **Auto-discovery on setup overlay** — fresh installs scan LAN for existing servers via UDP
+- **One-click connect cards** with green dot, server name, asset count
+- **`project_hidden` + `users` tables** with migration for existing databases
+
+## [1.2.9] - 2026-02-17
+
+### Added
+- **Shot Builder** — drag-and-drop naming convention editor (`shotBuilder.js`)
+- **`generateFromConvention()`** in `naming.js` — resolves convention tokens to filenames
+- **Episode field** on projects (`projects.episode` column) — separate from sequences
+- **Edit Project modal** with Sequences & Shots CRUD (inline chips + "+ Shot" button)
+- **ComfyUI Save node** applies naming convention with real names (not codes)
+- **`overrideVaultName`** in `FileService.importFile()` for convention-based naming
+
+### Fixed
+- **List view shows shot name** (320) not code (SH010)
+
 ## [1.2.8] - 2026-02-16
 
 ### Added

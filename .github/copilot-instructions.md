@@ -44,10 +44,10 @@ Comfy-Asset-Manager/
 │   ├── server.js                 # Express server entry (157 lines)
 │   ├── database.js               # sql.js wrapper, better-sqlite3 compat API, config.json (615 lines)
 │   ├── routes/
-│   │   ├── assetRoutes.js        # Import, browse, stream, delete, RV launch, compare (1702 lines)
+│   │   ├── assetRoutes.js        # Import, browse, stream, delete, RV launch, compare (1769 lines)
 │   │   ├── projectRoutes.js      # Project + Sequence + Shot CRUD + access control (497 lines)
 │   │   ├── userRoutes.js         # User CRUD, PIN auth, project hiding (blacklist) (220 lines)
-│   │   ├── settingsRoutes.js     # Settings, vault setup, RV plugin sync, DB transfer (742 lines)
+│   │   ├── settingsRoutes.js     # Settings, vault setup, RV plugin sync, DB transfer, Smart Ingest (739 lines)
 │   │   ├── exportRoutes.js       # FFmpeg transcode/export (488 lines)
 │   │   ├── comfyuiRoutes.js      # ComfyUI integration endpoints + workflow extraction (515 lines)
 │   │   ├── flowRoutes.js         # Flow/ShotGrid sync (188 lines)
@@ -75,9 +75,9 @@ Comfy-Asset-Manager/
 │   ├── css/styles.css            # Neutral gray VFX theme (3150 lines)
 │   └── js/
 │       ├── player.js             # Built-in media player modal (2082 lines)
-│       ├── browser.js            # Asset browser, grid/list, tree nav, selection, context menu, hide-from-users (2180 lines)
+│       ├── browser.js            # Asset browser, grid/list, tree nav, selection, context menu, hide-from-users (1886 lines)
 │       ├── settings.js           # Settings tab + network discovery + Preferences + DB transfer + team/PIN (1420 lines)
-│       ├── import.js             # File browser, import flow, Quick Access sidebar, SSE progress (1032 lines)
+│       ├── import.js             # File browser, import flow, Quick Access sidebar, SSE progress, Smart Ingest (1160 lines)
 │       ├── export.js             # Export modal (357 lines)
 │       ├── main.js               # Entry point, tab switching, PIN prompt, server discovery (290 lines)
 │       ├── utils.js              # Shared utilities (82 lines)
@@ -503,6 +503,63 @@ data: {"imported": 47, "errors": 0, ...}
 
 ---
 
+## Smart Ingest System (v1.3.0)
+
+### Overview
+Smart Ingest adds an **Inbox** workflow to the Import tab. Watch folders are configured per-project — when files appear in a watch folder, they show up in the Inbox panel with a live preview of how they'll be renamed using the project's naming convention.
+
+### Architecture
+```
+Watch Folder (Z:\Inbox\ProjectX\_inbox)
+    ↓
+GET /api/settings/watches/inbox    ← scans all watch folders for files
+    ↓
+Import Tab → Inbox Panel           ← user selects files, previews names
+    ↓
+POST /api/assets/import             ← standard import with naming convention
+    ↓
+(if Move mode) POST /api/settings/watches/:id/cleanup  ← moves originals to _ingested/
+```
+
+### Watch Folder Configuration
+- Configured in **Settings → Watch Folders** per project
+- Each watch folder has: `path`, `project_id`, `sequence_id`, `shot_id`, `role_id`
+- Files in the folder are scanned via `GET /api/settings/watches/inbox`
+- Stored in `watch_folders` database table
+
+### Import Mode Behavior (CRITICAL)
+The Inbox respects the import mode radio button in the Import tab:
+
+| Mode | What Happens to Originals | Cleanup Called? |
+|------|--------------------------|----------------|
+| **Move** | Moved to `_ingested/` subfolder after import | Yes (with confirmation prompt) |
+| **Copy** | Kept in place, untouched | No |
+| **Register** | Kept in place (DB reference only) | No |
+
+### Cleanup Endpoint
+`POST /api/settings/watches/:id/cleanup` moves ingested files from the watch folder into an `_ingested/` subfolder:
+- Creates `_ingested/` directory if needed
+- Handles filename collisions with counter suffix (`file_2.exr`)
+- Only called for **Move** mode; intentionally skipped for Copy and Register
+
+### Key Functions (import.js)
+- `loadInboxes()` — scans all watch folders, renders inbox panel with file previews
+- `executeIngest()` — imports selected inbox files, respects import mode, conditionally cleans up
+- Rename preview shows how naming convention will transform the filename
+
+### ⚠️ Copy Mode Must NOT Delete Originals
+This was a real bug (commit `4ccf32b`): `executeIngest()` was hardcoded to always call the cleanup endpoint, which moved originals to `_ingested/`. For **Copy** mode, originals must remain untouched.
+
+---
+
+## Role Color Readability (v1.3.0)
+
+`browser.js` includes an `ensureReadableColor(hex)` helper that auto-lightens role colors with low luminance to prevent invisible-on-dark-bg text in the tree navigation. Roles set inline `style="color:${role.color}"` which overrides any CSS rule — this helper ensures the color is always visible.
+
+**Threshold**: Luminance < 90 (out of 255) → boost all RGB channels by 80.
+
+---
+
 ## OpenRV Integration
 
 ### RV Plugin (rv-package/mediavault_mode.py)
@@ -648,7 +705,7 @@ Right-click any PNG or video asset that was generated by ComfyUI to extract the 
 | `/api/assets/compare-targets-by-path` | GET | Find related assets for RV plugin |
 | `/api/assets/viewer-status` | GET | Check if RV is running/available |
 
-### Settings
+### Settings & Smart Ingest
 | Endpoint | Method | Description |
 |----------|--------|-------------|
 | `/api/settings` | GET/POST | Get/save all settings |
@@ -659,6 +716,8 @@ Right-click any PNG or video asset that was generated by ComfyUI to extract the 
 | `/api/settings/db-info` | GET | Database stats (projects, assets, sequences, shots, fileSize) |
 | `/api/settings/import-db` | POST | Upload & replace database (multer multipart, auto-backup + rollback) |
 | `/api/settings/pull-db` | POST | Pull database from remote CAM server by URL (validates SQLite header) |
+| `/api/settings/watches/inbox` | GET | Scan all watch folders for new files (Smart Ingest) |
+| `/api/settings/watches/:id/cleanup` | POST | Move ingested files to `_ingested/` subfolder (Move mode only) |
 
 ### Export & Transcode
 | Endpoint | Method | Description |
@@ -837,6 +896,10 @@ Users pick up updates automatically via the in-app update banner.
 34. **Admin sees everything** — `resolveUserAccess()` returns `hiddenIds: 'all'` for admin role, meaning no projects are hidden.
 35. **Setup overlay auto-discovers servers** — `scanForRemoteServers()` in `main.js` runs UDP discovery when vault is unconfigured, showing found servers as clickable cards.
 36. **userRoutes.js route order matters** — `/project/:projectId/*` routes are placed BEFORE `/:id` routes to prevent Express matching "project" as an `:id` parameter.
+37. **Smart Ingest cleanup is mode-dependent** — `executeIngest()` only calls `/watches/:id/cleanup` for Move mode. Copy mode and Register mode must NOT call cleanup — originals must remain untouched.
+38. **`ensureReadableColor(hex)` prevents invisible text** — Role colors with luminance < 90 are auto-boosted by +80 RGB. Applied in tree nav rendering (`browser.js`). If a role color looks bad on dark bg, the DB color itself should be updated.
+39. **Naming convention uses `?.name || ?.code` fallback** — When calling `generateFromConvention()`, always pass `sequence?.name || sequence?.code` and `shot?.name || shot?.code`. Three call sites in `assetRoutes.js` were fixed for this.
+40. **DaVinci Resolve bridge uses Python subprocess** — Resolve's scripting API is Python-only. Use `scripts/resolve_bridge.py` called via `child_process.execFile()` from Node.js routes.
 
 ---
 
@@ -887,6 +950,31 @@ FFmpeg's drawtext fails when chaining 3+ filters with expressions (`y=ih-26`). F
 
 ### Flow/ShotGrid Integration (Pinned — awaiting credentials)
 UI in Settings tab ready. `flowRoutes.js` + `FlowService.js` + `flow_bridge.py` implemented. Needs ShotGrid API credentials.
+
+### DaVinci Resolve Integration (Pinned — Phase 1 starting)
+**Goal**: Two-way bridge between CAM and DaVinci Resolve for shot ingestion and editorial context.
+
+**Phases:**
+- **Phase 1 (next)**: Push to Resolve — right-click assets → send media to Resolve bins via Python Scripting API
+- **Phase 2 (future)**: Pull from Resolve — read timeline edit contexts for "minicut" playback in RV
+- **Phase 2.5 (future)**: OTIO/EDL file import (Resolve-independent format)
+
+**Architecture:**
+```
+CAM (Node.js) → POST /api/resolve/send → scripts/resolve_bridge.py → DaVinci Resolve (Python API)
+CAM (Node.js) ← GET /api/resolve/timeline ← scripts/resolve_bridge.py ← DaVinci Resolve timeline
+```
+
+**Minicut Concept**: When viewing a shot in RV, optionally play it in context with neighboring shots from the edit timeline, using editorial in/out points. Inspired by Flow/ShotGrid's minicut feature. Requires `edit_contexts` and `edit_entries` DB tables.
+
+**Resolve Scripting API** lives at:
+- Windows: `C:\Program Files\Blackmagic Design\DaVinci Resolve\fusionscript.dll`
+- Mac: `/Library/Application Support/Blackmagic Design/DaVinci Resolve/Developer/Scripting/`
+- Docs: `C:\ProgramData\Blackmagic Design\DaVinci Resolve\Support\Developer\Scripting\`
+
+**Key Files (planned):**
+- `src/routes/resolveRoutes.js` — REST API for Resolve bridge
+- `scripts/resolve_bridge.py` — Python bridge calling Resolve's `DaVinciResolveScript`
 
 ### Route Order Bug (Known)
 `router.get('/:id')` catches before `/viewer-status` in assetRoutes.js. Move `/viewer-status` above `/:id` to fix.
@@ -948,7 +1036,7 @@ UI in Settings tab ready. `flowRoutes.js` + `FlowService.js` + `flow_bridge.py` 
 | — | feat: ComfyUI Save node applies naming convention with real names (not codes) |
 | — | feat: `overrideVaultName` in FileService.importFile() for convention-based naming |
 | — | fix: List view shows shot name (320) not code (SH010) |
-| — | **v1.3.0 — User Access Control + Network Discovery Setup (February 2026)** |
+| — | **v1.3.0 — User Access Control + Network Discovery Setup + Smart Ingest (February 2026)** |
 | — | feat: Multi-user profiles with user picker overlay on launch |
 | — | feat: PIN protection (SHA-256 hashed) to prevent profile impersonation |
 | — | feat: Blacklist project hiding — admin hides specific projects from specific users |
@@ -959,6 +1047,12 @@ UI in Settings tab ready. `flowRoutes.js` + `FlowService.js` + `flow_bridge.py` 
 | — | feat: Auto-discovery on setup overlay — fresh installs scan LAN for existing servers |
 | — | feat: One-click connect cards with green dot, server name, asset count |
 | — | feat: `project_hidden` + `users` tables with migration for existing databases |
+| `2e2a31a` | feat: Smart Ingest — inbox watch folders with naming convention auto-rename |
+| `4196134` | fix: Naming convention uses sequence/shot names instead of codes |
+| `4ccf32b` | fix: Ingest copy mode now respects radio selection and keeps originals |
+| `0fac917` | fix: Tree nav labels use medium gray (#aaa) for readability on dark bg |
+| `cbe1108` | fix: Force tree-node text color + cache-bust CSS link |
+| `795cde7` | fix: Ensure tree role labels are readable on dark bg (ensureReadableColor) |
 
 ---
 
