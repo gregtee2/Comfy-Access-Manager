@@ -66,6 +66,7 @@ const transcodeRoutes = require('./routes/transcodeRoutes');
 const updateRoutes = require('./routes/updateRoutes');
 const serverRoutes = require('./routes/serverRoutes');
 const userRoutes = require('./routes/userRoutes');
+const resolveRoutes = require('./routes/resolveRoutes');
 const DiscoveryService = require('./services/DiscoveryService');
 
 app.use('/api/projects', projectRoutes);
@@ -79,6 +80,7 @@ app.use('/api/transcode', transcodeRoutes);
 app.use('/api/update', updateRoutes);
 app.use('/api/servers', serverRoutes);
 app.use('/api/users', userRoutes);
+app.use('/api/resolve', resolveRoutes);
 
 // ─── SPA fallback ───
 app.get('*', (req, res) => {

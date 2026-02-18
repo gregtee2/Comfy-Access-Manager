@@ -1185,6 +1185,7 @@ async function showContextMenu(event, assetIdx) {
     html += `<div class="ctx-item" data-action="move">📋 Move to Sequence${!isSingle ? ` (${count})` : ''}</div>`;
     html += `<div class="ctx-item" data-action="role">🎭 Set Role${!isSingle ? ` (${count})` : ''}</div>`;
     html += `<div class="ctx-item" data-action="export">📤 Export${!isSingle ? ` (${count})` : ''}</div>`;
+    html += `<div class="ctx-item" data-action="sendResolve">🎬 Send to Resolve${!isSingle ? ` (${count})` : ''}</div>`;
 
     if (count >= 2) {
         html += `<div class="ctx-item" data-action="play-all">▶️ Play All (${count})</div>`;
@@ -1235,6 +1236,7 @@ async function showContextMenu(event, assetIdx) {
             case 'move': showMoveToSequenceModal(); break;
             case 'role': showAssignRoleModal(); break;
             case 'export': window.showExportModal?.(); break;
+            case 'sendResolve': sendToResolve(); break;
             case 'play-all': playSelectedAssets(); break;
             case 'send-rv-set': window.sendSelectedToRV?.('set'); break;
             case 'send-rv-merge': window.sendSelectedToRV?.('merge'); break;
@@ -2077,6 +2079,132 @@ window.showAddSequenceModal = showAddSequenceModal;
 window.createSequence = createSequence;
 window.showAddShotModal = showAddShotModal;
 window.createShot = createShot;
+
+// ─── Send to DaVinci Resolve ───
+async function sendToResolve() {
+    const ids = state.selectedAssets;
+    if (!ids.length) return;
+
+    // Build a modal to let user choose bin path or auto-hierarchy
+    document.getElementById('resolveModal')?.remove();
+
+    const overlay = document.createElement('div');
+    overlay.id = 'resolveModal';
+    overlay.style.cssText = 'position:fixed;top:0;left:0;right:0;bottom:0;background:rgba(0,0,0,0.6);display:flex;align-items:center;justify-content:center;z-index:10000;';
+    overlay.onclick = (e) => { if (e.target === overlay) overlay.remove(); };
+
+    const box = document.createElement('div');
+    box.style.cssText = 'background:#222;border:1px solid #444;border-radius:8px;padding:24px 28px;max-width:500px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
+
+    box.innerHTML = `
+        <div style="font-size:15px;font-weight:600;color:#ddd;margin-bottom:16px;">🎬 Send to DaVinci Resolve</div>
+        <div style="font-size:12px;color:#888;margin-bottom:12px;">${ids.length} asset${ids.length > 1 ? 's' : ''} selected</div>
+        <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer;">
+            <input type="checkbox" id="resolveAutoHierarchy" checked
+                   style="width:16px;height:16px;accent-color:#888;">
+            <span style="font-size:13px;color:#ccc;">Auto-create bins from project hierarchy</span>
+        </label>
+        <div id="resolveManualBin" style="display:none;margin-bottom:12px;">
+            <label style="font-size:12px;color:#888;display:block;margin-bottom:4px;">Bin Path (e.g. "Project/Comp")</label>
+            <input type="text" id="resolveBinPathInput" placeholder="Leave empty for Media Pool root"
+                   style="width:100%;padding:8px 10px;background:#1a1a1a;border:1px solid #333;border-radius:4px;color:#ddd;font-size:13px;box-sizing:border-box;">
+        </div>
+        <div id="resolveStatus" style="font-size:12px;color:#666;margin-bottom:16px;min-height:18px;"></div>
+        <div style="display:flex;gap:8px;justify-content:flex-end;">
+            <button onclick="this.closest('#resolveModal').remove()"
+                    style="padding:8px 16px;background:#333;border:1px solid #444;border-radius:4px;color:#aaa;cursor:pointer;font-size:13px;">Cancel</button>
+            <button id="resolveSendBtn" onclick="executeSendToResolve()"
+                    style="padding:8px 20px;background:#444;border:1px solid #555;border-radius:4px;color:#ddd;cursor:pointer;font-size:13px;font-weight:500;">Send →</button>
+        </div>
+    `;
+
+    overlay.appendChild(box);
+    document.body.appendChild(overlay);
+
+    // Toggle manual bin input visibility
+    const autoCheck = document.getElementById('resolveAutoHierarchy');
+    const manualDiv = document.getElementById('resolveManualBin');
+    autoCheck.addEventListener('change', () => {
+        manualDiv.style.display = autoCheck.checked ? 'none' : 'block';
+    });
+
+    // Check Resolve status
+    const statusEl = document.getElementById('resolveStatus');
+    try {
+        const res = await api('/api/resolve/status');
+        if (res.running) {
+            statusEl.innerHTML = `<span style="color:#6a6">✓ Connected to Resolve — ${esc(res.currentProject || 'No project open')}</span>`;
+        } else {
+            statusEl.innerHTML = `<span style="color:#a66">⚠ Resolve not detected. Make sure Resolve is running.</span>`;
+        }
+    } catch (e) {
+        statusEl.innerHTML = `<span style="color:#a66">⚠ Cannot check Resolve status</span>`;
+    }
+
+    // Close on Escape
+    const onKey = (e) => { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', onKey); } };
+    document.addEventListener('keydown', onKey);
+}
+window.sendToResolve = sendToResolve;
+
+async function executeSendToResolve() {
+    const ids = state.selectedAssets;
+    if (!ids.length) return;
+
+    const autoHierarchy = document.getElementById('resolveAutoHierarchy')?.checked ?? true;
+    const manualBinPath = document.getElementById('resolveBinPathInput')?.value?.trim() || '';
+
+    const statusEl = document.getElementById('resolveStatus');
+    const sendBtn = document.getElementById('resolveSendBtn');
+    if (statusEl) statusEl.innerHTML = '<span style="color:#888">⏳ Sending to Resolve…</span>';
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
+
+    try {
+        const body = {
+            assetIds: ids,
+            createBins: true,
+        };
+
+        if (autoHierarchy) {
+            body.autoBinByHierarchy = true;
+        } else if (manualBinPath) {
+            body.binPath = manualBinPath;
+        }
+
+        const res = await api('/api/resolve/send', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(body),
+        });
+
+        if (res.success) {
+            const msg = `✅ ${res.imported || ids.length} asset${(res.imported || ids.length) > 1 ? 's' : ''} sent to Resolve → ${res.bin || 'Master'}`;
+            if (statusEl) statusEl.innerHTML = `<span style="color:#6a6">${esc(msg)}</span>`;
+            showToast(msg, 4000);
+
+            // Show warnings if any files were missing
+            if (res.warnings) {
+                if (statusEl) statusEl.innerHTML += `<br><span style="color:#a86">⚠ ${esc(res.warnings.message)}</span>`;
+            }
+
+            // Auto-close after brief delay
+            setTimeout(() => {
+                document.getElementById('resolveModal')?.remove();
+            }, 2000);
+        } else {
+            const errMsg = res.error || 'Unknown error';
+            if (statusEl) statusEl.innerHTML = `<span style="color:#a66">❌ ${esc(errMsg)}</span>`;
+            showToast('Failed: ' + errMsg, 5000);
+        }
+    } catch (e) {
+        if (statusEl) statusEl.innerHTML = `<span style="color:#a66">❌ ${e.message}</span>`;
+        showToast('Resolve error: ' + e.message, 5000);
+    } finally {
+        if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send →'; }
+    }
+}
+window.executeSendToResolve = executeSendToResolve;
+
 // ─── Show File Path Modal ───
 function showFilePathModal(filePath, vaultName) {
     // Remove existing if open
