@@ -39,7 +39,7 @@ export async function loadProjects() {
 }
 
 function renderProjectGrid(projects) {
-    const container = document.getElementById('projectsGrid');
+    const container = document.getElementById('projectGrid');
     if (!container) return;
 
     if (!projects || projects.length === 0) {
