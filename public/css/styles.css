@@ -614,6 +614,7 @@ label {
     transition: background 0.15s;
     white-space: nowrap;
     overflow: hidden;
+    color: #aaa;
 }
 .tree-node:hover {
     background: rgba(255,255,255,0.04);
