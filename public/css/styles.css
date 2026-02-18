@@ -3037,70 +3037,75 @@ label:has(input[type="checkbox"]) {
 .path-mapping-row .pm-remove:hover { color: #e57373; }
 
 /* ═══════════════════════════════════════════
-   SHOT BUILDER — Drag-and-drop naming convention
+   SHOT BUILDER — Inline naming convention builder
    ═══════════════════════════════════════════ */
 
 .sb-wrapper {
     margin-top: 12px;
     border: 1px solid var(--border);
     border-radius: var(--radius);
-    padding: 12px;
+    padding: 14px;
     background: var(--bg-dark);
 }
 .sb-header {
     display: flex; align-items: baseline; gap: 10px;
-    margin-bottom: 8px;
+    margin-bottom: 10px;
 }
 .sb-title { font-weight: 600; font-size: 0.95rem; }
-.sb-subtitle { color: var(--text-muted); font-size: 0.75rem; }
+.sb-subtitle { color: var(--text-muted); font-size: 0.72rem; }
 
-/* ── Tile inventory ── */
+/* ── Token palette ── */
 .sb-inventory {
-    display: flex; flex-wrap: wrap; gap: 6px;
-    padding: 8px;
-    background: var(--bg-card);
-    border: 1px dashed var(--border);
+    display: flex; flex-wrap: wrap; gap: 5px;
+    padding: 6px 8px;
+    background: rgba(255,255,255,0.02);
+    border: 1px solid var(--border);
     border-radius: var(--radius-sm);
-    margin-bottom: 10px;
+    margin-bottom: 12px;
 }
 .sb-tile {
     display: inline-flex; align-items: center; gap: 4px;
-    padding: 4px 10px;
+    padding: 3px 9px;
     border-radius: 4px;
-    font-size: 0.78rem;
+    font-size: 0.74rem;
     cursor: grab; user-select: none;
     color: #fff;
     background: var(--tile-color, #555);
-    border: 1px solid rgba(255,255,255,0.08);
-    transition: transform 0.1s, box-shadow 0.1s;
+    border: 1px solid rgba(255,255,255,0.1);
+    transition: transform 0.12s, box-shadow 0.12s, opacity 0.15s;
     position: relative;
 }
-.sb-tile:hover {
+.sb-tile-inv {
+    opacity: 0.8;
+}
+.sb-tile-inv:hover {
+    opacity: 1;
     transform: translateY(-1px);
-    box-shadow: 0 2px 8px rgba(0,0,0,0.3);
+    box-shadow: 0 2px 8px rgba(0,0,0,0.35);
 }
 .sb-tile.sb-dragging {
-    opacity: 0.4;
+    opacity: 0.25;
 }
-.sb-tile-icon { font-size: 0.85rem; }
-.sb-tile-label { white-space: nowrap; }
+.sb-tile-icon { font-size: 0.8rem; line-height: 1; }
+.sb-tile-label { white-space: nowrap; font-weight: 500; }
 
 /* ── Assembly zone ── */
 .sb-assembly-label {
     display: flex; align-items: center; justify-content: space-between;
-    font-size: 0.72rem; color: var(--text-muted);
+    font-size: 0.7rem; color: var(--text-muted);
     margin-bottom: 4px; padding: 0 2px;
 }
 .sb-clear-btn {
     background: none; border: 1px solid var(--border); color: var(--text-dim);
-    font-size: 0.7rem; padding: 2px 8px; border-radius: 3px; cursor: pointer;
+    font-size: 0.65rem; padding: 1px 8px; border-radius: 3px; cursor: pointer;
+    transition: all 0.15s;
 }
 .sb-clear-btn:hover { border-color: #e57373; color: #e57373; }
 
 .sb-assembly {
-    display: flex; flex-wrap: wrap; align-items: center; gap: 2px;
-    min-height: 52px;
-    padding: 8px;
+    display: flex; flex-flow: row wrap; align-items: center; gap: 0;
+    min-height: 44px;
+    padding: 8px 10px;
     background: var(--bg-card);
     border: 2px dashed var(--border);
     border-radius: var(--radius-sm);
@@ -3112,100 +3117,119 @@ label:has(input[type="checkbox"]) {
 }
 .sb-assembly-empty {
     width: 100%; text-align: center;
-    color: var(--text-muted); font-size: 0.78rem;
-    padding: 8px 0;
+    color: var(--text-muted); font-size: 0.75rem;
+    padding: 6px 0;
 }
 
-/* ── Assembly tiles — stay inline ── */
+/* ── Assembly tiles — inline flow ── */
 .sb-tile-asm {
     display: inline-flex; align-items: center; gap: 4px;
     padding: 4px 10px;
     min-width: 0;
     flex-shrink: 0;
+    cursor: grab;
+    transition: margin 0.15s ease, box-shadow 0.15s ease;
 }
+.sb-tile-asm:active { cursor: grabbing; }
+
 .sb-tile-asm .sb-tile-remove {
-    position: absolute; top: -5px; right: -5px;
-    width: 16px; height: 16px;
-    font-size: 0.6rem; line-height: 16px; text-align: center;
-    background: #3a3a3a; color: #aaa; border: 1px solid #555;
+    position: absolute; top: -6px; right: -6px;
+    width: 15px; height: 15px;
+    font-size: 0.55rem; line-height: 15px; text-align: center;
+    background: #333; color: #999; border: 1px solid #555;
     border-radius: 50%; cursor: pointer;
-    opacity: 0; transition: opacity 0.2s;
-    padding: 0;
+    opacity: 0; transition: opacity 0.15s;
+    padding: 0; z-index: 1;
 }
 .sb-tile-asm:hover .sb-tile-remove { opacity: 1; }
 .sb-tile-asm .sb-tile-remove:hover { background: #c62828; color: #fff; border-color: #c62828; }
 
-/* Drop position indicators */
+/* ── Drop position indicators — glowing insertion line ── */
 .sb-tile-asm.sb-drop-before {
-    border-left: 3px solid #5bb89a;
-    margin-left: 4px;
+    margin-left: 18px;
+    box-shadow: -5px 0 0 0 #5bb89a, -5px 0 10px 0 rgba(91,184,154,0.4);
 }
 .sb-tile-asm.sb-drop-after {
-    border-right: 3px solid #5bb89a;
-    margin-right: 4px;
+    margin-right: 18px;
+    box-shadow: 5px 0 0 0 #5bb89a, 5px 0 10px 0 rgba(91,184,154,0.4);
 }
 
-/* ── Separator inputs ── */
-.sb-sep-input {
-    width: 30px; text-align: center;
-    background: var(--bg-input); color: var(--text);
-    border: 1px solid var(--border); border-radius: 3px;
-    font-size: 0.75rem; font-family: monospace;
-    padding: 4px 2px; margin: 0 1px;
+/* ── Inline separators — subtle connectors between tiles ── */
+.sb-sep {
+    flex: 0 0 22px;
+    width: 22px; max-width: 22px; min-width: 0;
+    box-sizing: border-box;
+    text-align: center;
+    background: transparent;
+    color: #666;
+    border: 1px solid transparent;
+    border-radius: 3px;
+    font-size: 0.8rem;
+    font-family: 'Consolas', monospace;
+    padding: 3px 0;
+    margin: 0;
     outline: none;
+    transition: all 0.15s;
 }
-.sb-sep-input:focus { border-color: #5bb89a; }
-.sb-sep-input::placeholder { color: var(--text-muted); font-size: 0.65rem; }
+.sb-sep:hover {
+    color: #aaa;
+    background: rgba(255,255,255,0.04);
+    border-color: rgba(255,255,255,0.1);
+}
+.sb-sep:focus {
+    flex-basis: 32px;
+    width: 32px; max-width: 32px;
+    color: var(--text);
+    border-color: #5bb89a;
+    background: rgba(91,184,154,0.08);
+}
+.sb-sep::placeholder { color: #444; font-size: 0.6rem; }
 
 /* ── Wildcard controls (below the token row) ── */
 .sb-wc-section {
     width: 100%;
-    margin-top: 6px;
+    margin-top: 8px;
     display: flex; flex-direction: column; gap: 4px;
 }
 .sb-wc-row {
     display: flex; align-items: center; gap: 6px;
     padding: 4px 8px;
-    background: rgba(184, 144, 80, 0.08);
-    border: 1px solid rgba(184, 144, 80, 0.2);
+    background: rgba(184, 144, 80, 0.06);
+    border: 1px solid rgba(184, 144, 80, 0.15);
     border-radius: 4px;
+    font-size: 0.7rem;
 }
 .sb-wc-tag {
-    font-size: 0.65rem; color: #fff; padding: 1px 6px; border-radius: 3px;
+    font-size: 0.6rem; color: #fff; padding: 1px 6px; border-radius: 3px;
     white-space: nowrap;
 }
-.sb-wc-controls {
-    display: flex; align-items: center; gap: 4px;
-    margin-top: 4px;
-}
 .sb-wc-label, .sb-wc-value {
-    width: 60px;
-    background: rgba(0,0,0,0.25); color: #ddd;
-    border: 1px solid rgba(255,255,255,0.12); border-radius: 3px;
-    font-size: 0.68rem; padding: 2px 4px;
+    background: rgba(0,0,0,0.2); color: #ccc;
+    border: 1px solid rgba(255,255,255,0.08); border-radius: 3px;
+    font-size: 0.65rem; padding: 2px 4px;
     outline: none;
 }
 .sb-wc-label:focus, .sb-wc-value:focus { border-color: #b89050; }
-.sb-wc-label { width: 80px; }
-.sb-wc-value { width: 90px; }
+.sb-wc-label { width: 70px; }
+.sb-wc-value { width: 80px; }
 .sb-wc-ask {
-    display: flex; align-items: center; gap: 2px;
-    font-size: 0.65rem; color: #bbb; cursor: pointer; white-space: nowrap;
+    display: flex; align-items: center; gap: 3px;
+    font-size: 0.62rem; color: #999; cursor: pointer; white-space: nowrap;
 }
 .sb-wc-ask input[type="checkbox"] {
-    width: 12px; height: 12px; margin: 0; cursor: pointer;
+    width: 11px; height: 11px; margin: 0; cursor: pointer;
 }
 
 /* ── Preview ── */
 .sb-preview-label {
-    font-size: 0.72rem; color: var(--text-muted);
-    margin-top: 8px; margin-bottom: 2px;
+    font-size: 0.68rem; color: var(--text-muted);
+    margin-top: 10px; margin-bottom: 2px;
 }
 .sb-preview {
     font-family: 'Consolas', 'Fira Code', monospace;
-    font-size: 0.9rem;
+    font-size: 0.85rem;
     padding: 6px 10px;
-    background: #111;
+    background: #0e0e0e;
     border: 1px solid var(--border);
     border-radius: var(--radius-sm);
     color: #ddd;
@@ -3213,21 +3237,14 @@ label:has(input[type="checkbox"]) {
     overflow-x: auto;
 }
 .sb-preview-token { font-weight: 500; }
-.sb-preview-ext { color: var(--text-muted); }
-.sb-preview-empty { color: var(--text-muted); font-style: italic; font-size: 0.8rem; }
+.sb-preview-ext { color: var(--text-muted); font-size: 0.8rem; }
+.sb-preview-empty { color: var(--text-muted); font-style: italic; font-size: 0.78rem; }
 
-/* ── Preview legend & note ── */
+/* ── Preview legend ── */
 .sb-prev-legend {
-    font-size: 0.7rem;
+    font-size: 0.65rem;
     margin-top: 3px;
     color: var(--text-muted);
-}
-.sb-prev-note {
-    font-size: 0.62rem;
-    color: var(--text-muted);
-    opacity: 0.6;
-    margin-top: 4px;
-    font-style: italic;
 }
 
 /* Widen modal card when Shot Builder is inside */

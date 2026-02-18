@@ -50,8 +50,8 @@ export function renderShotBuilder(container, existingConvention = null, context 
     container.innerHTML = `
         <div class="sb-wrapper">
             <div class="sb-header">
-                <span class="sb-title">🏗️ Shot Builder</span>
-                <span class="sb-subtitle">Drag tiles to build your naming convention</span>
+                <span class="sb-title">🏗️ Naming Convention</span>
+                <span class="sb-subtitle">Click or drag tokens to build pattern</span>
             </div>
 
             <div class="sb-inventory" id="sbInventory">
@@ -59,17 +59,17 @@ export function renderShotBuilder(container, existingConvention = null, context 
             </div>
 
             <div class="sb-assembly-label">
-                <span>⬇ Drop tiles here to build filename pattern</span>
-                ${assemblyTokens.length > 0 ? '<button class="sb-clear-btn" id="sbClearAll">Clear All</button>' : ''}
+                <span>Filename pattern</span>
+                ${assemblyTokens.length > 0 ? '<button class="sb-clear-btn" id="sbClearAll">✕ Clear</button>' : ''}
             </div>
             <div class="sb-assembly" id="sbAssembly">
                 ${assemblyTokens.length === 0
-                    ? '<div class="sb-assembly-empty">Drag tokens from above ↑</div>'
+                    ? '<div class="sb-assembly-empty">Click or drag tokens from above</div>'
                     : renderAssemblyTokens()
                 }
             </div>
 
-            <div class="sb-preview-label">Preview:</div>
+            <div class="sb-preview-label">Preview</div>
             <div class="sb-preview" id="sbPreview">${generatePreview()}</div>
         </div>
     `;
@@ -93,7 +93,7 @@ export function renderShotBuilder(container, existingConvention = null, context 
 function renderInventoryTile(def) {
     return `<div class="sb-tile sb-tile-inv" draggable="true" data-type="${def.type}"
                  style="--tile-color: ${def.color};"
-                 title="${def.hint || def.label} — preview shows: ${def.example}">
+                 title="${def.hint || def.label} — click to add, or drag to position">
         <span class="sb-tile-icon">${def.icon}</span>
         <span class="sb-tile-label">${def.label}</span>
     </div>`;
@@ -107,9 +107,9 @@ function renderAssemblyTokens() {
 
         // Separator input (between tokens)
         const sepHtml = i > 0
-            ? `<input class="sb-sep-input" type="text" maxlength="4"
+            ? `<input class="sb-sep" type="text" maxlength="4"
                       data-sep-index="${i}" value="${escHtml(sepValue)}"
-                      placeholder="∅" title="Separator before this token (e.g. _ or leave empty to smash together)">`
+                      placeholder="·" title="Separator — click to edit (e.g. _ - . or empty)">`
             : '';
 
         const label = tok.type === 'wildcard' ? (tok.label || 'Wildcard') : def.label;
@@ -199,6 +199,18 @@ function bindInventoryDragEvents(container) {
             tile.classList.remove('sb-dragging');
             dragSource = null;
             clearDropIndicators(container);
+        });
+        // Click to append token to end of flow
+        tile.addEventListener('click', () => {
+            const type = tile.dataset.type;
+            const newToken = { type, separator: assemblyTokens.length > 0 ? '_' : '' };
+            if (type === 'wildcard') {
+                newToken.label = 'Custom';
+                newToken.value = '';
+                newToken.askAtImport = false;
+            }
+            assemblyTokens.push(newToken);
+            renderShotBuilder(container, assemblyTokens, projectContext);
         });
     });
 }
@@ -320,7 +332,7 @@ function clearDropIndicators(container) {
 
 function bindControlEvents(container) {
     // Separator inputs
-    container.querySelectorAll('.sb-sep-input').forEach(input => {
+    container.querySelectorAll('.sb-sep').forEach(input => {
         input.addEventListener('input', (e) => {
             const idx = parseInt(e.target.dataset.sepIndex);
             assemblyTokens[idx].separator = e.target.value;
