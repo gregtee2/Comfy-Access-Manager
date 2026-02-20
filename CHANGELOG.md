@@ -5,7 +5,11 @@ All notable changes to Comfy Asset Manager (CAM) will be documented in this file
 ## [1.4.1] - 2026-02-19
 
 ### Added
-- **Marquee (rubber-band) drag selection** — click and drag on empty space in the asset grid to draw a blue selection rectangle; all intersecting cards are selected
+- **Video thumbnail scrubbing** — hover over any video asset card and move the mouse left/right to scrub through the clip's timeline directly on the thumbnail; no click required
+- **Advanced selection sets** — professional multi-select with full keyboard modifier support
+  - Shift+Click range selection — selects all assets between last-clicked and current
+  - Ctrl/Cmd+Click toggle selection — add or remove individual assets without clearing others
+  - Drag (marquee) selection — click and drag on empty space to draw a blue rubber-band rectangle; all intersecting cards are selected
   - Shift+drag adds to existing selection (additive mode)
   - 5px movement threshold prevents accidental marquee on normal clicks
   - Auto-scrolls when dragging near viewport edges
@@ -13,6 +17,12 @@ All notable changes to Comfy Asset Manager (CAM) will be documented in this file
   - Cursor switches to crosshair during drag, text selection disabled
 
 ### Changed
+- **UI professionalization & emoji purge** — removed all emoji characters from buttons, labels, headings, toasts, and documentation across the entire frontend (21 files); replaced with clean text labels (e.g., `[Settings]`, `Success:`, `Export`)
+  - `index.html` — 298 lines updated; clean sidebar icons, tab labels, button text
+  - `contextMenus.js` — all menu items use text-only labels
+  - `import.js`, `export.js`, `settings.js`, `shotBuilder.js`, `player.js`, `projectView.js` — emoji-free UI throughout
+  - `Getting Started.html` — installation guide cleaned up
+  - `popout-player.html` — popout player controls updated
 - **Database Engine Migration** — Replaced `sql.js` (WASM) with `better-sqlite3` (native C++) for massive performance gains
   - Enabled Write-Ahead Logging (WAL) mode for concurrent reads/writes without locking
   - Eliminated memory-locking issues during large imports or heavy API usage
@@ -20,6 +30,8 @@ All notable changes to Comfy Asset Manager (CAM) will be documented in this file
   - Auto-updater seamlessly installs the new native driver for end-users
 
 ### Fixed
+- **0 KB file sizes on existing assets** — server startup now scans for assets with `file_size = 0` and re-reads the actual size from disk, fixing assets imported before file-size tracking was added
+- **FFmpeg thumbnail generation failures** — `ThumbnailService` now falls back to timestamp `00:00:00` when the calculated seek position exceeds the video duration (fixes blank/missing thumbnails for short clips)
 - **Click-to-deselect after marquee** — the `click` event that fires after `mouseup` was clearing the selection made by the marquee; added `_suppressNextClick` flag to prevent this
 - **Deselect on background click** — now correctly detects clicks on both `#assetContainer` and `#assetContainerWrap` as "empty space" clicks
 
