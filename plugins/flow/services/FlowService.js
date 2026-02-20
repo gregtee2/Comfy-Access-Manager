@@ -5,29 +5,51 @@
  * See LICENSE file for details.
  */
 /**
- * FlowService - Bridge between MediaVault (Node.js) and Flow Production Tracking (Python)
- * 
+ * FlowService — Bridge between CAM (Node.js) and Flow Production Tracking (Python)
+ *
  * Spawns the Python flow_bridge.py script and parses JSON output.
  * Handles sync operations: Projects, Sequences, Shots, Pipeline Steps → Roles
- * And publish operations: MediaVault assets → Flow Versions
+ * And publish operations: CAM assets → Flow Versions
  */
 
 const { spawn } = require('child_process');
 const path = require('path');
-const { getSetting, getDb } = require('../database');
 
-const BRIDGE_SCRIPT = path.join(__dirname, '..', '..', 'scripts', 'flow_bridge.py');
+const BRIDGE_SCRIPT = path.join(__dirname, '..', 'scripts', 'flow_bridge.py');
+
+// Injected database module (set by routes.js init)
+let _db = null;
 
 class FlowService {
+
+    /**
+     * Set the database module (dependency injection from plugin loader).
+     * @param {object} database - The core database module (with getDb, getSetting, etc.)
+     */
+    static setDatabase(database) {
+        _db = database;
+    }
+
+    /** @returns {object} The database wrapper */
+    static _getDb() {
+        if (!_db) throw new Error('FlowService: database not initialized (call setDatabase first)');
+        return _db.getDb();
+    }
+
+    /** @returns {string|null} A setting value */
+    static _getSetting(key) {
+        if (!_db) throw new Error('FlowService: database not initialized');
+        return _db.getSetting(key);
+    }
 
     /**
      * Get Flow connection credentials from settings.
      */
     static getCredentials() {
         return {
-            site: getSetting('flow_site_url') || '',
-            scriptName: getSetting('flow_script_name') || '',
-            apiKey: getSetting('flow_api_key') || '',
+            site: this._getSetting('flow_site_url') || '',
+            scriptName: this._getSetting('flow_script_name') || '',
+            apiKey: this._getSetting('flow_api_key') || '',
         };
     }
 
@@ -65,7 +87,6 @@ class FlowService {
         }
 
         return new Promise((resolve, reject) => {
-            // Use system Python (shotgun_api3 should be installed there)
             const pythonCmd = process.platform === 'win32' ? 'python' : 'python3';
             const proc = spawn(pythonCmd, args, {
                 cwd: path.dirname(BRIDGE_SCRIPT),
@@ -84,7 +105,6 @@ class FlowService {
                 }
 
                 try {
-                    // Parse last line of stdout (may have debug output before it)
                     const lines = stdout.trim().split('\n');
                     const lastLine = lines[lines.length - 1];
                     const result = JSON.parse(lastLine);
@@ -105,27 +125,18 @@ class FlowService {
         });
     }
 
-    // ─── High-Level Sync Operations ───────────────────────
+    // ─── High-Level Sync Operations ───
 
-    /**
-     * Test the Flow connection.
-     */
     static async testConnection() {
         return this.execute('test_connection');
     }
 
-    /**
-     * Sync projects from Flow → MediaVault.
-     * Creates new projects or updates existing ones (matched by flow_id).
-     * @returns {{ created: number, updated: number, projects: array }}
-     */
     static async syncProjects() {
         const result = await this.execute('sync_projects');
-        const db = getDb();
+        const db = this._getDb();
         let created = 0, updated = 0;
 
         for (const proj of result.projects) {
-            // Check if project with this flow_id already exists
             const existing = db.prepare(
                 'SELECT id FROM projects WHERE flow_id = ?'
             ).get(proj.flow_id);
@@ -136,7 +147,6 @@ class FlowService {
                 ).run(proj.name, proj.description, proj.flow_id);
                 updated++;
             } else {
-                // Check if project with same code exists (link it)
                 const byCode = db.prepare(
                     'SELECT id FROM projects WHERE code = ?'
                 ).get(proj.code);
@@ -158,14 +168,9 @@ class FlowService {
         return { success: true, created, updated, total: result.count };
     }
 
-    /**
-     * Sync sequences from Flow → MediaVault for a specific project.
-     * @param {number} flowProjectId - Flow project ID
-     * @param {number} localProjectId - Local MediaVault project ID
-     */
     static async syncSequences(flowProjectId, localProjectId) {
         const result = await this.execute('sync_sequences', { project_id: flowProjectId });
-        const db = getDb();
+        const db = this._getDb();
         let created = 0, updated = 0;
 
         for (const seq of result.sequences) {
@@ -200,18 +205,12 @@ class FlowService {
         return { success: true, created, updated, total: result.count };
     }
 
-    /**
-     * Sync shots from Flow → MediaVault for a specific project.
-     * @param {number} flowProjectId - Flow project ID
-     * @param {number} localProjectId - Local MediaVault project ID
-     */
     static async syncShots(flowProjectId, localProjectId) {
         const result = await this.execute('sync_shots', { project_id: flowProjectId });
-        const db = getDb();
+        const db = this._getDb();
         let created = 0, updated = 0;
 
         for (const shot of result.shots) {
-            // Resolve local sequence_id from flow_id
             let localSeqId = null;
             if (shot.sequence_flow_id) {
                 const seq = db.prepare(
@@ -240,10 +239,7 @@ class FlowService {
                     ).run(shot.flow_id, shot.description, localSeqId, byCode.id);
                     updated++;
                 } else {
-                    if (!localSeqId) {
-                        // Can't create shot without a sequence - skip
-                        continue;
-                    }
+                    if (!localSeqId) continue;
                     db.prepare(
                         'INSERT INTO shots (project_id, sequence_id, name, code, description, flow_id) VALUES (?, ?, ?, ?, ?, ?)'
                     ).run(localProjectId, localSeqId, shot.name, shot.code, shot.description, shot.flow_id);
@@ -255,16 +251,11 @@ class FlowService {
         return { success: true, created, updated, total: result.count };
     }
 
-    /**
-     * Sync pipeline steps from Flow → MediaVault roles.
-     * Pipeline Steps in Flow map to Roles in MediaVault.
-     */
     static async syncSteps() {
         const result = await this.execute('sync_steps');
-        const db = getDb();
+        const db = this._getDb();
         let created = 0, updated = 0;
 
-        // Default icons for common step names
         const STEP_ICONS = {
             'comp': '🎨', 'compositing': '🎨',
             'light': '💡', 'lighting': '💡', 'lgt': '💡',
@@ -294,7 +285,6 @@ class FlowService {
                 ).run(step.name, step.color, step.sort_order, existing.id);
                 updated++;
             } else {
-                // Check if role with same code already exists
                 const byCode = db.prepare(
                     'SELECT id FROM roles WHERE code = ?'
                 ).get(step.code.toUpperCase());
@@ -316,21 +306,16 @@ class FlowService {
         return { success: true, created, updated, total: result.count };
     }
 
-    /**
-     * Publish a MediaVault asset as a Version in Flow.
-     * @param {object} params - { assetId, flowProjectId, flowShotId, code, description }
-     */
     static async publishVersion(params) {
-        const db = getDb();
-        
-        // Get asset info
+        const db = this._getDb();
+
         const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(params.assetId);
         if (!asset) throw new Error(`Asset ${params.assetId} not found`);
 
         const publishParams = {
             project_id: params.flowProjectId,
             code: params.code || asset.vault_name,
-            description: params.description || `Published from Comfy Asset Manager`,
+            description: params.description || 'Published from Comfy Asset Manager',
             path_to_frames: asset.file_path,
             status: params.status || 'rev',
         };
@@ -341,7 +326,6 @@ class FlowService {
 
         const result = await this.execute('publish_version', publishParams);
 
-        // Store flow_version_id on the asset for tracking
         if (result.version && result.version.flow_id) {
             db.prepare(
                 'UPDATE assets SET metadata = json_set(COALESCE(metadata, "{}"), "$.flow_version_id", ?) WHERE id = ?'
@@ -351,9 +335,6 @@ class FlowService {
         return result;
     }
 
-    /**
-     * Upload a thumbnail from MediaVault to a Flow Version.
-     */
     static async uploadThumbnail(flowVersionId, thumbnailPath) {
         return this.execute('upload_thumbnail', {
             version_id: flowVersionId,
@@ -361,17 +342,13 @@ class FlowService {
         });
     }
 
-    /**
-     * Full sync: Projects → Sequences → Shots → Steps for a specific project.
-     */
     static async fullSync(flowProjectId, localProjectId) {
         const results = {
             steps: await this.syncSteps(),
             sequences: await this.syncSequences(flowProjectId, localProjectId),
         };
-        // Shots depend on sequences being synced first
         results.shots = await this.syncShots(flowProjectId, localProjectId);
-        
+
         return {
             success: true,
             steps: results.steps,
@@ -380,11 +357,8 @@ class FlowService {
         };
     }
 
-    /**
-     * Get mapping of local projects to Flow projects.
-     */
     static getProjectMappings() {
-        const db = getDb();
+        const db = this._getDb();
         return db.prepare(
             'SELECT id, name, code, flow_id FROM projects WHERE flow_id IS NOT NULL'
         ).all();

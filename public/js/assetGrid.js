@@ -14,6 +14,7 @@ import { state } from './state.js';
 import { api } from './api.js';
 import { esc, formatSize, formatDuration, formatDateTime, typeIcon, showToast } from './utils.js';
 import { openPlayer } from './player.js';
+import { getActiveCrateId } from './crate.js';
 
 // ═══════════════════════════════════════════
 //  PROJECT DETAIL / BROWSER
@@ -63,6 +64,16 @@ export function renderProjectDetail(project) {
     const seqList = document.getElementById('sequenceList');
     const filterSeq = document.getElementById('filterSequence');
 
+    // Restore collapse state helper
+    const _syncSeqToggle = () => {
+        const open = localStorage.getItem('cam_seqPanelOpen') === '1';
+        seqList.style.display = open ? 'flex' : 'none';
+        const tog = document.getElementById('seqPanelToggle');
+        const arr = document.getElementById('seqPanelArrow');
+        if (tog) tog.classList.toggle('open', open);
+        if (arr) arr.textContent = open ? '\u25bc' : '\u25b6';
+    };
+
     if (project.type !== 'simple' && project.sequences?.length > 0) {
         seqPanel.style.display = 'block';
         filterSeq.style.display = 'block';
@@ -73,13 +84,18 @@ export function renderProjectDetail(project) {
             if (isActive && s.shots?.length > 0) {
                 shotHtml = `<div class="shot-chips">${s.shots.map(sh => {
                     const isShActive = state.currentShot?.id === sh.id;
+                    const rolePills = (sh.roles || []).map(r => {
+                        const c = r.role_color || '#888';
+                        return `<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:${c}33;color:${c};border:1px solid ${c}55;margin:1px 2px 0 0;line-height:1.3;">${r.role_icon || ''} ${r.role_code || r.role_name}</span>`;
+                    }).join('');
                     return `
                     <span class="shot-chip ${isShActive ? 'active' : ''}" 
                           onclick="event.stopPropagation();selectShot(${s.id}, ${sh.id})"
                           oncontextmenu="event.stopPropagation();showShotContextMenu(event, ${s.id}, ${sh.id}, '${esc(sh.name).replace(/'/g, "\\'")}')"
                           ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                           ondrop="event.stopPropagation();onShotDrop(event, ${s.id}, ${sh.id})"
-                          >🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span></span>`;
+                          style="display:inline-flex;flex-direction:column;align-items:flex-start;"
+                          ><span>🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span></span>${rolePills ? `<span style="margin-top:2px;">${rolePills}</span>` : ''}</span>`;
                 }).join('')}
                     <span class="shot-chip shot-add" onclick="event.stopPropagation();showAddShotModal(${s.id})">+ Shot</span>
                 </div>`;
@@ -87,6 +103,14 @@ export function renderProjectDetail(project) {
                 shotHtml = `<div class="shot-chips">
                     <span class="shot-chip shot-add" onclick="event.stopPropagation();showAddShotModal(${s.id})">+ Shot</span>
                 </div>`;
+            }
+            // Role pills for this sequence (always visible, not just when active)
+            let seqRolePills = '';
+            if (s.roles?.length > 0) {
+                seqRolePills = `<div style="margin:2px 0 4px 24px;display:flex;flex-wrap:wrap;gap:2px;">${s.roles.map(r => {
+                    const c = r.role_color || '#888';
+                    return `<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:${c}33;color:${c};border:1px solid ${c}55;line-height:1.3;">${r.role_icon || ''} ${r.role_code || r.role_name} <span style="opacity:.6">${r.asset_count}</span></span>`;
+                }).join('')}</div>`;
             }
             return `
             <div class="sequence-chip ${isActive ? 'active' : ''}" 
@@ -96,18 +120,35 @@ export function renderProjectDetail(project) {
                  ondrop="onSeqDrop(event, ${s.id})">
                 📋 ${esc(s.name)} <span style="opacity:.5;font-size:.8em">${esc(s.code)}</span>
                 <span class="chip-count">${s.asset_count || 0}</span>
-            </div>${shotHtml}`;
+            </div>${seqRolePills}${shotHtml}`;
         }).join('');
 
         // Populate dropdown
         filterSeq.innerHTML = '<option value="">All Sequences</option>' +
             project.sequences.map(s => `<option value="${s.id}">${s.name} (${s.code})</option>`).join('');
+    } else if (project.orphanShots?.length > 0) {
+        // Fallback: shots without sequences — show directly with role pills
+        seqPanel.style.display = 'block';
+        filterSeq.style.display = 'none';
+        seqList.innerHTML = project.orphanShots.map(sh => {
+            const isShActive = state.currentShot?.id === sh.id;
+            const rolePills = (sh.roles || []).map(r => {
+                const c = r.role_color || '#888';
+                return `<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:${c}33;color:${c};border:1px solid ${c}55;margin:1px 2px 0 0;line-height:1.3;">${r.role_icon || ''} ${r.role_code || r.role_name} <span style="opacity:.6">${r.asset_count}</span></span>`;
+            }).join('');
+            return `
+            <span class="shot-chip ${isShActive ? 'active' : ''}" 
+                  onclick="event.stopPropagation();selectShot(null, ${sh.id})"
+                  style="display:inline-flex;flex-direction:column;align-items:flex-start;margin:2px;"
+                  >🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span>${rolePills ? `<span style="margin-top:2px;">${rolePills}</span>` : ''}</span>`;
+        }).join('');
     } else {
         seqPanel.style.display = project.type === 'simple' ? 'none' : 'block';
         seqList.innerHTML = project.type === 'simple' ? '' :
             '<div style="color:var(--text-muted);font-size:0.82rem;padding:8px;">No sequences yet. Click "+ Sequence" to add one.</div>';
         filterSeq.style.display = 'none';
     }
+    _syncSeqToggle();
 }
 
 export async function selectSequence(seqId) {
@@ -138,6 +179,9 @@ export function selectShot(seqId, shotId) {
 // ═══════════════════════════════════════════
 
 export async function loadProjectAssets(projectId) {
+    // Don't overwrite the asset grid when viewing a crate
+    if (getActiveCrateId()) return;
+
     const params = new URLSearchParams({ project_id: projectId });
 
     const mediaType = document.getElementById('filterMediaType')?.value;
@@ -653,6 +697,7 @@ function startAssetPoll() {
     _pollTimer = setInterval(async () => {
         if (document.hidden) return;
         if (!state.currentProject) return;
+        if (getActiveCrateId()) return;  // Don't poll while viewing a crate
 
         try {
             const info = await api(`/api/assets/poll?project_id=${state.currentProject.id}`);

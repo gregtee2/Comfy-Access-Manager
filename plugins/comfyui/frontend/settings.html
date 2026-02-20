@@ -1,0 +1,16 @@
+<div class="settings-section">
+    <h3>🎨 ComfyUI Integration <span class="help-icon" data-tip="Connect to ComfyUI for AI-generated content. The custom node lets you load assets directly into ComfyUI workflows and save outputs back to the vault.">?</span></h3>
+    <label>ComfyUI URL <span class="help-icon" data-tip="The URL where ComfyUI is running. Default is http://127.0.0.1:8188. Used by 'Load in ComfyUI' to send workflows.">?</span></label>
+    <div class="input-row">
+        <input type="text" id="settingComfyUrl" placeholder="http://127.0.0.1:8188">
+        <button onclick="saveSettings()">Save</button>
+    </div>
+    <label>ComfyUI Output Path <span class="help-icon" data-tip="Point this to your ComfyUI output folder. New files can be auto-detected for import.">?</span></label>
+    <div class="input-row">
+        <input type="text" id="settingComfyPath" placeholder="C:\ComfyUI_windows_portable\ComfyUI\output">
+        <button class="btn-browse" onclick="openFolderPicker('settingComfyPath')" title="Browse...">📁</button>
+        <button onclick="saveSettings()">Save</button>
+    </div>
+    <label><input type="checkbox" id="settingComfyWatch"> Auto-watch ComfyUI output folder</label>
+    <p class="hint">New files in ComfyUI output will appear in the import queue.</p>
+</div>

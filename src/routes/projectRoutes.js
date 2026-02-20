@@ -140,11 +140,23 @@ router.get('/tree', (req, res) => {
         ORDER BY r.sort_order, r.name
     `).all();
 
+    // Get role counts per sequence (assets directly on sequence)
+    const seqRoles = db.prepare(`
+        SELECT a.sequence_id, r.id as role_id, r.name as role_name, r.code as role_code,
+               r.color as role_color, r.icon as role_icon, COUNT(a.id) as asset_count
+        FROM assets a
+        JOIN roles r ON r.id = a.role_id
+        WHERE a.sequence_id IS NOT NULL
+        GROUP BY a.sequence_id, r.id
+        ORDER BY r.sort_order, r.name
+    `).all();
+
     // Build tree
     const tree = projects.map(p => ({
         ...p,
         sequences: sequences.filter(s => s.project_id === p.id).map(s => ({
             ...s,
+            roles: seqRoles.filter(sr => sr.sequence_id === s.id),
             shots: shots.filter(sh => sh.sequence_id === s.id).map(sh => ({
                 ...sh,
                 roles: shotRoles.filter(sr => sr.shot_id === sh.id)
@@ -178,6 +190,48 @@ router.get('/:id', (req, res) => {
         ORDER BY s.sort_order, s.code
     `).all(project.id);
 
+    const shots = db.prepare(`
+        SELECT sh.id, sh.project_id, sh.sequence_id, sh.name, sh.code,
+            (SELECT COUNT(*) FROM assets a WHERE a.shot_id = sh.id) as asset_count
+        FROM shots sh WHERE sh.project_id = ? ORDER BY sh.sort_order, sh.code
+    `).all(project.id);
+
+    const shotRoles = db.prepare(`
+        SELECT a.shot_id, r.id as role_id, r.name as role_name, r.code as role_code,
+               r.color as role_color, r.icon as role_icon, COUNT(a.id) as asset_count
+        FROM assets a
+        JOIN roles r ON r.id = a.role_id
+        WHERE a.project_id = ? AND a.shot_id IS NOT NULL
+        GROUP BY a.shot_id, r.id
+        ORDER BY r.name
+    `).all(project.id);
+
+    // Sequence-level roles (assets directly on sequence, no shot)
+    const seqRoles = db.prepare(`
+        SELECT a.sequence_id, r.id as role_id, r.name as role_name, r.code as role_code,
+               r.color as role_color, r.icon as role_icon, COUNT(a.id) as asset_count
+        FROM assets a
+        JOIN roles r ON r.id = a.role_id
+        WHERE a.project_id = ? AND a.sequence_id IS NOT NULL
+        GROUP BY a.sequence_id, r.id
+        ORDER BY r.name
+    `).all(project.id);
+
+    // Nest shots + roles under sequences, attach sequence-level roles
+    for (const seq of sequences) {
+        seq.shots = shots.filter(sh => sh.sequence_id === seq.id).map(sh => ({
+            ...sh,
+            roles: shotRoles.filter(sr => sr.shot_id === sh.id)
+        }));
+        seq.roles = seqRoles.filter(sr => sr.sequence_id === seq.id);
+    }
+
+    // Orphan shots (no sequence parent) — fallback rendering
+    const orphanShots = shots.filter(sh => !sh.sequence_id).map(sh => ({
+        ...sh,
+        roles: shotRoles.filter(sr => sr.shot_id === sh.id)
+    }));
+
     const assetCounts = db.prepare(`
         SELECT media_type, COUNT(*) as count 
         FROM assets WHERE project_id = ? 
@@ -194,6 +248,7 @@ router.get('/:id', (req, res) => {
     res.json({
         ...project,
         sequences,
+        orphanShots,
         assetCounts,
         totalAssets: totalAssets.count,
     });

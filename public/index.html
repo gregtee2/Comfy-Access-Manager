@@ -129,7 +129,10 @@
         <section id="tab-projects" class="tab-content active">
             <div class="section-header">
                 <h2>Projects <span class="help-icon" data-tip="Projects are the top-level containers for your media. Each project can hold Sequences → Shots → Roles, following ShotGrid/Flow conventions.">?</span></h2>
-                <button class="btn-primary" onclick="showCreateProjectModal()" title="Create a new project with name, code, and type">+ New Project</button>
+                <div style="display:flex;gap:6px;">
+                    <button class="btn-primary" onclick="importFromResolve()" title="Pull media from DaVinci Resolve's media pool into CAM" style="background:#334;border-color:#445;">🎬 Import from Resolve</button>
+                    <button class="btn-primary" onclick="showCreateProjectModal()" title="Create a new project with name, code, and type">+ New Project</button>
+                </div>
             </div>
             <div id="projectGrid" class="project-grid">
                 <!-- Populated by JS -->
@@ -141,6 +144,20 @@
             <div class="browser-layout">
                 <!-- LEFT: Tree Navigation -->
                 <div id="treePanel" class="tree-panel">
+                    <!-- CRATE PANEL (collapsible, above tree) -->
+                    <div id="cratePanel" class="crate-panel">
+                        <div class="crate-header" onclick="window.toggleCratePanel?.()">
+                            <span>📦 Crates</span>
+                            <div style="display:flex;gap:4px;align-items:center;">
+                                <button class="btn-tiny" onclick="event.stopPropagation();window.createCratePrompt?.()" title="Create a new crate">+</button>
+                                <span id="crateChevron" class="crate-chevron">▾</span>
+                            </div>
+                        </div>
+                        <div id="crateList" class="crate-list">
+                            <!-- Populated by JS -->
+                        </div>
+                    </div>
+
                     <div class="tree-header">
                         <span title="Navigate the project hierarchy: Project → Sequence → Shot → Role">🌳 Tree Navigation</span>
                         <button class="btn-tiny" onclick="refreshTree()" title="Reload the project tree from the database">↻</button>
@@ -169,6 +186,7 @@
                     <div class="project-actions">
                         <button class="btn-sm" onclick="showAddSequenceModal()">+ Sequence</button>
                         <button class="btn-sm" onclick="importToProject()">📥 Import Files</button>
+                        <button class="btn-sm" onclick="reorganizeAndRelink()" title="Move linked files into vault structure, rename, and relink in Resolve" style="background:#334;border-color:#445;">🔄 Reorganize & Relink</button>
                         <button class="btn-sm btn-subtle" onclick="archiveCurrentProject()" title="Archive this project (hides from view, doesn't delete)">📦 Archive</button>
                         <button class="btn-sm btn-subtle" onclick="deleteCurrentProject()" title="Right-click project in tree for more options">🗑️ Delete Project</button>
                     </div>
@@ -176,7 +194,10 @@
 
                 <!-- Sequences & Shots panel (for shot-based projects) -->
                 <div id="sequencesPanel" class="sequences-panel">
-                    <div id="sequenceList" class="sequence-list"></div>
+                    <div id="seqPanelToggle" class="seq-panel-toggle" onclick="toggleSeqPanel()">
+                        <span id="seqPanelArrow">▶</span> Sequences &amp; Shots
+                    </div>
+                    <div id="sequenceList" class="sequence-list" style="display:none"></div>
                 </div>
 
                 <!-- Filter bar -->
@@ -520,56 +541,11 @@
                     <label><input type="checkbox" id="settingAutoThumb" checked> Auto-generate thumbnails on import</label>
                 </div>
 
-                <div class="settings-section">
-                    <h3>🎨 ComfyUI Integration <span class="help-icon" data-tip="Connect to ComfyUI for AI-generated content. The custom node lets you load assets directly into ComfyUI workflows and save outputs back to the vault.">?</span></h3>
-                    <label>ComfyUI URL <span class="help-icon" data-tip="The URL where ComfyUI is running. Default is http://127.0.0.1:8188. Used by 'Load in ComfyUI' to send workflows.">?</span></label>
-                    <div class="input-row">
-                        <input type="text" id="settingComfyUrl" placeholder="http://127.0.0.1:8188">
-                        <button onclick="saveSettings()">Save</button>
-                    </div>
-                    <label>ComfyUI Output Path <span class="help-icon" data-tip="Point this to your ComfyUI output folder. New files can be auto-detected for import.">?</span></label>
-                    <div class="input-row">
-                        <input type="text" id="settingComfyPath" placeholder="C:\ComfyUI_windows_portable\ComfyUI\output">
-                        <button class="btn-browse" onclick="openFolderPicker('settingComfyPath')" title="Browse...">📁</button>
-                        <button onclick="saveSettings()">Save</button>
-                    </div>
-                    <label><input type="checkbox" id="settingComfyWatch"> Auto-watch ComfyUI output folder</label>
-                    <p class="hint">New files in ComfyUI output will appear in the import queue.</p>
-                </div>
+                <!-- ComfyUI settings injected by plugin -->
+                <div id="plugin-settings-comfyui"></div>
 
-                <div class="settings-section">
-                    <h3>🔀 Flow Production Tracking <span class="help-icon" data-tip="Sync your project structure from Autodesk Flow (ShotGrid). Projects, sequences, shots, and pipeline steps are imported and kept in sync.">?</span></h3>
-                    <p class="hint">Connect to Autodesk Flow (formerly ShotGrid) to sync projects, sequences, shots, and pipeline steps.</p>
-                    <label>Site URL</label>
-                    <input type="text" id="settingFlowSite" placeholder="https://mysite.shotgrid.autodesk.com">
-                    <label>Script Name</label>
-                    <input type="text" id="settingFlowScriptName" placeholder="mediavault_sync">
-                    <label>API Key</label>
-                    <div class="input-row">
-                        <input type="password" id="settingFlowApiKey" placeholder="••••••••••••••••••••">
-                        <button onclick="saveSettings()">Save</button>
-                    </div>
-                    <div class="input-row" style="margin-top:8px; gap:6px;">
-                        <button id="flowTestBtn" onclick="testFlowConnection()">🔌 Test Connection</button>
-                        <button id="flowSyncBtn" onclick="showFlowSyncPanel()" disabled>🔄 Sync from Flow</button>
-                    </div>
-                    <div id="flowStatus" style="margin-top:6px;font-size:0.82rem;"></div>
-                    <div id="flowSyncPanel" style="display:none; margin-top:10px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px;">
-                        <h4 style="margin:0 0 8px 0;font-size:0.9rem;">Sync Options</h4>
-                        <div style="display:flex;flex-direction:column;gap:6px;">
-                            <button onclick="flowSyncProjects()">📁 Sync Projects</button>
-                            <button onclick="flowSyncSteps()">🎭 Sync Pipeline Steps → Roles</button>
-                            <div id="flowProjectSyncRow" style="display:none;">
-                                <label style="font-size:0.82rem;">Select project for full sync:</label>
-                                <div class="input-row" style="margin-top:4px;">
-                                    <select id="flowProjectSelect" class="setting-select"></select>
-                                    <button onclick="flowFullSync()">🔄 Full Sync</button>
-                                </div>
-                            </div>
-                        </div>
-                        <div id="flowSyncLog" style="margin-top:8px;font-size:0.82rem;color:var(--text-dim);max-height:150px;overflow-y:auto;"></div>
-                    </div>
-                </div>
+                <!-- Flow Production Tracking settings injected by plugin -->
+                <div id="plugin-settings-flow"></div>
 
                 <div class="settings-section">
                     <h3>🎭 Roles <span class="help-icon" data-tip="Roles are pipeline steps (Comp, Light, Anim, FX, etc.) — they drive the '{step}' token in ShotGrid naming and help categorize assets within shots.">?</span></h3>
@@ -790,8 +766,24 @@
 
     <!-- MP4 demuxer for WebCodecs frame-accurate decode (player frame cache) -->
     <script src="/js/lib/mp4box.all.js"></script>
-    <script type="module" src="/js/main.js"></script>
+    <script type="module" src="/js/main.js?v=1.3.3"></script>
     <script>
+        // Sequences panel toggle — collapsed by default
+        function toggleSeqPanel(forceOpen) {
+            const list = document.getElementById('sequenceList');
+            const toggle = document.getElementById('seqPanelToggle');
+            if (!list || !toggle) return;
+            const isOpen = forceOpen === true ? false : list.style.display !== 'none';
+            list.style.display = isOpen ? 'none' : 'flex';
+            toggle.classList.toggle('open', !isOpen);
+            document.getElementById('seqPanelArrow').textContent = isOpen ? '\u25b6' : '\u25bc';
+            localStorage.setItem('cam_seqPanelOpen', !isOpen ? '1' : '0');
+        }
+        // Restore state on load (default collapsed)
+        document.addEventListener('DOMContentLoaded', () => {
+            if (localStorage.getItem('cam_seqPanelOpen') === '1') toggleSeqPanel(true);
+        });
+
         // Toggle warning when Register-in-place radio is selected
         document.querySelectorAll('input[name="importMode"]').forEach(r => {
             r.addEventListener('change', () => {

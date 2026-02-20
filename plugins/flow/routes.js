@@ -5,15 +5,23 @@
  * See LICENSE file for details.
  */
 /**
- * MediaVault - Flow Production Tracking (ShotGrid) Routes
- * Sync projects, sequences, shots, pipeline steps from Flow → MediaVault
- * Publish versions from MediaVault → Flow
+ * Flow Production Tracking Plugin — Backend Routes
+ * Sync projects, sequences, shots, pipeline steps from Flow → CAM
+ * Publish versions from CAM → Flow
  */
 
 const express = require('express');
 const router = express.Router();
-const FlowService = require('../services/FlowService');
-const { getDb } = require('../database');
+const FlowService = require('./services/FlowService');
+
+/**
+ * Initialize plugin with core API (dependency injection).
+ * FlowService needs database access — pass it the database module.
+ * @param {object} core - Core API from pluginLoader
+ */
+function init(core) {
+    FlowService.setDatabase(core.database);
+}
 
 // ─── Status / Config ───
 
@@ -22,18 +30,17 @@ router.get('/status', async (req, res) => {
     try {
         const configured = FlowService.isConfigured();
         if (!configured) {
-            return res.json({ 
-                configured: false, 
+            return res.json({
+                configured: false,
                 connected: false,
                 message: 'Flow not configured. Add credentials in Settings → Flow Production Tracking.'
             });
         }
 
-        // Try to connect
         try {
             const result = await FlowService.testConnection();
-            res.json({ 
-                configured: true, 
+            res.json({
+                configured: true,
                 connected: true,
                 server_info: result.server_info,
             });
@@ -131,7 +138,7 @@ router.post('/sync/full', async (req, res) => {
 
 // ─── Publish ───
 
-// POST /api/flow/publish/version — Create a Version in Flow from a MediaVault asset
+// POST /api/flow/publish/version — Create a Version in Flow from a CAM asset
 // Body: { assetId, flowProjectId, flowShotId?, code?, description? }
 router.post('/publish/version', async (req, res) => {
     const { assetId, flowProjectId } = req.body;
@@ -186,3 +193,4 @@ router.get('/projects', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.init = init;

@@ -5,8 +5,9 @@
  * See LICENSE file for details.
  */
 /**
- * MediaVault - ComfyUI Integration Routes
- * API endpoints for ComfyUI custom nodes to browse, load, and save assets
+ * ComfyUI Integration Plugin — Routes
+ * API endpoints for ComfyUI custom nodes to browse, load, and save assets.
+ * Also handles workflow extraction from generated media files.
  */
 
 const express = require('express');
@@ -15,19 +16,32 @@ const path = require('path');
 const fs = require('fs');
 const http = require('http');
 const { execFileSync } = require('child_process');
-const { getDb, getSetting, logActivity } = require('../database');
-const FileService = require('../services/FileService');
-const ThumbnailService = require('../services/ThumbnailService');
-const MediaInfoService = require('../services/MediaInfoService');
-const { detectMediaType, isMediaFile } = require('../utils/mediaTypes');
-const { resolveFilePath } = require('../utils/pathResolver');
-const { generateFromConvention, getNextVersion } = require('../utils/naming');
+
+// ─── Core API (injected via init) ───
+let core = null;
+
+function init(coreAPI) {
+    core = coreAPI;
+}
+
+// ─── Lazy accessors for core services ───
+function getDb() { return core.database.getDb(); }
+function getSetting(k) { return core.database.getSetting(k); }
+function logActivity(...a) { return core.database.logActivity(...a); }
+function FileService() { return core.services.FileService; }
+function ThumbnailService() { return core.services.ThumbnailService; }
+function MediaInfoService() { return core.services.MediaInfoService; }
+function detectMediaType(f) { return core.utils.mediaTypes.detectMediaType(f); }
+function resolveFilePath(p) { return core.utils.pathResolver.resolveFilePath(p); }
+function generateFromConvention(...a) { return core.utils.naming.generateFromConvention(...a); }
+function getNextVersion(...a) { return core.utils.naming.getNextVersion(...a); }
+
 
 // ═══════════════════════════════════════════
 //  LOAD FROM VAULT (ComfyUI reads assets)
 // ═══════════════════════════════════════════
 
-// GET /api/comfyui/projects — List projects (for dropdown in ComfyUI node)
+// GET /projects — List projects (for dropdown in ComfyUI node)
 router.get('/projects', (req, res) => {
     const db = getDb();
     const projects = db.prepare(`
@@ -36,11 +50,10 @@ router.get('/projects', (req, res) => {
         FROM projects
         ORDER BY name
     `).all();
-
     res.json(projects);
 });
 
-// GET /api/comfyui/sequences — List sequences (optionally filtered by project)
+// GET /sequences — List sequences (optionally filtered by project)
 router.get('/sequences', (req, res) => {
     const { project_id } = req.query;
     const db = getDb();
@@ -49,14 +62,12 @@ router.get('/sequences', (req, res) => {
                  FROM sequences s
                  LEFT JOIN projects p ON p.id = s.project_id`;
     const params = [];
-
     if (project_id) { query += ' WHERE s.project_id = ?'; params.push(project_id); }
     query += ' ORDER BY s.sort_order, s.name';
-
     res.json(db.prepare(query).all(...params));
 });
 
-// GET /api/comfyui/shots — List shots (optionally filtered by sequence or project)
+// GET /shots — List shots (optionally filtered by sequence or project)
 router.get('/shots', (req, res) => {
     const { project_id, sequence_id } = req.query;
     const db = getDb();
@@ -67,22 +78,20 @@ router.get('/shots', (req, res) => {
                  LEFT JOIN sequences seq ON seq.id = sh.sequence_id
                  WHERE 1=1`;
     const params = [];
-
     if (project_id) { query += ' AND sh.project_id = ?'; params.push(project_id); }
     if (sequence_id) { query += ' AND sh.sequence_id = ?'; params.push(sequence_id); }
     query += ' ORDER BY sh.sort_order, sh.name';
-
     res.json(db.prepare(query).all(...params));
 });
 
-// GET /api/comfyui/roles — List roles
+// GET /roles — List roles
 router.get('/roles', (req, res) => {
     const db = getDb();
     const roles = db.prepare('SELECT id, name, code FROM roles ORDER BY sort_order, name').all();
     res.json(roles);
 });
 
-// GET /api/comfyui/assets — List assets filtered for ComfyUI (images/videos only)
+// GET /assets — List assets filtered for ComfyUI (images/videos only)
 router.get('/assets', (req, res) => {
     const { project_id, sequence_id, shot_id, role_id, media_type } = req.query;
     const db = getDb();
@@ -90,7 +99,6 @@ router.get('/assets', (req, res) => {
     let query = `SELECT id, vault_name, file_path, media_type, width, height, file_ext 
                  FROM assets WHERE 1=1`;
     const params = [];
-
     if (project_id) { query += ' AND project_id = ?'; params.push(project_id); }
     if (sequence_id) { query += ' AND sequence_id = ?'; params.push(sequence_id); }
     if (shot_id) { query += ' AND shot_id = ?'; params.push(shot_id); }
@@ -101,15 +109,11 @@ router.get('/assets', (req, res) => {
     } else {
         query += " AND media_type IN ('image', 'video', 'exr')";
     }
-
     query += ' ORDER BY vault_name';
-    const assets = db.prepare(query).all(...params);
-
-    res.json(assets);
+    res.json(db.prepare(query).all(...params));
 });
 
-// GET /api/comfyui/asset/:id/path — Get file path for a specific asset
-// This is the key endpoint for ComfyUI: returns the absolute file path
+// GET /asset/:id/path — Get file path for a specific asset
 router.get('/asset/:id/path', (req, res) => {
     const db = getDb();
     const asset = db.prepare('SELECT id, file_path, vault_name, media_type FROM assets WHERE id = ?')
@@ -133,7 +137,7 @@ router.get('/asset/:id/path', (req, res) => {
 //  PERSISTENT MAPPING (Node remembers which asset)
 // ═══════════════════════════════════════════
 
-// POST /api/comfyui/mapping — Save which asset a ComfyUI node is using
+// POST /mapping — Save which asset a ComfyUI node is using
 router.post('/mapping', (req, res) => {
     const { workflow_id, node_id, asset_id } = req.body;
     if (!node_id || !asset_id) {
@@ -156,7 +160,7 @@ router.post('/mapping', (req, res) => {
     res.json({ success: true });
 });
 
-// GET /api/comfyui/mapping/:nodeId — Get the saved asset for a node
+// GET /mapping/:nodeId — Get the saved asset for a node
 router.get('/mapping/:nodeId', (req, res) => {
     const { workflow_id } = req.query;
     const db = getDb();
@@ -188,7 +192,7 @@ router.get('/mapping/:nodeId', (req, res) => {
 //  SAVE TO VAULT (ComfyUI outputs → vault)
 // ═══════════════════════════════════════════
 
-// POST /api/comfyui/save — Save a ComfyUI output file into the vault
+// POST /save — Save a ComfyUI output file into the vault
 router.post('/save', async (req, res) => {
     const { file_path, project_id, sequence_id, shot_id, role_id, custom_name, node_id, workflow_id, generation_info } = req.body;
 
@@ -241,7 +245,7 @@ router.post('/save', async (req, res) => {
             }
         }
 
-        const imported = FileService.importFile(file_path, {
+        const imported = FileService().importFile(file_path, {
             projectCode: project.code,
             sequenceCode: sequence?.code,
             shotCode: shot?.code,
@@ -250,7 +254,7 @@ router.post('/save', async (req, res) => {
             overrideVaultName,
         });
 
-        const info = await MediaInfoService.probe(imported.vaultPath);
+        const info = await MediaInfoService().probe(imported.vaultPath);
 
         const result = db.prepare(`
             INSERT INTO assets (
@@ -286,7 +290,7 @@ router.post('/save', async (req, res) => {
 
         // Generate thumbnail
         try {
-            const thumbPath = await ThumbnailService.generate(imported.vaultPath, assetId);
+            const thumbPath = await ThumbnailService().generate(imported.vaultPath, assetId);
             if (thumbPath) {
                 db.prepare('UPDATE assets SET thumbnail_path = ? WHERE id = ?').run(thumbPath, assetId);
             }
@@ -345,7 +349,7 @@ function extractWorkflowFromFile(filePath) {
 }
 
 function extractVideoWorkflow(filePath) {
-    const ffprobe = MediaInfoService.findFFprobe();
+    const ffprobe = MediaInfoService().findFFprobe();
     if (!ffprobe) return null;
 
     try {
@@ -450,14 +454,14 @@ function checkComfyUI(comfyUrl) {
     });
 }
 
-// GET /api/comfyui/status — Check if ComfyUI is reachable
+// GET /status — Check if ComfyUI is reachable
 router.get('/status', async (req, res) => {
     const comfyUrl = getSetting('comfyui_url') || 'http://127.0.0.1:8188';
     const running = await checkComfyUI(comfyUrl);
     res.json({ running, url: comfyUrl });
 });
 
-// GET /api/comfyui/check-workflow/:id — Check if an asset has an embedded workflow
+// GET /check-workflow/:id — Check if an asset has an embedded workflow
 router.get('/check-workflow/:id', (req, res) => {
     const db = getDb();
     const asset = db.prepare('SELECT id, file_path, vault_name, media_type, file_ext FROM assets WHERE id = ?')
@@ -476,7 +480,7 @@ router.get('/check-workflow/:id', (req, res) => {
     });
 });
 
-// POST /api/comfyui/load-in-comfy/:id — Extract workflow and send to ComfyUI
+// POST /load-in-comfy/:id — Extract workflow and send to ComfyUI
 router.post('/load-in-comfy/:id', async (req, res) => {
     try {
         const comfyUrl = getSetting('comfyui_url') || 'http://127.0.0.1:8188';
@@ -547,3 +551,4 @@ router.post('/load-in-comfy/:id', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.init = init;

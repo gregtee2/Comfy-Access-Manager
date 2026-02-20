@@ -12,9 +12,10 @@
 
 import { state } from './state.js';
 import { api } from './api.js';
-import { loadProjects, loadTree, initFileDropZone } from './browser.js';
+import { loadProjects, loadTree, initFileDropZone, loadCrates } from './browser.js';
 import { loadImportTab } from './import.js';
 import { loadSettings, loadRoles, openFolderPicker, autoCheckForUpdates } from './settings.js';
+import pluginRegistry from './pluginRegistry.js';
 import './export.js';
 
 // ═══════════════════════════════════════════
@@ -183,6 +184,10 @@ async function checkSetup() {
             scanForRemoteServers(); // Auto-discover servers on the LAN
         } else {
             document.getElementById('setupOverlay').style.display = 'none';
+
+            // Initialize plugin registry (loads plugin UI contributions)
+            await pluginRegistry.init();
+
             loadProjects();
             loadSettings();
             loadRoles();
@@ -217,7 +222,7 @@ function switchTab(tab) {
     document.querySelectorAll('.tab-content').forEach(t => t.classList.toggle('active', t.id === `tab-${tab}`));
 
     if (tab === 'projects') loadProjects();
-    if (tab === 'browser') loadTree();
+    if (tab === 'browser') { loadTree(); loadCrates(); }
     if (tab === 'import') loadImportTab();
     if (tab === 'settings') { loadSettings(); loadRoles(); }
 }

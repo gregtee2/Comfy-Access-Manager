@@ -139,11 +139,16 @@ These are the ONLY files with `process.platform` checks. When adding features th
 | `FileService.js` `getDrives()` | Drive letter scan (Win) vs `/Volumes` + `mount` parse (Mac) vs `/mnt`+`/media` (Linux) | ~100 lines |
 | `assetRoutes.js` `findRV()` | `rv.exe` paths (Win) vs `RV.app` bundle paths (Mac) vs `/usr/local/rv` (Linux) | ~90 lines |
 | `assetRoutes.js` `findRvPush()`, `isRvRunning()` | `tasklist` (Win) vs `pgrep` (Mac/Linux) | ~15 lines |
+| `assetRoutes.js` `findFontFile()` | `C:/Windows/Fonts/` (Win) vs `/System/Library/Fonts/` (Mac) | ~10 lines |
 | `ThumbnailService.js` `findFFmpeg()` | `C:\ffmpeg\` (Win) vs `/opt/homebrew/bin/` (Mac) vs `/usr/bin/` (Linux) | ~25 lines |
 | `MediaInfoService.js` `findFFprobe()` | Same pattern as FFmpeg | ~20 lines |
 | `FlowService.js` `_executeCommand()` | `python` (Win) vs `python3` (Mac/Linux) | 1 line |
 | `resolveRoutes.js` `_getResolveModulesPath/LibPath()` | `fusionscript.dll` paths (Win) vs `fusionscript.so` paths (Mac/Linux) | ~30 lines |
-| `assetRoutes.js` `findFontFile()` | `C:/Windows/Fonts/` (Win) vs `/System/Library/Fonts/` (Mac) | ~10 lines |
+| `TranscodeService.js` `h264_mov.buildArgs()` | `h264_nvenc` (Win) vs `h264_videotoolbox` (Mac), both fall back to `libx264` | ~15 lines |
+| `exportRoutes.js` `CODEC_PRESETS`, `CODEC_NAME_MAP` | `h264_nvenc`/`hevc_nvenc` (Win) vs `h264_videotoolbox`/`hevc_videotoolbox` (Mac), GPU→CPU fallback | ~30 lines |
+| `updateRoutes.js` | Remote URL token injection (same logic, no OS branch needed) | — |
+| `RVPluginSync.js` `findRVInstalls()` | `rv.exe` paths (Win) vs `RV.app` bundle paths (Mac), `tar`/`zip` for rvpkg | ~60 lines |
+| `pathResolver.js` `resolveFilePath()` | Drive-letter↔`/Volumes` bidirectional path mapping | ~30 lines |
 
 ### Platform-Specific Files (not shared)
 

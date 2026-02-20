@@ -286,6 +286,174 @@ def cmd_get_projects(resolve, params):
     }
 
 
+def _collect_clips_recursive(folder, bin_path=""):
+    """Recursively collect all clips from a folder and its subfolders."""
+    clips = []
+    folder_name = folder.GetName()
+    current_path = (bin_path + "/" + folder_name) if bin_path else folder_name
+
+    # Get clips in this folder
+    for item in (folder.GetClipList() or []):
+        clip_info = {
+            "name": item.GetName(),
+            "binPath": current_path,
+            "mediaId": item.GetMediaId() if hasattr(item, 'GetMediaId') else None,
+        }
+
+        # Get clip properties
+        try:
+            props = item.GetClipProperty()
+            if props:
+                clip_info["filePath"] = props.get("File Path", "")
+                clip_info["resolution"] = props.get("Resolution", "")
+                clip_info["fps"] = props.get("FPS", "")
+                clip_info["duration"] = props.get("Duration", "")
+                clip_info["codec"] = props.get("Video Codec", "")
+                clip_info["clipType"] = props.get("Type", "")
+                clip_info["frames"] = props.get("Frames", "")
+                clip_info["startFrame"] = props.get("Start", "")
+                clip_info["endFrame"] = props.get("End", "")
+        except Exception:
+            pass
+
+        clips.append(clip_info)
+
+    # Recurse into subfolders
+    for sub in (folder.GetSubFolderList() or []):
+        clips.extend(_collect_clips_recursive(sub, current_path))
+
+    return clips
+
+
+def cmd_get_media_pool(resolve, params):
+    """
+    Get all clips from Resolve's media pool with file paths and bin structure.
+    Returns every MediaPoolItem with its file path, bin location, and metadata.
+    Used for pulling a Resolve project into CAM for reorganization.
+    """
+    if not resolve:
+        return {"success": False, "error": "Resolve not running"}
+
+    project = resolve.GetProjectManager().GetCurrentProject()
+    if not project:
+        return {"success": False, "error": "No project open in Resolve"}
+
+    mp = project.GetMediaPool()
+    root = mp.GetRootFolder()
+
+    clips = _collect_clips_recursive(root)
+
+    # Filter out clips with no file path (generated media, timelines, etc.)
+    media_clips = [c for c in clips if c.get("filePath")]
+
+    return {
+        "success": True,
+        "project": project.GetName(),
+        "totalClips": len(clips),
+        "mediaClips": len(media_clips),
+        "clips": media_clips
+    }
+
+
+def _find_clip_by_path(folder, file_path):
+    """Recursively find a MediaPoolItem by its file path."""
+    for item in (folder.GetClipList() or []):
+        try:
+            props = item.GetClipProperty()
+            if props and props.get("File Path", "") == file_path:
+                return item
+        except Exception:
+            pass
+
+    for sub in (folder.GetSubFolderList() or []):
+        found = _find_clip_by_path(sub, file_path)
+        if found:
+            return found
+
+    return None
+
+
+def cmd_relink_clips(resolve, params):
+    """
+    Relink clips in Resolve's media pool to new file paths.
+
+    params:
+        relink_map: dict of { old_path: new_path } mappings
+    """
+    if not resolve:
+        return {"success": False, "error": "Resolve not running"}
+
+    project = resolve.GetProjectManager().GetCurrentProject()
+    if not project:
+        return {"success": False, "error": "No project open in Resolve"}
+
+    relink_map = params.get("relink_map", {})
+    if not relink_map:
+        return {"success": False, "error": "No relink_map provided"}
+
+    mp = project.GetMediaPool()
+    root = mp.GetRootFolder()
+
+    results = {
+        "success": True,
+        "project": project.GetName(),
+        "relinked": 0,
+        "failed": 0,
+        "not_found": 0,
+        "details": []
+    }
+
+    for old_path, new_path in relink_map.items():
+        # Verify new file exists
+        if not os.path.exists(new_path):
+            results["failed"] += 1
+            results["details"].append({
+                "old": old_path,
+                "new": new_path,
+                "status": "new_file_missing"
+            })
+            continue
+
+        # Find the clip in the media pool
+        clip = _find_clip_by_path(root, old_path)
+        if not clip:
+            results["not_found"] += 1
+            results["details"].append({
+                "old": old_path,
+                "new": new_path,
+                "status": "clip_not_found"
+            })
+            continue
+
+        # Attempt relink
+        try:
+            # ReplaceClip takes the new file path
+            success = clip.ReplaceClip(new_path)
+            if success:
+                results["relinked"] += 1
+                results["details"].append({
+                    "old": old_path,
+                    "new": new_path,
+                    "status": "relinked"
+                })
+            else:
+                results["failed"] += 1
+                results["details"].append({
+                    "old": old_path,
+                    "new": new_path,
+                    "status": "replace_failed"
+                })
+        except Exception as e:
+            results["failed"] += 1
+            results["details"].append({
+                "old": old_path,
+                "new": new_path,
+                "status": f"error: {str(e)}"
+            })
+
+    return results
+
+
 def main():
     if len(sys.argv) < 2:
         print(json.dumps({"success": False, "error": "Usage: resolve_bridge.py <command> [--json '{...}']"}))
@@ -313,6 +481,8 @@ def main():
         "list_bins": cmd_list_bins,
         "send_to_bin": cmd_send_to_bin,
         "get_projects": cmd_get_projects,
+        "get_media_pool": cmd_get_media_pool,
+        "relink_clips": cmd_relink_clips,
     }
 
     handler = commands.get(command)

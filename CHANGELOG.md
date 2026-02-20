@@ -2,6 +2,40 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.4.0] - 2026-02-19
+
+### Added
+- **Crate system** — collect assets from any project/sequence/shot into named crates for review, export, or sharing
+  - `public/js/crate.js` — full crate UI: create, rename, delete, view, export
+  - `src/routes/crateRoutes.js` — REST API for crate CRUD, add/remove assets, export
+  - `crates` + `crate_assets` database tables with ordered asset positions
+  - Tree nav sidebar shows crate list with asset count badges
+  - Context menu "Add to Crate" submenu with crate picker
+  - Context menu "Remove from Crate" when viewing a crate
+  - RV plugin: **Add to Crate** from right-click menu inside OpenRV (sends currently viewed clip)
+- **Plugin architecture** — Resolve, Flow/ShotGrid, and ComfyUI refactored into self-contained plugins
+  - `src/pluginLoader.js` — scans `plugins/` directory, auto-mounts routes and serves plugin frontend assets
+  - `public/js/pluginRegistry.js` — frontend plugin registration and settings injection
+  - Each plugin is a folder with `plugin.json` manifest, `routes.js`, optional `frontend/`, `services/`, `scripts/`
+  - Plugins: `plugins/comfyui/`, `plugins/flow/`, `plugins/resolve/`
+  - Old monolithic route files (`comfyuiRoutes.js`, `flowRoutes.js`, `resolveRoutes.js`, `FlowService.js`) removed from core
+- **macOS VideoToolbox GPU encoding** — Mac exports now use hardware-accelerated `h264_videotoolbox` / `hevc_videotoolbox` instead of slow CPU `libx264`
+  - `TranscodeService.js` — platform-aware GPU encoder selection (VideoToolbox on Mac, NVENC on Windows)
+  - `exportRoutes.js` — `CODEC_PRESETS` and `CODEC_NAME_MAP` are now platform-aware; codec dropdown shows correct GPU label per OS
+  - Export execution now auto-retries with CPU fallback (`libx264`/`libx265`) if GPU encoder fails
+- **install.sh Python3 check** — installer now verifies Python3 is available (needed for Resolve bridge, Flow sync)
+
+### Fixed
+- **RV plugin `_QWidgets` undefined** — `QListWidget` and `QListWidgetItem` were never imported; replaced all `_QWidgets.ClassName` references with direct class imports for both PySide2 and PySide6
+- **RV plugin multi-clip source detection** — "Add to Crate" always exported the first clip regardless of which was viewed; now uses `rvc.sourcesAtFrame(rvc.frame())` to detect the currently displayed source
+- **Crate sidebar count badge showing 0** — `addToCrate()` was not calling `loadCrates()` after successful add; sidebar now refreshes immediately
+- **Context menu "Delete" visible in crate view** — hidden when viewing a crate (assets should be removed, not deleted)
+- **Tree nav not clearing crate state** — navigating away from a crate in the tree now properly clears `activeCrateId`
+
+### Changed
+- Updated copilot-instructions platform-branching files table from 8 to 13 entries
+- Cache-bust CSS and JS links updated to `?v=1.4.0`
+
 ## [1.3.2] - 2026-02-18
 
 ### Added

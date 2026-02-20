@@ -1,0 +1,25 @@
+{
+    "id": "comfyui",
+    "name": "ComfyUI Integration",
+    "version": "1.0.0",
+    "description": "ComfyUI node integration — browse, load, and save assets from ComfyUI workflows. Extract embedded workflows from generated media.",
+    "icon": "🎨",
+    "backend": {
+        "routes": "routes.js",
+        "mountPath": "/api/comfyui"
+    },
+    "frontend": {
+        "settingsSection": "frontend/settings.html",
+        "settingsScript": "frontend/settings.js",
+        "contextMenu": {
+            "items": [
+                {
+                    "id": "loadComfy",
+                    "label": "🎨 Load in ComfyUI",
+                    "fileTypes": ["png", "mp4", "webm", "mkv", "mov", "avi"],
+                    "singleOnly": true
+                }
+            ]
+        }
+    }
+}

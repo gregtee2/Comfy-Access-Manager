@@ -13,6 +13,7 @@ import rv.commands as rvc
 import rv.extra_commands as rve
 import json
 import os
+import tempfile
 
 import time
 
@@ -44,7 +45,8 @@ try:
         QDialog, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
         QTableWidget, QTableWidgetItem, QHeaderView, QPushButton,
         QCheckBox, QLabel, QFrame, QAbstractItemView, QGroupBox,
-        QSplitter, QWidget, QMenu, QAction, QApplication
+        QSplitter, QWidget, QMenu, QAction, QApplication,
+        QListWidget, QListWidgetItem
     )
     from PySide2.QtGui import QCursor, QFont, QColor, QBrush, QIcon
     from PySide2.QtCore import Qt, QSize
@@ -55,7 +57,8 @@ except ImportError:
             QDialog, QVBoxLayout, QHBoxLayout, QTreeWidget, QTreeWidgetItem,
             QTableWidget, QTableWidgetItem, QHeaderView, QPushButton,
             QCheckBox, QLabel, QFrame, QAbstractItemView, QGroupBox,
-            QSplitter, QWidget, QMenu, QApplication
+            QSplitter, QWidget, QMenu, QApplication,
+            QListWidget, QListWidgetItem
         )
         from PySide6.QtGui import QCursor, QAction, QFont, QColor, QBrush, QIcon
         from PySide6.QtCore import Qt, QSize
@@ -675,6 +678,9 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 ("Prev Version", self.prevVersion, "alt+Left", None),
                 ("Next Version", self.nextVersion, "alt+Right", None),
                 ("_", None),
+                ("Publish Frame", self.publishFrame, "alt+p", None),
+                ("Add to Crate ...", self.addToCrateMenu, "alt+c", None),
+                ("_", None),
                 ("Toggle Overlay", self._toggleOverlay, "shift+o",
                  lambda: rvc.CheckedMenuState if self._overlay_enabled
                          else rvc.UncheckedMenuState),
@@ -693,40 +699,82 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
     # ── source path resolution ───────────────────────────────────
 
     def _getCurrentSourcePath(self):
-        """Return the file path of the first/current source."""
+        """Return the file path of the currently VIEWED source (not always the first)."""
         try:
+            # --- Strategy 1: Use sourcesAtFrame to find the source visible NOW ---
+            try:
+                frame = rvc.frame()
+                srcsAtFrame = rvc.sourcesAtFrame(frame)
+                if srcsAtFrame:
+                    # sourcesAtFrame returns list of (sourceName, ...) tuples
+                    for entry in srcsAtFrame:
+                        source_name = entry if isinstance(entry, str) else entry[0]
+                        path = self._resolveSourcePath(source_name)
+                        if path:
+                            return path
+            except Exception:
+                pass
+
+            # --- Strategy 2: Walk viewNode's source group ---
+            try:
+                vn = rvc.viewNode()
+                if vn:
+                    frame = rvc.frame()
+                    # For sequence/stack nodes, find the active source group
+                    for sg in rvc.nodesOfType("RVSourceGroup"):
+                        path = self._pathFromSourceGroup(sg)
+                        if path:
+                            # In single-source view or first match fallback
+                            pass  # Will fall through to strategy 3
+            except Exception:
+                pass
+
+            # --- Strategy 3: Fallback — first source (original behavior) ---
             srcs = rvc.sources()
             if not srcs:
                 return None
 
-            source_name = srcs[0][0]
+            source_name = srcs[0][0] if isinstance(srcs[0], (list, tuple)) else srcs[0]
+            path = self._resolveSourcePath(source_name)
+            if path:
+                return path
 
-            if os.path.exists(source_name):
-                return os.path.normpath(source_name)
-
-            try:
-                media = rvc.sourceMedia(source_name)
-                if media and media[0] and os.path.exists(media[0]):
-                    return os.path.normpath(media[0])
-            except Exception:
-                pass
-
+            # --- Strategy 4: Walk all source groups ---
             for sg in rvc.nodesOfType("RVSourceGroup"):
-                try:
-                    for n in rvc.nodesInGroup(sg):
-                        try:
-                            prop = rvc.getStringProperty(n + ".media.movie", 0, 1)
-                            if prop and os.path.exists(prop[0]):
-                                return os.path.normpath(prop[0])
-                        except Exception:
-                            pass
-                except Exception:
-                    pass
+                path = self._pathFromSourceGroup(sg)
+                if path:
+                    return path
 
             return None
         except Exception as e:
             print("[MediaVault] _getCurrentSourcePath error: %s" % e)
             return None
+
+    def _resolveSourcePath(self, source_name):
+        """Given a source name string, resolve it to an on-disk file path."""
+        try:
+            if os.path.exists(source_name):
+                return os.path.normpath(source_name)
+            media = rvc.sourceMedia(source_name)
+            if media and media[0] and os.path.exists(media[0]):
+                return os.path.normpath(media[0])
+        except Exception:
+            pass
+        return None
+
+    def _pathFromSourceGroup(self, sg):
+        """Extract file path from an RVSourceGroup node."""
+        try:
+            for n in rvc.nodesInGroup(sg):
+                try:
+                    prop = rvc.getStringProperty(n + ".media.movie", 0, 1)
+                    if prop and prop[0] and os.path.exists(prop[0]):
+                        return os.path.normpath(prop[0])
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return None
 
     # ── API ──────────────────────────────────────────────────────
 
@@ -996,6 +1044,220 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
     def showSwitchMenu(self, event):
         """MediaVault -> Switch to ..."""
         self._showPickerDialog("switch")
+
+    # ── publish frame ─────────────────────────────────────────
+
+    def publishFrame(self, event):
+        """MediaVault -> Publish Frame — save current frame as a Ref asset.
+        Exports the composited displayed frame (including annotations and
+        paint-overs) via exportCurrentFrame, then sends the rendered file
+        to the CAM server for vault import.
+        """
+        if urllib is None:
+            rve.displayFeedback("urllib not available", 4.0)
+            return
+
+        filepath = self._getCurrentSourcePath()
+        if not filepath:
+            rve.displayFeedback("No source loaded", 3.0)
+            return
+
+        frame = rvc.frame()
+        rve.displayFeedback("Publishing frame %d ..." % frame, 2.0)
+
+        renderedPath = None
+        tempDir = None
+        try:
+            # Export the currently displayed frame (with annotations/paint-overs/
+            # LUTs baked in) to a temp PNG so CAM imports what the user sees.
+            tempDir = tempfile.mkdtemp(prefix="cam_rv_publish_")
+            renderedPath = os.path.join(
+                tempDir, "frame_%04d.png" % frame
+            )
+            try:
+                rvc.exportCurrentFrame(renderedPath)
+                # Validate the file was actually written
+                if (not os.path.exists(renderedPath)
+                        or os.path.getsize(renderedPath) < 100):
+                    print("[MediaVault] exportCurrentFrame produced no/tiny file")
+                    renderedPath = None
+            except Exception as e:
+                print("[MediaVault] exportCurrentFrame failed: %s" % e)
+                renderedPath = None
+
+            payload_data = {
+                "sourcePath": filepath,
+                "frameNumber": frame,
+            }
+            # If we got a rendered frame, tell CAM to use that file directly
+            if renderedPath:
+                payload_data["renderedFramePath"] = renderedPath
+
+            payload = json.dumps(payload_data).encode("utf-8")
+
+            url = "%s/api/assets/publish-frame" % DMV_URL
+            req = urllib.request.Request(
+                url, data=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=30) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+
+            if result.get("success"):
+                names = [a.get("vault_name", "?") for a in result.get("assets", [])]
+                rve.displayFeedback(
+                    "Published: %s" % ", ".join(names), 5.0
+                )
+            else:
+                rve.displayFeedback(
+                    "Publish failed: %s" % result.get("error", "Unknown"), 5.0
+                )
+        except Exception as e:
+            print("[MediaVault] publishFrame error: %s" % e)
+            rve.displayFeedback("Publish error: %s" % e, 5.0)
+        finally:
+            # Clean up temp directory
+            if tempDir:
+                try:
+                    import shutil
+                    shutil.rmtree(tempDir, ignore_errors=True)
+                except Exception:
+                    pass
+
+    # ── add to crate ──────────────────────────────────────────
+
+    def addToCrateMenu(self, event):
+        """MediaVault -> Add to Crate ... — add current clip to a crate."""
+        if urllib is None:
+            rve.displayFeedback("urllib not available", 4.0)
+            return
+
+        filepath = self._getCurrentSourcePath()
+        if not filepath:
+            rve.displayFeedback("No source loaded", 3.0)
+            return
+
+        # Fetch available crates
+        try:
+            url = "%s/api/crates" % DMV_URL
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=5) as resp:
+                crates = json.loads(resp.read().decode("utf-8"))
+        except Exception as e:
+            print("[MediaVault] Failed to fetch crates: %s" % e)
+            rve.displayFeedback("Cannot connect to MediaVault: %s" % e, 4.0)
+            return
+
+        if not crates:
+            rve.displayFeedback("No crates found \u2014 create one in the browser first", 4.0)
+            return
+
+        # Show crate picker dialog
+        crateId = self._showCratePickerDialog(crates)
+        if crateId is None:
+            return  # User cancelled
+
+        # Add to crate via API
+        try:
+            payload = json.dumps({"filePath": filepath}).encode("utf-8")
+            url = "%s/api/crates/%s/add-by-path" % (DMV_URL, crateId)
+            req = urllib.request.Request(
+                url, data=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=10) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+
+            if result.get("ok"):
+                rve.displayFeedback(
+                    "Added \"%s\" to crate \"%s\"" % (
+                        result.get("vaultName", os.path.basename(filepath)),
+                        result.get("crateName", "?")),
+                    4.0
+                )
+            else:
+                rve.displayFeedback(
+                    "Failed: %s" % result.get("error", "Unknown"), 4.0
+                )
+        except Exception as e:
+            print("[MediaVault] addToCrate error: %s" % e)
+            rve.displayFeedback("Add to crate error: %s" % e, 4.0)
+
+    def _showCratePickerDialog(self, crates):
+        """Show a simple Qt dialog listing available crates. Returns crate ID or None."""
+        if not HAS_QT:
+            # No Qt available — fall back to first crate
+            print("[MediaVault] No Qt — using first crate: %s" % crates[0].get("name"))
+            rve.displayFeedback("Using crate: %s (no Qt for picker)" % crates[0].get("name"), 2.0)
+            return crates[0].get("id")
+
+        try:
+            dialog = QDialog()
+            dialog.setWindowTitle("Add to Crate")
+            dialog.setMinimumSize(320, 200)
+            dialog.setStyleSheet("""
+                QDialog { background: #1e1e1e; color: #e0e0e0; }
+                QListWidget { background: #2a2a2a; color: #e0e0e0;
+                              border: 1px solid #444; font-size: 13px;
+                              selection-background-color: #2ec4b6;
+                              selection-color: #000; }
+                QListWidget::item { padding: 8px; }
+                QLabel { color: #aaa; font-size: 12px; }
+                QPushButton { background: #2ec4b6; color: #000;
+                              border: none; padding: 8px 20px;
+                              border-radius: 4px; font-weight: bold;
+                              font-size: 13px; }
+                QPushButton:hover { background: #26a89c; }
+                QPushButton#cancelBtn { background: #444; color: #ccc; }
+                QPushButton#cancelBtn:hover { background: #555; }
+            """)
+
+            layout = QVBoxLayout(dialog)
+            layout.setContentsMargins(16, 16, 16, 16)
+            layout.setSpacing(12)
+
+            label = QLabel("Select a crate:")
+            layout.addWidget(label)
+
+            listWidget = QListWidget()
+            for c in crates:
+                count = c.get("item_count", 0)
+                item_text = "%s  (%d item%s)" % (c["name"], count, "" if count == 1 else "s")
+                item = QListWidgetItem(item_text)
+                item.setData(256, c["id"])  # Qt.UserRole = 256
+                listWidget.addItem(item)
+
+            if listWidget.count() > 0:
+                listWidget.setCurrentRow(0)
+            layout.addWidget(listWidget)
+
+            # Buttons
+            btnLayout = QHBoxLayout()
+            btnLayout.addStretch()
+            cancelBtn = QPushButton("Cancel")
+            cancelBtn.setObjectName("cancelBtn")
+            cancelBtn.clicked.connect(dialog.reject)
+            btnLayout.addWidget(cancelBtn)
+            addBtn = QPushButton("Add to Crate")
+            addBtn.clicked.connect(dialog.accept)
+            btnLayout.addWidget(addBtn)
+            layout.addLayout(btnLayout)
+
+            # Double-click to accept
+            listWidget.itemDoubleClicked.connect(lambda _: dialog.accept())
+
+            result = dialog.exec_()
+
+            if result == QDialog.Accepted:
+                selected = listWidget.currentItem()
+                if selected:
+                    return selected.data(256)  # Qt.UserRole
+            return None
+
+        except Exception as e:
+            print("[MediaVault] Crate picker dialog error: %s" % e)
+            rve.displayFeedback("Crate picker error: %s" % e, 4.0)
+            return None
 
     def prevVersion(self, event):
         """MediaVault -> Prev Version"""

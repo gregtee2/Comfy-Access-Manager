@@ -521,6 +521,26 @@ function runMigrations(wrapper) {
     // Migration: drop old whitelist table if it exists (pre-v1.3.0)
     try { wrapper.exec('DROP TABLE IF EXISTS project_access'); } catch (_) {}
 
+    // ─── Crates (asset staging for export) ───
+    wrapper.exec(`
+        CREATE TABLE IF NOT EXISTS crates (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            created_at TEXT DEFAULT (datetime('now'))
+        );
+
+        CREATE TABLE IF NOT EXISTS crate_items (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            crate_id INTEGER NOT NULL REFERENCES crates(id) ON DELETE CASCADE,
+            asset_id INTEGER NOT NULL REFERENCES assets(id) ON DELETE CASCADE,
+            added_at TEXT DEFAULT (datetime('now')),
+            UNIQUE(crate_id, asset_id)
+        );
+
+        CREATE INDEX IF NOT EXISTS idx_crate_items_crate ON crate_items(crate_id);
+        CREATE INDEX IF NOT EXISTS idx_crate_items_asset ON crate_items(asset_id);
+    `);
+
     // Seed default Admin user if users table is empty
     const userCount = wrapper.prepare('SELECT COUNT(*) as count FROM users').get();
     if (userCount.count === 0) {

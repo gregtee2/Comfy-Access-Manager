@@ -568,6 +568,96 @@ label {
     flex-shrink: 0;
 }
 
+/* ─── Crate Panel (asset staging) ─── */
+.crate-panel {
+    border-bottom: 1px solid var(--border);
+}
+.crate-header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    padding: 8px 10px;
+    font-weight: 600;
+    font-size: 0.8rem;
+    color: var(--text-dim);
+    cursor: pointer;
+    background: var(--bg-darker, #161616);
+    position: sticky;
+    top: 0;
+    z-index: 2;
+    border-bottom: 1px solid var(--border);
+}
+.crate-header:hover { background: rgba(255,255,255,0.03); }
+.crate-chevron {
+    font-size: 0.7rem;
+    transition: transform 0.2s;
+    color: var(--text-muted);
+}
+.crate-chevron.collapsed { transform: rotate(-90deg); }
+.crate-list {
+    max-height: 180px;
+    overflow-y: auto;
+    transition: max-height 0.2s ease;
+}
+.crate-list.collapsed {
+    max-height: 0;
+    overflow: hidden;
+}
+.crate-item {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 5px 10px 5px 14px;
+    cursor: pointer;
+    font-size: 0.78rem;
+    color: #aaa;
+    white-space: nowrap;
+    overflow: hidden;
+    transition: background 0.15s;
+}
+.crate-item:hover { background: rgba(255,255,255,0.04); }
+.crate-item.crate-active {
+    background: rgba(99, 179, 237, 0.12);
+    color: var(--accent-light);
+}
+.crate-item .crate-name {
+    flex: 1;
+    overflow: hidden;
+    text-overflow: ellipsis;
+}
+.crate-item .crate-count {
+    flex-shrink: 0;
+    font-size: 0.65rem;
+    color: var(--text-muted);
+    background: rgba(255,255,255,0.06);
+    padding: 1px 5px;
+    border-radius: 8px;
+}
+.crate-item .crate-actions {
+    display: none;
+    gap: 2px;
+}
+.crate-item:hover .crate-actions { display: flex; }
+.crate-item .crate-actions button {
+    background: none;
+    border: none;
+    color: var(--text-muted);
+    cursor: pointer;
+    font-size: 0.7rem;
+    padding: 1px 3px;
+    border-radius: 3px;
+}
+.crate-item .crate-actions button:hover {
+    color: var(--accent-light);
+    background: rgba(255,255,255,0.08);
+}
+.crate-empty {
+    color: var(--text-muted);
+    font-size: 0.75rem;
+    padding: 8px 14px;
+    opacity: 0.6;
+}
+
 /* ─── Tree Navigation Panel ─── */
 .tree-panel {
     background: var(--bg-darker, #161616);
@@ -684,6 +774,21 @@ label {
 
 /* ─── Sequences Panel ─── */
 .sequences-panel { margin-bottom: 16px; }
+.seq-panel-toggle {
+    cursor: pointer;
+    font-size: 0.78rem;
+    color: var(--text-muted, #888);
+    padding: 4px 8px;
+    border-radius: 4px;
+    user-select: none;
+    display: inline-flex;
+    align-items: center;
+    gap: 6px;
+    transition: color 0.15s;
+}
+.seq-panel-toggle:hover { color: var(--text-primary, #ccc); }
+.seq-panel-toggle span { font-size: 0.65rem; transition: transform 0.15s; }
+.seq-panel-toggle.open span { transform: rotate(90deg); }
 .sequence-list { display: flex; gap: 8px; flex-wrap: wrap; }
 .sequence-chip {
     background: var(--bg-input); border: 1px solid var(--border);
@@ -2097,7 +2202,7 @@ label:has(input[type="checkbox"]) {
 .btn-browse:hover { background: var(--accent); color: #fff; }
 
 /* ─── Folder Picker Modal ─── */
-#folderPickerModal { z-index: 10000; }
+#folderPickerModal { z-index: 11000; }
 .folder-picker-card {
     background: var(--surface);
     border: 1px solid var(--border);
