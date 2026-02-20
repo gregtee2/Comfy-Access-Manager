@@ -998,9 +998,20 @@ export function handleVideoHover(el, id) {
         // Check if codec is natively playable by browser
         const browserCodecs = new Set(['h264', 'h265', 'hevc', 'vp8', 'vp9', 'av1', 'avc', 'avc1']);
         const codec = el.dataset.codec || '';
-        const needsTranscode = codec && !browserCodecs.has(codec.toLowerCase());
         
-        video.src = needsTranscode ? `/api/assets/${id}/stream` : `/api/assets/${id}/file`;
+        // Safari on macOS can hardware-decode ProRes natively
+        const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
+        const isProRes = /prores/i.test(codec);
+        const nativeProRes = isSafari && isProRes;
+        
+        const needsTranscode = codec && !browserCodecs.has(codec.toLowerCase()) && !nativeProRes;
+        
+        if (needsTranscode) {
+            // Cap transcode to 480px wide for fast scrub preview
+            video.src = `/api/assets/${id}/stream?maxw=480`;
+        } else {
+            video.src = `/api/assets/${id}/file`;
+        }
         video.dataset.needsTranscode = needsTranscode ? 'true' : 'false';
         
         video.muted = true;
@@ -1025,9 +1036,17 @@ export function handleVideoHover(el, id) {
             };
         }
         
+        // Don't hide thumbnail until a real frame is ready to paint
         video.onloadeddata = () => {
-            if (img) img.style.opacity = '0';
+            requestAnimationFrame(() => {
+                if (img) img.style.opacity = '0';
+            });
             video.play().catch(e => console.log('Autoplay prevented', e));
+        };
+        
+        // If transcode fails or times out, keep showing thumbnail
+        video.onerror = () => {
+            if (img) img.style.opacity = '1';
         };
         
         el.appendChild(video);
@@ -1048,8 +1067,17 @@ export function handleVideoMove(e, el) {
         scrubBar.style.width = `${percent * 100}%`;
     }
     
-    // Only scrub if it's a native file. Transcoded streams can't seek.
-    if (video.dataset.needsTranscode === 'true') return;
+    // For transcoded streams, allow scrubbing within buffered range
+    if (video.dataset.needsTranscode === 'true') {
+        if (video.buffered.length > 0) {
+            const bufferedEnd = video.buffered.end(video.buffered.length - 1);
+            const targetTime = percent * bufferedEnd;
+            if (isFinite(targetTime) && video.readyState >= 1) {
+                try { video.currentTime = targetTime; } catch (err) {}
+            }
+        }
+        return;
+    }
     
     const targetTime = percent * parseFloat(video.dataset.duration);
     if (isFinite(targetTime) && video.readyState >= 1) {

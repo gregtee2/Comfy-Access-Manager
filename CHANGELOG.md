@@ -2,6 +2,22 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.4.3] - 2026-02-20
+
+### Fixed
+- **ProRes video scrub black frames** — Safari on macOS now plays ProRes files natively via hardware decoder instead of transcoding, enabling full scrub support
+- **Slow transcode on hover** — non-browser codecs (ProRes, DNxHR, etc.) now transcode at 480px wide for scrub preview instead of full 4K resolution, dramatically reducing load time
+- **Black flash on hover** — thumbnail stays visible until a real video frame is painted (uses requestAnimationFrame), preventing the black flash before first frame
+- **Transcoded stream scrubbing** — transcoded videos now allow scrubbing within the buffered range instead of completely disabling seek
+- **Transcode error resilience** — if transcode fails or times out, the thumbnail stays visible instead of showing a black frame
+## [1.4.3] - 2026-02-20
+
+### Fixed
+- **ProRes video scrub black frames** — Safari on macOS now plays ProRes files natively via hardware decoder instead of transcoding, enabling full scrub support
+- **Slow transcode on hover** — non-browser codecs (ProRes, DNxHR, etc.) now transcode at 480px wide for scrub preview instead of full 4K resolution, dramatically reducing load time
+- **Black flash on hover** — thumbnail stays visible until a real video frame is painted (uses requestAnimationFrame), preventing the black flash before first frame
+- **Transcoded stream scrubbing** — transcoded videos now allow scrubbing within the buffered range instead of completely disabling seek
+- **Transcode error resilience** — if transcode fails or times out, the thumbnail stays visible instead of showing a black frame
 ## [1.4.2] - 2026-02-20
 
 ### Performance
