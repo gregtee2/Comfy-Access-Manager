@@ -1277,14 +1277,16 @@ router.get('/:id/stream', (req, res) => {
         ? `-vf scale=${maxW}:-2`
         : '';
 
+    const isScrub = maxW <= 480;
     const { spawn } = require('child_process');
     const args = [
+        '-analyzeduration', '5000000',  // 5s — helps MXF/DNxHD containers
+        '-probesize', '5000000',
         '-i', asset.file_path,
         '-c:v', 'libx264',
         '-preset', 'ultrafast',
-        '-crf', '23',
-        '-c:a', 'aac',
-        '-b:a', '128k',
+        '-crf', isScrub ? '28' : '23',  // Lower quality for tiny scrub preview
+        ...(isScrub ? ['-an'] : ['-c:a', 'aac', '-b:a', '128k']),  // Strip audio for scrub
         ...(scaleFilter ? ['-vf', `scale=${maxW}:-2`] : []),
         '-movflags', 'frag_keyframe+empty_moov+faststart',
         '-f', 'mp4',

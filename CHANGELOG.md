@@ -2,6 +2,13 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.4.4] - 2026-02-20
+
+### Fixed
+- **DNxHD / MXF container scrub support** — added `-analyzeduration` and `-probesize` flags to FFmpeg transcode so MXF-wrapped DNxHD files are properly detected and transcoded
+- **Audio stripped for scrub preview** — scrub transcodes (480px) now skip audio encoding entirely (`-an`), cutting transcode time roughly in half
+- **Lower quality scrub preview** — CRF bumped from 23 to 28 for 480px scrub previews to further reduce transcode latency
+- **Transcoded stream duration handling** — fragmented MP4 streams that report `Infinity` duration no longer block scrub; buffered-range scrubbing works regardless of duration metadata
 ## [1.4.3] - 2026-02-20
 
 ### Fixed

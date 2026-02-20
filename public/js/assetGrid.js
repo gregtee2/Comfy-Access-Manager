@@ -1030,7 +1030,7 @@ export function handleVideoHover(el, id) {
             video.dataset.duration = dbDuration;
         } else {
             video.onloadedmetadata = () => {
-                if (isFinite(video.duration)) {
+                if (isFinite(video.duration) && video.duration > 0) {
                     video.dataset.duration = video.duration;
                 }
             };
@@ -1057,7 +1057,9 @@ export function handleVideoHover(el, id) {
 export function handleVideoMove(e, el) {
     const video = el.querySelector('video');
     const scrubBar = el.querySelector('.scrub-bar');
-    if (!video || !video.dataset.duration) return;
+    if (!video) return;
+    // Transcoded streams may not have a known duration — still allow buffered scrub
+    if (!video.dataset.duration && video.dataset.needsTranscode !== 'true') return;
     
     const rect = el.getBoundingClientRect();
     const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
