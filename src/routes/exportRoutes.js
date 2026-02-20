@@ -58,6 +58,13 @@ const CODEC_PRESETS = {
     prores_lt:    { label: 'ProRes 422 LT',            ext: '.mov',  args: ['-c:v', 'prores_ks', '-profile:v', '1', '-c:a', 'pcm_s16le'] },
     prores_proxy: { label: 'ProRes 422 Proxy',         ext: '.mov',  args: ['-c:v', 'prores_ks', '-profile:v', '0', '-c:a', 'pcm_s16le'] },
     copy:         { label: 'Copy (no re-encode)',      ext: null,    args: ['-c', 'copy'] },
+
+    // ─── Image Sequence presets ───
+    seq_exr:      { label: 'EXR Sequence',             ext: '.exr',  args: ['-compression', 'zip1'], isSequence: true },
+    seq_png:      { label: 'PNG Sequence (lossless)',   ext: '.png',  args: [],                       isSequence: true },
+    seq_tiff:     { label: 'TIFF Sequence (16-bit)',    ext: '.tiff', args: ['-pix_fmt', 'rgb48le'],  isSequence: true },
+    seq_dpx:      { label: 'DPX Sequence (10-bit)',     ext: '.dpx',  args: ['-pix_fmt', 'gbrp10le'], isSequence: true },
+    seq_jpg:      { label: 'JPEG Sequence',             ext: '.jpg',  args: ['-q:v', '2'],            isSequence: true },
 };
 
 // Map common FFmpeg codec names → our preset keys for "match source" detection
@@ -79,7 +86,7 @@ router.get('/presets', (req, res) => {
     res.json({
         resolutions: RESOLUTION_PRESETS,
         codecs: Object.fromEntries(
-            Object.entries(CODEC_PRESETS).map(([k, v]) => [k, { label: v.label, ext: v.ext }])
+            Object.entries(CODEC_PRESETS).map(([k, v]) => [k, { label: v.label, ext: v.ext, isSequence: !!v.isSequence }])
         ),
     });
 });
@@ -372,6 +379,43 @@ function exportSingleAsset(asset, opts) {
         }
 
         // Build FFmpeg args
+        const isSeq = preset.isSequence === true;
+
+        if (isSeq) {
+            // image sequence: create subfolder, output as frame pattern
+            const seqDir = path.join(path.dirname(safePath), path.basename(safePath, path.extname(safePath)));
+            if (!fs.existsSync(seqDir)) fs.mkdirSync(seqDir, { recursive: true });
+            const framePattern = path.join(seqDir, `${path.basename(safePath, path.extname(safePath))}.%04d${ext}`);
+
+            const args = ['-y', '-i', asset.file_path];
+            if (resPreset.scale) args.push('-vf', `scale=${resPreset.scale}`);
+            args.push(...preset.args);
+            args.push(framePattern);
+
+            // Override safePath so downstream registration points at the folder
+            safePath = seqDir;
+
+            const ffmpeg = spawn(resolvedFFmpeg, args, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+            let stderr = '';
+            ffmpeg.stderr.on('data', (d) => { stderr += d.toString(); });
+            ffmpeg.on('close', async (code) => {
+                if (code === 0) {
+                    logActivity('export', 'asset', asset.id, {
+                        outputPath: seqDir, resolution, codec: codecKey,
+                        hierarchy: asset.hierarchy || {}, type: 'image_sequence',
+                    });
+                    // Count exported frames
+                    const frames = fs.readdirSync(seqDir).filter(f => f.endsWith(ext));
+                    resolve({ outputPath: seqDir, outputName: path.basename(seqDir), frameCount: frames.length });
+                } else {
+                    const lines = stderr.split('\n').filter(l => l.trim());
+                    reject(new Error(`FFmpeg exited with code ${code}: ${lines.slice(-3).join(' ').substring(0, 200)}`));
+                }
+            });
+            ffmpeg.on('error', (err) => reject(new Error(`Failed to start FFmpeg: ${err.message}`)));
+            return; // Exit early — skip the normal video export path below
+        }
+
         const args = [
             '-y',
             '-i', asset.file_path,

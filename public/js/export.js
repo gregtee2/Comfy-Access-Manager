@@ -61,12 +61,17 @@ export async function showExportModal(singleId = null) {
         return `<option value="${key}" ${selected}>${p.label}</option>`;
     }).join('');
 
-    // Build codec options - put the suggested one first as selected
+    // Build codec options — group video codecs and image sequence formats
+    const videoCodecs = Object.entries(presets.codecs).filter(([, c]) => !c.isSequence);
+    const seqCodecs   = Object.entries(presets.codecs).filter(([, c]) =>  c.isSequence);
     const codecOptions = [
         `<option value="match_source"> Match Source (${esc(probeInfo.codec)})</option>`,
-        ...Object.entries(presets.codecs).map(([key, c]) => {
-            return `<option value="${key}">${esc(c.label)}</option>`;
-        }),
+        `<optgroup label="Video Formats">`,
+        ...videoCodecs.map(([key, c]) => `<option value="${key}">${esc(c.label)}</option>`),
+        `</optgroup>`,
+        `<optgroup label="Image Sequences">`,
+        ...seqCodecs.map(([key, c]) => `<option value="${key}">${esc(c.label)}</option>`),
+        `</optgroup>`,
     ].join('');
 
     // Build filename template
@@ -182,11 +187,18 @@ function updateExportPreview() {
 
     // Add extension hint
     const codecPreset = presetCache?.codecs?.[codec];
+    const isSeq = codecPreset?.isSequence;
     const ext = codecPreset?.ext || '.mp4';
-    if (!preview.includes('.')) preview += ext;
+    if (!isSeq && !preview.includes('.')) preview += ext;
 
     const el = document.getElementById('exportPreview');
-    if (el) el.textContent = `File: ${preview}`;
+    if (el) {
+        if (isSeq) {
+            el.textContent = `Folder: ${preview}/  →  ${preview}.0001${ext}, .0002${ext}, ...`;
+        } else {
+            el.textContent = `File: ${preview}`;
+        }
+    }
 
     // Show folder structure preview
     const folderEl = document.getElementById('exportFolderPreview');

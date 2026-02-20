@@ -2,6 +2,18 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.4.5] - 2026-02-20
+
+### Added
+- **Image sequence export** — Export context menu now includes image sequence formats alongside video codecs:
+  - EXR Sequence (zip1 compression)
+  - PNG Sequence (lossless)
+  - TIFF Sequence (16-bit)
+  - DPX Sequence (10-bit)
+  - JPEG Sequence
+- **Grouped codec dropdown** — Export codec selector now groups options into "Video Formats" and "Image Sequences" with `<optgroup>` labels
+- **Sequence preview** — Export preview shows folder path and frame naming pattern (e.g. `name.0001.exr`) when a sequence format is selected
+- **Automatic subfolder creation** — Sequence exports create a named subfolder containing all frames, preserving the project hierarchy structure
 ## [1.4.4] - 2026-02-20
 
 ### Fixed
