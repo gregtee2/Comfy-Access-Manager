@@ -2,6 +2,20 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.4.1] - 2026-02-19
+
+### Added
+- **Marquee (rubber-band) drag selection** — click and drag on empty space in the asset grid to draw a blue selection rectangle; all intersecting cards are selected
+  - Shift+drag adds to existing selection (additive mode)
+  - 5px movement threshold prevents accidental marquee on normal clicks
+  - Auto-scrolls when dragging near viewport edges
+  - Works in both grid and list views
+  - Cursor switches to crosshair during drag, text selection disabled
+
+### Fixed
+- **Click-to-deselect after marquee** — the `click` event that fires after `mouseup` was clearing the selection made by the marquee; added `_suppressNextClick` flag to prevent this
+- **Deselect on background click** — now correctly detects clicks on both `#assetContainer` and `#assetContainerWrap` as "empty space" clicks
+
 ## [1.4.0] - 2026-02-19
 
 ### Added

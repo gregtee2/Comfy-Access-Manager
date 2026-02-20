@@ -322,15 +322,165 @@ function renderAssets() {
 }
 
 // Click on empty space in the grid → deselect all
+// (suppressed briefly after a marquee drag so the click doesn't undo the selection)
+let _suppressNextClick = false;
 document.addEventListener('click', (e) => {
+    if (_suppressNextClick) { _suppressNextClick = false; return; }
     const container = document.getElementById('assetContainer');
     if (!container) return;
-    if (e.target === container && state.selectedAssets.length > 0) {
+    // Only deselect when clicking directly on the grid background, not on a card
+    const wrap = document.getElementById('assetContainerWrap');
+    const onBackground = e.target === container || e.target === wrap;
+    if (onBackground && state.selectedAssets.length > 0) {
         state.selectedAssets = [];
         state.lastClickedAsset = -1;
         updateSelectionClasses();
     }
 });
+
+// ═══════════════════════════════════════════
+//  MARQUEE (rubber-band) DRAG SELECTION
+// ═══════════════════════════════════════════
+
+(function initMarqueeSelection() {
+    let active = false;
+    let startX = 0, startY = 0;
+    let marqueeEl = null;
+    const THRESHOLD = 5; // px of movement before marquee activates
+    let thresholdMet = false;
+    let priorSelected = []; // selection before drag (for shift-additive)
+
+    function getScrollParent() {
+        return document.querySelector('.browser-main') || document.documentElement;
+    }
+
+    function createMarquee() {
+        const el = document.createElement('div');
+        el.className = 'marquee-selection';
+        const wrap = document.getElementById('assetContainerWrap');
+        (wrap || document.body).appendChild(el);
+        return el;
+    }
+
+    function updateRect(e) {
+        const wrap = document.getElementById('assetContainerWrap');
+        if (!wrap || !marqueeEl) return;
+        const wr = wrap.getBoundingClientRect();
+        const curX = e.clientX - wr.left;
+        const curY = e.clientY - wr.top;
+        const x = Math.min(startX, curX);
+        const y = Math.min(startY, curY);
+        const w = Math.abs(curX - startX);
+        const h = Math.abs(curY - startY);
+        marqueeEl.style.left = x + 'px';
+        marqueeEl.style.top = y + 'px';
+        marqueeEl.style.width = w + 'px';
+        marqueeEl.style.height = h + 'px';
+    }
+
+    function rectsIntersect(a, b) {
+        return !(a.right < b.left || a.left > b.right ||
+                 a.bottom < b.top || a.top > b.bottom);
+    }
+
+    function selectIntersecting(additive) {
+        const wrap = document.getElementById('assetContainerWrap');
+        const container = document.getElementById('assetContainer');
+        if (!wrap || !container || !marqueeEl) return;
+        const mRect = marqueeEl.getBoundingClientRect();
+        const hits = [];
+        container.querySelectorAll('[data-aidx]').forEach(el => {
+            const elRect = el.getBoundingClientRect();
+            if (rectsIntersect(mRect, elRect)) {
+                const idx = parseInt(el.dataset.aidx, 10);
+                const asset = state.assets[idx];
+                if (asset) hits.push(asset.id);
+            }
+        });
+        if (additive) {
+            const merged = new Set([...priorSelected, ...hits]);
+            state.selectedAssets = [...merged];
+        } else {
+            state.selectedAssets = hits;
+        }
+        updateSelectionClasses();
+    }
+
+    // ── Auto-scroll while dragging near edges ──
+    let scrollRAF = null;
+    function autoScroll(e) {
+        const sp = getScrollParent();
+        const rect = sp.getBoundingClientRect ? sp.getBoundingClientRect()
+            : { top: 0, bottom: window.innerHeight, left: 0, right: window.innerWidth };
+        const margin = 40; // px from edge to start scrolling
+        const speed = 8;   // px per frame
+        let dx = 0, dy = 0;
+        if (e.clientY < rect.top + margin) dy = -speed;
+        else if (e.clientY > rect.bottom - margin) dy = speed;
+        if (dx !== 0 || dy !== 0) {
+            sp.scrollTop += dy;
+            sp.scrollLeft += dx;
+        }
+    }
+
+    document.addEventListener('mousedown', (e) => {
+        // Only start on the container or its wrapper background
+        const container = document.getElementById('assetContainer');
+        if (!container) return;
+        if (e.button !== 0) return;               // left-click only
+        if (e.target.closest('[data-aidx]')) return; // started on a card
+        if (e.target.closest('.asset-star')) return;  // star button
+        if (e.target.closest('.selection-toolbar')) return;
+        if (e.target.closest('.project-sticky-header')) return;
+        if (e.target.closest('.sequence-chip')) return;
+        if (e.target.closest('.shot-chip')) return;
+        // Must be inside the asset container area
+        const wrap = document.getElementById('assetContainerWrap');
+        if (!wrap || !wrap.contains(e.target)) return;
+
+        const wr = wrap.getBoundingClientRect();
+        startX = e.clientX - wr.left;
+        startY = e.clientY - wr.top;
+        active = true;
+        thresholdMet = false;
+        priorSelected = e.shiftKey ? [...state.selectedAssets] : [];
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!active) return;
+        const wrap = document.getElementById('assetContainerWrap');
+        if (!wrap) { active = false; return; }
+        const wr = wrap.getBoundingClientRect();
+        const dx = (e.clientX - wr.left) - startX;
+        const dy = (e.clientY - wr.top) - startY;
+        if (!thresholdMet) {
+            if (Math.abs(dx) < THRESHOLD && Math.abs(dy) < THRESHOLD) return;
+            thresholdMet = true;
+            marqueeEl = createMarquee();
+            document.body.classList.add('marquee-active');
+        }
+        updateRect(e);
+        selectIntersecting(e.shiftKey || priorSelected.length > 0);
+        autoScroll(e);
+    });
+
+    document.addEventListener('mouseup', (e) => {
+        if (!active) return;
+        const didMarquee = thresholdMet;
+        active = false;
+        if (marqueeEl) {
+            selectIntersecting(e.shiftKey || priorSelected.length > 0);
+            marqueeEl.remove();
+            marqueeEl = null;
+        }
+        document.body.classList.remove('marquee-active');
+        priorSelected = [];
+        // Suppress the click event that fires right after mouseup
+        // so it doesn't clear the selection we just made
+        if (didMarquee) _suppressNextClick = true;
+        if (scrollRAF) { cancelAnimationFrame(scrollRAF); scrollRAF = null; }
+    });
+})();
 
 // ═══════════════════════════════════════════
 //  ASSET SELECTION (click, shift-click, bulk)

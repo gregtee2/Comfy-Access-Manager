@@ -1111,6 +1111,22 @@ label {
 .asset-row .row-size { color: var(--text-dim); }
 .asset-row .row-date { color: var(--text-muted); font-size: 0.72rem; white-space: nowrap; }
 
+/* ─── Marquee (rubber-band) selection ─── */
+.marquee-selection {
+    position: absolute;
+    border: 1.5px solid rgba(74, 158, 218, 0.8);
+    background: rgba(74, 158, 218, 0.12);
+    pointer-events: none;
+    z-index: 50;
+    border-radius: 2px;
+}
+body.marquee-active {
+    user-select: none !important;
+    -webkit-user-select: none !important;
+    cursor: crosshair !important;
+}
+body.marquee-active * { cursor: crosshair !important; }
+
 /* ─── Asset Selection ─── */
 .asset-selected {
     border-color: #4a9eda !important;
