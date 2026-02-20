@@ -25,7 +25,7 @@
             user-select: none;
         }
 
-        /* ─── Top Bar (normal mode) ─── */
+        /* --- Top Bar (normal mode) --- */
         .popout-bar {
             display: flex;
             align-items: center;
@@ -62,7 +62,7 @@
         .nav-btn:hover { border-color: #888; color: #fff; }
         .nav-btn:disabled { opacity: 0.3; cursor: default; }
 
-        /* ─── Media Area ─── */
+        /* --- Media Area --- */
         .media-area {
             flex: 1;
             display: flex;
@@ -83,7 +83,7 @@
             max-height: 100vh;
         }
 
-        /* ─── HUD Overlay (presentation mode) ─── */
+        /* --- HUD Overlay (presentation mode) --- */
         .hud {
             display: none;
             position: absolute;
@@ -127,7 +127,7 @@
         body.presentation.hud-hidden .hud { opacity: 0; transition: opacity 0.5s; }
         body.presentation .hud { opacity: 1; transition: opacity 0.3s; }
 
-        /* ─── Controls Bar (bottom, presentation mode) ─── */
+        /* --- Controls Bar (bottom, presentation mode) --- */
         .controls-bar {
             display: none;
             position: absolute;
@@ -144,7 +144,7 @@
         body.presentation.hud-hidden .controls-bar { opacity: 0; pointer-events: none; }
         body.presentation .controls-bar { opacity: 1; }
 
-        /* ─── Presentation toggle hints ─── */
+        /* --- Presentation toggle hints --- */
         .hint-toast {
             position: fixed;
             bottom: 60px; left: 50%;
@@ -161,7 +161,7 @@
         }
         .hint-toast.visible { opacity: 1; }
 
-        /* ─── Overlay Toggle Panel ─── */
+        /* --- Overlay Toggle Panel --- */
         .overlay-panel {
             position: absolute;
             top: 44px; right: 8px;
@@ -182,7 +182,7 @@
         .overlay-panel label:hover { color: #ddd; }
         .overlay-panel input[type="checkbox"] { accent-color: #7ab87a; }
 
-        /* ─── Transport Bar ─── */
+        /* --- Transport Bar --- */
         .popout-transport {
             display: none;
             align-items: center;
@@ -286,17 +286,17 @@
     <!-- Normal mode top bar -->
     <div class="popout-bar" id="topBar">
         <div class="bar-left">
-            <span class="bar-title" id="barTitle">—</span>
+            <span class="bar-title" id="barTitle">-</span>
             <span class="bar-meta" id="barMeta"></span>
         </div>
         <div class="bar-center">
-            <button class="nav-btn" id="btnPrev" title="Previous clip (PageUp)">◀</button>
-            <span class="bar-index" id="barIndex">—</span>
-            <button class="nav-btn" id="btnNext" title="Next clip (PageDown)">▶</button>
+            <button class="nav-btn" id="btnPrev" title="Previous clip (PageUp)"><</button>
+            <span class="bar-index" id="barIndex">-</span>
+            <button class="nav-btn" id="btnNext" title="Next clip (PageDown)">></button>
         </div>
         <div class="bar-right">
-            <button class="bar-btn" id="btnOverlays" title="Toggle HUD overlays">👁 HUD</button>
-            <button class="bar-btn" id="btnPresentation" title="Presentation Mode (F / F11)">⛶ Present</button>
+            <button class="bar-btn" id="btnOverlays" title="Toggle HUD overlays">[Eye] HUD</button>
+            <button class="bar-btn" id="btnPresentation" title="Presentation Mode (F / F11)">[ ] Present</button>
         </div>
     </div>
 
@@ -321,16 +321,16 @@
 
     <!-- Transport bar (visible when video is loaded) -->
     <div class="popout-transport" id="transportBar">
-        <button class="po-btn" id="tPrev" title="Previous frame (←)">⏮</button>
-        <button class="po-btn po-play" id="tPlay" title="Play/Pause (Space)">▶</button>
-        <button class="po-btn" id="tNext" title="Next frame (→)">⏭</button>
+        <button class="po-btn" id="tPrev" title="Previous frame (<-)">|<</button>
+        <button class="po-btn po-play" id="tPlay" title="Play/Pause (Space)">></button>
+        <button class="po-btn" id="tNext" title="Next frame (->)">>|</button>
         <div class="po-scrub-wrap">
             <input type="range" class="po-scrub" id="tScrub" min="0" max="1000" value="0">
             <div class="po-scrub-fill" id="tFill"></div>
         </div>
         <span class="po-time" id="tTime">00:00 / 00:00</span>
         <span class="po-frame" id="tFrame">F 0 / 0</span>
-        <button class="po-btn" id="tLoop" title="Toggle loop" style="font-size:0.78rem;">🔁</button>
+        <button class="po-btn" id="tLoop" title="Toggle loop" style="font-size:0.78rem;">Loop</button>
     </div>
 
     <!-- Overlay toggle panel -->
@@ -345,9 +345,9 @@
     <div class="hint-toast" id="hintToast"></div>
 
     <script>
-    // ═══════════════════════════════════════
+    // =======================================
     //  STATE
-    // ═══════════════════════════════════════
+    // =======================================
     let assets = [];
     let currentIndex = 0;
     let isPresentation = false;
@@ -370,9 +370,9 @@
     document.getElementById('ovFrame').checked = overlayPrefs.frame !== false;
     document.getElementById('ovResolution').checked = overlayPrefs.resolution === true;
 
-    // ═══════════════════════════════════════
+    // =======================================
     //  COMMUNICATION WITH MAIN WINDOW
-    // ═══════════════════════════════════════
+    // =======================================
     window.addEventListener('message', (e) => {
         if (e.origin !== origin) return;
         const msg = e.data;
@@ -381,7 +381,7 @@
             assets = msg.assets || [];
             currentIndex = msg.index || 0;
             renderMedia();
-            document.title = `CAM Player — ${assets.length} clip${assets.length !== 1 ? 's' : ''}`;
+            document.title = `CAM Player - ${assets.length} clip${assets.length !== 1 ? 's' : ''}`;
         }
 
         if (msg.type === 'dmv-popout-navigate') {
@@ -402,9 +402,9 @@
         }
     });
 
-    // ═══════════════════════════════════════
+    // =======================================
     //  RENDER
-    // ═══════════════════════════════════════
+    // =======================================
     function renderMedia() {
         const asset = assets[currentIndex];
         if (!asset) return;
@@ -437,25 +437,25 @@
         } else if (asset.media_type === 'audio') {
             content.innerHTML = `
                 <div style="text-align:center;padding:40px;">
-                    <div style="font-size:5rem;margin-bottom:20px;">🔊</div>
+                    <div style="font-size:5rem;margin-bottom:20px;"></div>
                     <audio controls autoplay src="${fileUrl}" style="width:400px;"></audio>
                 </div>`;
         } else {
-            content.innerHTML = `<div style="text-align:center;padding:40px;color:#888;"><div style="font-size:4rem;">📎</div><p>No preview available</p></div>`;
+            content.innerHTML = `<div style="text-align:center;padding:40px;color:#888;"><div style="font-size:4rem;"></div><p>No preview available</p></div>`;
         }
 
         // Update bar
-        document.getElementById('barTitle').textContent = asset.vault_name || asset.original_name || '—';
+        document.getElementById('barTitle').textContent = asset.vault_name || asset.original_name || '-';
         document.getElementById('barIndex').textContent = `${currentIndex + 1} / ${assets.length}`;
         document.getElementById('btnPrev').disabled = currentIndex <= 0;
         document.getElementById('btnNext').disabled = currentIndex >= assets.length - 1;
 
         // Meta
         const parts = [];
-        if (asset.width && asset.height) parts.push(`${asset.width}×${asset.height}`);
+        if (asset.width && asset.height) parts.push(`${asset.width}x${asset.height}`);
         if (asset.codec) parts.push(asset.codec);
         if (asset.fps) parts.push(`${asset.fps} fps`);
-        document.getElementById('barMeta').textContent = parts.join('  •  ');
+        document.getElementById('barMeta').textContent = parts.join('  *  ');
 
         // HUD
         updateHud(asset);
@@ -467,7 +467,7 @@
 
         document.getElementById('hudShot').textContent = prefs.shotName ? (asset.vault_name || '') : '';
         document.getElementById('hudIndex').textContent = prefs.index ? `${currentIndex + 1} / ${assets.length}` : '';
-        document.getElementById('hudRes').textContent = prefs.resolution && asset.width ? `${asset.width}×${asset.height}` : '';
+        document.getElementById('hudRes').textContent = prefs.resolution && asset.width ? `${asset.width}x${asset.height}` : '';
         // Frame counter updated in RAF loop for video, static for images
         if (asset.media_type !== 'video') {
             document.getElementById('hudFrame').textContent = '';
@@ -503,7 +503,7 @@
 
         let isScrubbing = false;
 
-        // Format seconds → MM:SS
+        // Format seconds -> MM:SS
         function fmtTime(sec) {
             if (!isFinite(sec)) return '00:00';
             const m = Math.floor(sec / 60);
@@ -513,8 +513,8 @@
 
         // Play/pause button
         tPlay.onclick = (e) => { e.stopPropagation(); video.paused ? video.play() : video.pause(); };
-        video.addEventListener('play', () => { tPlay.textContent = '⏸'; });
-        video.addEventListener('pause', () => { tPlay.textContent = '▶'; });
+        video.addEventListener('play', () => { tPlay.textContent = '||'; });
+        video.addEventListener('pause', () => { tPlay.textContent = '>'; });
 
         // Loop button
         tLoop.style.opacity = video.loop ? '1' : '0.4';
@@ -537,7 +537,7 @@
             tFill.style.width = (pct * 100) + '%';
         });
 
-        // RAF tick — updates transport + HUD
+        // RAF tick - updates transport + HUD
         function tick() {
             // HUD frame counter
             if (!getActivePrefs().frame) {
@@ -566,9 +566,9 @@
         frameRaf = requestAnimationFrame(tick);
     }
 
-    // ═══════════════════════════════════════
+    // =======================================
     //  NAVIGATION
-    // ═══════════════════════════════════════
+    // =======================================
     function goNext() {
         if (currentIndex < assets.length - 1) { currentIndex++; renderMedia(); syncToMain(); }
     }
@@ -584,9 +584,9 @@
     document.getElementById('btnNext').onclick = goNext;
     document.getElementById('btnPrev').onclick = goPrev;
 
-    // ═══════════════════════════════════════
+    // =======================================
     //  PRESENTATION MODE
-    // ═══════════════════════════════════════
+    // =======================================
     function togglePresentation() {
         isPresentation = !isPresentation;
         document.body.classList.toggle('presentation', isPresentation);
@@ -594,7 +594,7 @@
 
         if (isPresentation) {
             document.documentElement.requestFullscreen?.().catch(() => {});
-            showHint('Presentation Mode — press F or Esc to exit. Move mouse for controls.');
+            showHint('Presentation Mode - press F or Esc to exit. Move mouse for controls.');
             resetHudTimer();
         } else {
             if (document.fullscreenElement) document.exitFullscreen?.();
@@ -626,9 +626,9 @@
 
     document.getElementById('btnPresentation').onclick = togglePresentation;
 
-    // ═══════════════════════════════════════
+    // =======================================
     //  OVERLAY PANEL
-    // ═══════════════════════════════════════
+    // =======================================
     const overlayPanel = document.getElementById('overlayPanel');
     document.getElementById('btnOverlays').onclick = () => {
         overlayPanel.classList.toggle('open');
@@ -656,13 +656,13 @@
         });
     });
 
-    // ═══════════════════════════════════════
-    //  KEYBOARD — matches main player behavior:
+    // =======================================
+    //  KEYBOARD - matches main player behavior:
     //    Arrow Left/Right = frame step (video) or prev/next (image)
     //    PageUp/PageDown = always prev/next clip
     //    Space = toggle play/pause
     //    J/L = frame step (alternate keys)
-    // ═══════════════════════════════════════
+    // =======================================
     document.addEventListener('keydown', (e) => {
         const video = document.querySelector('#mediaContent video');
 
@@ -702,7 +702,7 @@
         }
     });
 
-    /** Step video by one frame (±delta) */
+    /** Step video by one frame (+/-delta) */
     function frameStep(video, delta) {
         video.pause();
         const asset = assets[currentIndex];
@@ -711,9 +711,9 @@
         video.currentTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + delta * frameDur));
     }
 
-    // ═══════════════════════════════════════
+    // =======================================
     //  HINT TOAST
-    // ═══════════════════════════════════════
+    // =======================================
     function showHint(text, duration = 4000) {
         const toast = document.getElementById('hintToast');
         toast.textContent = text;
@@ -727,9 +727,9 @@
         return d.innerHTML;
     }
 
-    // ═══════════════════════════════════════
+    // =======================================
     //  INITIAL STATE (if opened directly)
-    // ═══════════════════════════════════════
+    // =======================================
     if (!window.opener) {
         document.getElementById('barTitle').textContent = 'Waiting for content...';
         document.getElementById('barIndex').textContent = 'Open from main CAM window';
@@ -737,3 +737,4 @@
     </script>
 </body>
 </html>
+

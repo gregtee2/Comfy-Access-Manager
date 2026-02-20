@@ -5,7 +5,7 @@
  * See LICENSE file for details.
  */
 /**
- * DMV — Export Module
+ * DMV - Export Module
  * Video transcoding/export via FFmpeg backend.
  * Supports single & batch export, resolution presets, codec selection,
  * templated output naming, and folder browsing.
@@ -24,9 +24,9 @@ async function getPresets() {
     return presetCache;
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EXPORT MODAL
-// ═══════════════════════════════════════════
+// ===========================================
 
 /**
  * Show the export modal for selected assets or a specific asset id.
@@ -50,7 +50,7 @@ export async function showExportModal(singleId = null) {
 
     const presets = await getPresets();
 
-    const sourceRes = `${probeInfo.width}×${probeInfo.height}`;
+    const sourceRes = `${probeInfo.width}x${probeInfo.height}`;
     const sourceFps = probeInfo.fps ? `${Math.round(probeInfo.fps * 100) / 100} fps` : '';
     const sourceDur = probeInfo.duration ? formatDuration(probeInfo.duration) : '';
     const sourceSize = probeInfo.file_size ? formatFileSize(probeInfo.file_size) : '';
@@ -61,9 +61,9 @@ export async function showExportModal(singleId = null) {
         return `<option value="${key}" ${selected}>${p.label}</option>`;
     }).join('');
 
-    // Build codec options — put the suggested one first as selected
+    // Build codec options - put the suggested one first as selected
     const codecOptions = [
-        `<option value="match_source">🔄 Match Source (${esc(probeInfo.codec)})</option>`,
+        `<option value="match_source"> Match Source (${esc(probeInfo.codec)})</option>`,
         ...Object.entries(presets.codecs).map(([key, c]) => {
             return `<option value="${key}">${esc(c.label)}</option>`;
         }),
@@ -75,7 +75,7 @@ export async function showExportModal(singleId = null) {
 
     const modalContent = document.getElementById('modalContent');
     modalContent.innerHTML = `
-        <h3>📤 Export Video${ids.length > 1 ? 's' : ''}</h3>
+        <h3> Export Video${ids.length > 1 ? 's' : ''}</h3>
 
         <div class="export-source-info">
             <div class="export-source-row">
@@ -137,15 +137,15 @@ export async function showExportModal(singleId = null) {
 
             <label>Destination</label>
             <div class="export-dest-row">
-                <input type="text" id="exportDest" placeholder="Leave empty → vault/exports/ folder" value="">
-                <button class="btn-browse" onclick="browseExportDest()" title="Browse...">📁</button>
+                <input type="text" id="exportDest" placeholder="Leave empty -> vault/exports/ folder" value="">
+                <button class="btn-browse" onclick="browseExportDest()" title="Browse..."></button>
             </div>
         </div>
 
         <div class="form-actions" style="margin-top:20px">
             <button class="btn-cancel" onclick="closeModal()">Cancel</button>
             <button class="btn-primary" id="exportStartBtn" onclick="executeExport()">
-                📤 Export${ids.length > 1 ? ` (${ids.length})` : ''}
+                 Export${ids.length > 1 ? ` (${ids.length})` : ''}
             </button>
         </div>
     `;
@@ -158,9 +158,9 @@ export async function showExportModal(singleId = null) {
     updateExportPreview();
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  NAME PREVIEW & TOKEN INSERTION
-// ═══════════════════════════════════════════
+// ===========================================
 
 function updateExportPreview() {
     const nameInput = document.getElementById('exportName');
@@ -174,7 +174,7 @@ function updateExportPreview() {
     const roleCode = hierarchy.role_code || '';
 
     let preview = nameInput.value
-        .replace(/{original}/g, '«original»')
+        .replace(/{original}/g, '<<original>>')
         .replace(/{resolution}/g, resolution)
         .replace(/{codec}/g, codec)
         .replace(/{role}/g, roleCode)
@@ -197,7 +197,7 @@ function updateExportPreview() {
         if (hierarchy.shot_name)     parts.push(hierarchy.shot_name);
         if (hierarchy.role_code)     parts.push(hierarchy.role_code);
         parts.push(preview);
-        folderEl.textContent = `📁 ${parts.join(' / ')}`;
+        folderEl.textContent = ` ${parts.join(' / ')}`;
     }
 }
 
@@ -218,13 +218,13 @@ function browseExportDest() {
     if (window.openFolderPicker) {
         window.openFolderPicker('exportDest');
     } else {
-        showToast('Folder picker not available — type a path manually', 4000);
+        showToast('Folder picker not available - type a path manually', 4000);
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EXECUTE EXPORT
-// ═══════════════════════════════════════════
+// ===========================================
 
 async function executeExport() {
     const btn = document.getElementById('exportStartBtn');
@@ -238,7 +238,7 @@ async function executeExport() {
 
     // Disable button during export
     btn.disabled = true;
-    btn.textContent = '⏳ Starting...';
+    btn.textContent = 'Wait: Starting...';
 
     try {
         const result = await api('/api/export/start', {
@@ -247,21 +247,21 @@ async function executeExport() {
         });
 
         closeModal();
-        showToast(`📤 Export started: ${result.total} file(s)`, 3000);
+        showToast(` Export started: ${result.total} file(s)`, 3000);
 
         // Start polling for progress
         pollExportJob(result.jobId);
 
     } catch (err) {
         btn.disabled = false;
-        btn.textContent = `📤 Export${ids.length > 1 ? ` (${ids.length})` : ''}`;
-        showToast('❌ Export failed: ' + err.message, 5000);
+        btn.textContent = ` Export${ids.length > 1 ? ` (${ids.length})` : ''}`;
+        showToast('Error: Export failed: ' + err.message, 5000);
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  PROGRESS POLLING & TOAST
-// ═══════════════════════════════════════════
+// ===========================================
 
 function pollExportJob(jobId) {
     // Show a persistent progress toast
@@ -269,7 +269,7 @@ function pollExportJob(jobId) {
     toastEl.className = 'export-progress-toast';
     toastEl.id = `export-toast-${jobId}`;
     toastEl.innerHTML = `
-        <div class="export-progress-header">📤 Exporting...</div>
+        <div class="export-progress-header"> Exporting...</div>
         <div class="export-progress-bar-wrap">
             <div class="export-progress-bar" style="width:0%"></div>
         </div>
@@ -290,16 +290,16 @@ function pollExportJob(jobId) {
             if (bar) bar.style.width = `${pct}%`;
 
             if (job.status === 'running') {
-                text.textContent = `${job.completed}/${job.total} — ${job.current || '...'}`;
+                text.textContent = `${job.completed}/${job.total} - ${job.current || '...'}`;
             } else {
                 // Done
                 clearInterval(interval);
 
                 if (job.failed > 0) {
-                    text.textContent = `✅ ${job.completed - job.failed} exported, ❌ ${job.failed} failed`;
+                    text.textContent = `Success: ${job.completed - job.failed} exported, Error: ${job.failed} failed`;
                     if (bar) bar.style.background = '#ff9800';
                 } else {
-                    text.textContent = `✅ ${job.completed} file(s) exported successfully`;
+                    text.textContent = `Success: ${job.completed} file(s) exported successfully`;
                     if (bar) bar.style.background = '#4caf50';
                 }
 
@@ -316,9 +316,9 @@ function pollExportJob(jobId) {
     }, 1000);
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  HELPERS
-// ═══════════════════════════════════════════
+// ===========================================
 
 function buildHierarchyDisplay(h) {
     if (!h) return '';
@@ -346,12 +346,13 @@ function formatFileSize(bytes) {
     return bytes + ' B';
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EXPOSE ON WINDOW (for HTML onclick handlers)
-// ═══════════════════════════════════════════
+// ===========================================
 
 window.showExportModal = showExportModal;
 window.executeExport = executeExport;
 window.updateExportPreview = updateExportPreview;
 window.insertExportToken = insertExportToken;
 window.browseExportDest = browseExportDest;
+

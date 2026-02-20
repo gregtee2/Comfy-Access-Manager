@@ -5,7 +5,7 @@
  * See LICENSE file for details.
  */
 /**
- * CAM — Asset Grid Module
+ * CAM - Asset Grid Module
  * Browser tab: project detail, asset loading/rendering, selection,
  * drag & drop, star toggle, polling for new assets.
  */
@@ -16,9 +16,9 @@ import { esc, formatSize, formatDuration, formatDateTime, typeIcon, showToast } 
 import { openPlayer } from './player.js';
 import { getActiveCrateId } from './crate.js';
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  PROJECT DETAIL / BROWSER
-// ═══════════════════════════════════════════
+// ===========================================
 
 export async function openProject(id) {
     try {
@@ -56,7 +56,7 @@ export function renderProjectDetail(project) {
     const vaultRoot = state.settings?.vault_root || '';
     const sep = vaultRoot.includes('/') ? '/' : '\\';
     const projectFolder = vaultRoot ? `${vaultRoot}${vaultRoot.endsWith('\\') || vaultRoot.endsWith('/') ? '' : sep}${project.code}` : '';
-    document.getElementById('projectPath').textContent = projectFolder ? `📂 ${projectFolder}` : '';
+    document.getElementById('projectPath').textContent = projectFolder ? ` ${projectFolder}` : '';
     document.getElementById('projectPath').title = projectFolder;
 
     // Sequences panel
@@ -95,7 +95,7 @@ export function renderProjectDetail(project) {
                           ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                           ondrop="event.stopPropagation();onShotDrop(event, ${s.id}, ${sh.id})"
                           style="display:inline-flex;flex-direction:column;align-items:flex-start;"
-                          ><span>🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span></span>${rolePills ? `<span style="margin-top:2px;">${rolePills}</span>` : ''}</span>`;
+                          ><span> ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span></span>${rolePills ? `<span style="margin-top:2px;">${rolePills}</span>` : ''}</span>`;
                 }).join('')}
                     <span class="shot-chip shot-add" onclick="event.stopPropagation();showAddShotModal(${s.id})">+ Shot</span>
                 </div>`;
@@ -118,7 +118,7 @@ export function renderProjectDetail(project) {
                  oncontextmenu="showSeqContextMenu(event, ${s.id}, '${esc(s.name).replace(/'/g, "\\'")}')"
                  ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                  ondrop="onSeqDrop(event, ${s.id})">
-                📋 ${esc(s.name)} <span style="opacity:.5;font-size:.8em">${esc(s.code)}</span>
+                 ${esc(s.name)} <span style="opacity:.5;font-size:.8em">${esc(s.code)}</span>
                 <span class="chip-count">${s.asset_count || 0}</span>
             </div>${seqRolePills}${shotHtml}`;
         }).join('');
@@ -127,7 +127,7 @@ export function renderProjectDetail(project) {
         filterSeq.innerHTML = '<option value="">All Sequences</option>' +
             project.sequences.map(s => `<option value="${s.id}">${s.name} (${s.code})</option>`).join('');
     } else if (project.orphanShots?.length > 0) {
-        // Fallback: shots without sequences — show directly with role pills
+        // Fallback: shots without sequences - show directly with role pills
         seqPanel.style.display = 'block';
         filterSeq.style.display = 'none';
         seqList.innerHTML = project.orphanShots.map(sh => {
@@ -140,7 +140,7 @@ export function renderProjectDetail(project) {
             <span class="shot-chip ${isShActive ? 'active' : ''}" 
                   onclick="event.stopPropagation();selectShot(null, ${sh.id})"
                   style="display:inline-flex;flex-direction:column;align-items:flex-start;margin:2px;"
-                  >🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span>${rolePills ? `<span style="margin-top:2px;">${rolePills}</span>` : ''}</span>`;
+                  > ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span>${rolePills ? `<span style="margin-top:2px;">${rolePills}</span>` : ''}</span>`;
         }).join('');
     } else {
         seqPanel.style.display = project.type === 'simple' ? 'none' : 'block';
@@ -174,9 +174,9 @@ export function selectShot(seqId, shotId) {
     loadProjectAssets(state.currentProject.id);
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  ASSET LOADING & RENDERING
-// ═══════════════════════════════════════════
+// ===========================================
 
 export async function loadProjectAssets(projectId) {
     // Don't overwrite the asset grid when viewing a crate
@@ -223,7 +223,7 @@ function setView(mode) {
 }
 
 /**
- * Lightweight selection update — toggles CSS classes on existing DOM elements
+ * Lightweight selection update - toggles CSS classes on existing DOM elements
  * without rebuilding the entire grid. Eliminates flicker/jiggle on click.
  */
 export function updateSelectionClasses() {
@@ -245,7 +245,7 @@ function renderAssets() {
     if (state.assets.length === 0) {
         container.innerHTML = `
             <div class="empty-state" style="grid-column: 1/-1;">
-                <div class="empty-icon">📭</div>
+                <div class="empty-icon"></div>
                 <p>No assets yet. Import some files to get started!</p>
             </div>
         `;
@@ -259,19 +259,19 @@ function renderAssets() {
             <div class="asset-card fade-in ${state.selectedAssets.includes(a.id) ? 'asset-selected' : ''}" 
                 data-aidx="${i}" onclick="handleAssetClick(event, ${i})" ondblclick="handleAssetDblClick(event, ${i})" oncontextmenu="showContextMenu(event, ${i})"
                 draggable="true" ondragstart="onAssetDragStart(event, ${i})">
-                <div class="asset-thumb">
+                <div class="asset-thumb" ${a.media_type === 'video' ? `data-duration="${a.duration || 0}" data-codec="${a.codec || ''}" onmouseenter="handleVideoHover(this, ${a.id})" onmousemove="handleVideoMove(event, this)" onmouseleave="handleVideoLeave(this)"` : ''}>
                     <img src="/api/assets/${a.id}/thumbnail" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                     <div class="thumb-placeholder" style="display:none">${typeIcon(a.media_type)}</div>
                     <span class="asset-type-badge ${a.media_type}">${a.media_type}</span>
-                    ${a.is_linked ? '<span class="asset-link-badge" title="Linked – file remains at original location">🔗</span>' : ''}
-                    ${a.role_name ? `<span class="asset-role-badge" style="background:${a.role_color || '#666'}">${a.role_icon || '🎭'} ${esc(a.role_code)}</span>` : ''}
+                    ${a.is_linked ? '<span class="asset-link-badge" title="Linked - file remains at original location"></span>' : ''}
+                    ${a.role_name ? `<span class="asset-role-badge" style="background:${a.role_color || '#666'}">${a.role_icon || ''} ${esc(a.role_code)}</span>` : ''}
                     ${a.duration ? `<span class="asset-duration">${formatDuration(a.duration)}</span>` : ''}
                 </div>
-                <button class="asset-star" onclick="event.stopPropagation();toggleStar(${a.id})">${a.starred ? '⭐' : '☆'}</button>
+                <button class="asset-star" onclick="event.stopPropagation();toggleStar(${a.id})">${a.starred ? '*' : '*'}</button>
                 <div class="asset-info">
                     <div class="asset-name" title="${esc(a.vault_name)}">${esc(a.vault_name)}</div>
                     <div class="asset-meta">
-                        ${a.width ? `<span>${a.width}×${a.height}</span>` : ''}
+                        ${a.width ? `<span>${a.width}x${a.height}</span>` : ''}
                         <span>${formatSize(a.file_size)}</span>
                     </div>
                 </div>
@@ -300,19 +300,19 @@ function renderAssets() {
                 data-aidx="${i}" onclick="handleAssetClick(event, ${i})" ondblclick="handleAssetDblClick(event, ${i})" oncontextmenu="showContextMenu(event, ${i})"
                 draggable="true" ondragstart="onAssetDragStart(event, ${i})">
                 <div class="row-id">${a.id}</div>
-                <div class="row-thumb">
+                <div class="row-thumb" ${a.media_type === 'video' ? `data-duration="${a.duration || 0}" data-codec="${a.codec || ''}" onmouseenter="handleVideoHover(this, ${a.id})" onmousemove="handleVideoMove(event, this)" onmouseleave="handleVideoLeave(this)"` : ''}>
                     <img src="/api/assets/${a.id}/thumbnail" onerror="this.outerHTML='<span>${typeIcon(a.media_type)}</span>'">
                     <span class="row-type-pip ${a.media_type}" title="${a.media_type}">${a.file_ext || ''}</span>
                 </div>
-                <div class="row-audio">${hasAudio ? '🔊' : '<span style="opacity:.25">🔇</span>'}</div>
+                <div class="row-audio">${hasAudio ? '' : '<span style="opacity:.25"></span>'}</div>
                 <div class="row-show">${esc(a.project_code || '')}</div>
-                <div class="row-shot">${esc(a.shot_name || a.shot_code || '—')}</div>
-                <div class="row-name">${a.is_linked ? '🔗 ' : ''}${esc(a.vault_name)}</div>
+                <div class="row-shot">${esc(a.shot_name || a.shot_code || '-')}</div>
+                <div class="row-name">${a.is_linked ? ' ' : ''}${esc(a.vault_name)}</div>
                 <div class="row-role">${a.role_name ? `<span class="role-tag" style="background:${a.role_color || '#666'}">${a.role_icon || ''} ${esc(a.role_code)}</span>` : ''}</div>
-                <div class="row-res">${a.width ? `${a.width}×${a.height}` : '—'}</div>
+                <div class="row-res">${a.width ? `${a.width}x${a.height}` : '-'}</div>
                 <div class="row-size">${formatSize(a.file_size)}</div>
                 <div class="row-date">${formatDateTime(a.created_at)}</div>
-                <button class="asset-star" onclick="event.stopPropagation();toggleStar(${a.id})" style="position:static">${a.starred ? '⭐' : '☆'}</button>
+                <button class="asset-star" onclick="event.stopPropagation();toggleStar(${a.id})" style="position:static">${a.starred ? '*' : '*'}</button>
             </div>`;
         }).join('');
         container.innerHTML = headerRow + rows;
@@ -321,26 +321,33 @@ function renderAssets() {
     updateSelectionToolbar();
 }
 
-// Click on empty space in the grid → deselect all
+// Click on empty space in the grid -> deselect all
 // (suppressed briefly after a marquee drag so the click doesn't undo the selection)
 let _suppressNextClick = false;
 document.addEventListener('click', (e) => {
     if (_suppressNextClick) { _suppressNextClick = false; return; }
     const container = document.getElementById('assetContainer');
     if (!container) return;
-    // Only deselect when clicking directly on the grid background, not on a card
-    const wrap = document.getElementById('assetContainerWrap');
-    const onBackground = e.target === container || e.target === wrap;
-    if (onBackground && state.selectedAssets.length > 0) {
-        state.selectedAssets = [];
-        state.lastClickedAsset = -1;
-        updateSelectionClasses();
+    
+    const isCard = e.target.closest('[data-aidx]');
+    const isToolbar = e.target.closest('.selection-toolbar');
+    const isHeader = e.target.closest('.project-sticky-header');
+    const isBreadcrumb = e.target.closest('.breadcrumb');
+    const isFilterBar = e.target.closest('.filter-bar');
+    const inBrowserMain = e.target.closest('.browser-main');
+    
+    if (inBrowserMain && !isCard && !isToolbar && !isHeader && !isBreadcrumb && !isFilterBar) {
+        if (state.selectedAssets.length > 0) {
+            state.selectedAssets = [];
+            state.lastClickedAsset = -1;
+            updateSelectionClasses();
+        }
     }
 });
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  MARQUEE (rubber-band) DRAG SELECTION
-// ═══════════════════════════════════════════
+// ===========================================
 
 (function initMarqueeSelection() {
     let active = false;
@@ -349,6 +356,7 @@ document.addEventListener('click', (e) => {
     const THRESHOLD = 5; // px of movement before marquee activates
     let thresholdMet = false;
     let priorSelected = []; // selection before drag (for shift-additive)
+    let dragMode = 'normal'; // 'normal', 'add', 'remove'
 
     function getScrollParent() {
         return document.querySelector('.browser-main') || document.documentElement;
@@ -383,7 +391,7 @@ document.addEventListener('click', (e) => {
                  a.bottom < b.top || a.top > b.bottom);
     }
 
-    function selectIntersecting(additive) {
+    function selectIntersecting() {
         const wrap = document.getElementById('assetContainerWrap');
         const container = document.getElementById('assetContainer');
         if (!wrap || !container || !marqueeEl) return;
@@ -397,7 +405,11 @@ document.addEventListener('click', (e) => {
                 if (asset) hits.push(asset.id);
             }
         });
-        if (additive) {
+        
+        if (dragMode === 'remove') {
+            const hitSet = new Set(hits);
+            state.selectedAssets = priorSelected.filter(id => !hitSet.has(id));
+        } else if (dragMode === 'add') {
             const merged = new Set([...priorSelected, ...hits]);
             state.selectedAssets = [...merged];
         } else {
@@ -406,7 +418,7 @@ document.addEventListener('click', (e) => {
         updateSelectionClasses();
     }
 
-    // ── Auto-scroll while dragging near edges ──
+    // -- Auto-scroll while dragging near edges --
     let scrollRAF = null;
     function autoScroll(e) {
         const sp = getScrollParent();
@@ -424,26 +436,48 @@ document.addEventListener('click', (e) => {
     }
 
     document.addEventListener('mousedown', (e) => {
-        // Only start on the container or its wrapper background
         const container = document.getElementById('assetContainer');
         if (!container) return;
         if (e.button !== 0) return;               // left-click only
-        if (e.target.closest('[data-aidx]')) return; // started on a card
+
+        const onCard = e.target.closest('[data-aidx]');
+        const isModifier = e.shiftKey || e.ctrlKey || e.metaKey;
+        if (onCard && !isModifier) return; // started on a card without modifier -> allow native drag
+        
         if (e.target.closest('.asset-star')) return;  // star button
         if (e.target.closest('.selection-toolbar')) return;
         if (e.target.closest('.project-sticky-header')) return;
         if (e.target.closest('.sequence-chip')) return;
         if (e.target.closest('.shot-chip')) return;
-        // Must be inside the asset container area
-        const wrap = document.getElementById('assetContainerWrap');
-        if (!wrap || !wrap.contains(e.target)) return;
+        if (e.target.closest('.filter-bar')) return;
+        if (e.target.closest('.breadcrumb')) return;
 
-        const wr = wrap.getBoundingClientRect();
+        // Must be inside the asset container area or browser-main
+        const wrap = document.getElementById('assetContainerWrap');
+        const browserMain = e.target.closest('.browser-main');
+        if (!wrap && !browserMain) return;
+        
+        let isInside = false;
+        if (wrap && wrap.contains(e.target)) isInside = true;
+        if (browserMain && browserMain.contains(e.target)) isInside = true;
+        if (!isInside) return;
+
+        // If we are on a card and holding modifier, prevent default to stop native drag-and-drop
+        if (onCard && isModifier) {
+            e.preventDefault();
+        }
+
+        const wr = wrap ? wrap.getBoundingClientRect() : browserMain.getBoundingClientRect();
         startX = e.clientX - wr.left;
         startY = e.clientY - wr.top;
         active = true;
         thresholdMet = false;
-        priorSelected = e.shiftKey ? [...state.selectedAssets] : [];
+        
+        if (e.ctrlKey || e.metaKey) dragMode = 'remove';
+        else if (e.shiftKey) dragMode = 'add';
+        else dragMode = 'normal';
+        
+        priorSelected = (dragMode !== 'normal') ? [...state.selectedAssets] : [];
     });
 
     document.addEventListener('mousemove', (e) => {
@@ -460,7 +494,7 @@ document.addEventListener('click', (e) => {
             document.body.classList.add('marquee-active');
         }
         updateRect(e);
-        selectIntersecting(e.shiftKey || priorSelected.length > 0);
+        selectIntersecting();
         autoScroll(e);
     });
 
@@ -469,12 +503,13 @@ document.addEventListener('click', (e) => {
         const didMarquee = thresholdMet;
         active = false;
         if (marqueeEl) {
-            selectIntersecting(e.shiftKey || priorSelected.length > 0);
+            selectIntersecting();
             marqueeEl.remove();
             marqueeEl = null;
         }
         document.body.classList.remove('marquee-active');
         priorSelected = [];
+        dragMode = 'normal';
         // Suppress the click event that fires right after mouseup
         // so it doesn't clear the selection we just made
         if (didMarquee) _suppressNextClick = true;
@@ -482,11 +517,13 @@ document.addEventListener('click', (e) => {
     });
 })();
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  ASSET SELECTION (click, shift-click, bulk)
-// ═══════════════════════════════════════════
+// ===========================================
 
 function handleAssetClick(event, assetIdx) {
+    if (_suppressNextClick) return;
+
     const asset = state.assets[assetIdx];
     if (!asset) return;
 
@@ -590,9 +627,9 @@ function updateSelectionToolbar() {
         `${count} selected (${formatSize(state.assets.filter(a => state.selectedAssets.includes(a.id)).reduce((s, a) => s + (a.file_size || 0), 0))})`;
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  STAR TOGGLE
-// ═══════════════════════════════════════════
+// ===========================================
 
 async function toggleStar(assetId) {
     try {
@@ -605,9 +642,9 @@ async function toggleStar(assetId) {
     }
 }
 
-// ═══════════════════════════════════════════
-//  DRAG & DROP — Assets → Sequences/Shots
-// ═══════════════════════════════════════════
+// ===========================================
+//  DRAG & DROP - Assets -> Sequences/Shots
+// ===========================================
 
 function onAssetDragStart(event, assetIdx) {
     const asset = state.assets[assetIdx];
@@ -624,7 +661,7 @@ function onAssetDragStart(event, assetIdx) {
 
     const ghost = document.createElement('div');
     ghost.className = 'drag-ghost';
-    ghost.textContent = `📦 ${ids.length} asset${ids.length > 1 ? 's' : ''}`;
+    ghost.textContent = ` ${ids.length} asset${ids.length > 1 ? 's' : ''}`;
     document.body.appendChild(ghost);
     event.dataTransfer.setDragImage(ghost, 0, 0);
     setTimeout(() => ghost.remove(), 0);
@@ -668,7 +705,7 @@ async function onShotDrop(event, seqId, shotId) {
             loadProjectAssets(pid);
         }
     } catch (err) {
-        alert('❌ Move failed: ' + err.message);
+        alert(' Move failed: ' + err.message);
     }
 }
 
@@ -700,13 +737,13 @@ async function onSeqDrop(event, seqId, projectId) {
             loadProjectAssets(pid);
         }
     } catch (err) {
-        alert('❌ Move failed: ' + err.message);
+        alert(' Move failed: ' + err.message);
     }
 }
 
-// ═══════════════════════════════════════════
-//  DRAG & DROP — Files from OS → Import
-// ═══════════════════════════════════════════
+// ===========================================
+//  DRAG & DROP - Files from OS -> Import
+// ===========================================
 
 let fileDragCounter = 0;
 
@@ -777,7 +814,7 @@ async function onFileDrop(e) {
     const prevHTML = container.innerHTML;
     container.innerHTML = `
         <div class="empty-state" style="grid-column:1/-1">
-            <div class="empty-icon">⏳</div>
+            <div class="empty-icon"></div>
             <p>Importing ${fileCount} file${fileCount > 1 ? 's' : ''}...</p>
         </div>
     `;
@@ -797,10 +834,10 @@ async function onFileDrop(e) {
         await loadProjectAssets(projectId);
         await window.loadTree?.();
 
-        showToast(`✅ Imported ${result.imported} file${result.imported !== 1 ? 's' : ''}`);
+        showToast(` Imported ${result.imported} file${result.imported !== 1 ? 's' : ''}`);
     } catch (err) {
         console.error('File drop upload failed:', err);
-        alert('❌ Import failed: ' + err.message);
+        alert(' Import failed: ' + err.message);
         container.innerHTML = prevHTML;
     }
 }
@@ -810,8 +847,8 @@ function showFileDropOverlay() {
     if (!overlay) return;
 
     let target = state.currentProject?.name || '';
-    if (state.currentSequence) target += ' → ' + state.currentSequence.name;
-    if (state.currentShot) target += ' → ' + state.currentShot.name;
+    if (state.currentSequence) target += ' -> ' + state.currentSequence.name;
+    if (state.currentShot) target += ' -> ' + state.currentShot.name;
     document.getElementById('dropTargetLabel').textContent = target;
 
     overlay.style.display = 'flex';
@@ -822,9 +859,9 @@ function hideFileDropOverlay() {
     if (overlay) overlay.style.display = 'none';
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  AUTO-REFRESH (poll for new assets)
-// ═══════════════════════════════════════════
+// ===========================================
 
 let _pollTimer = null;
 let _lastPollCount = null;
@@ -885,14 +922,14 @@ if (_origSwitchTab) {
     };
 }
 
-// ─── Filter bar event listeners (JS-based for Safari compatibility) ───
+// --- Filter bar event listeners (JS-based for Safari compatibility) ---
 document.getElementById('filterMediaType')?.addEventListener('change', filterAssets);
 document.getElementById('filterSequence')?.addEventListener('change', filterAssets);
 document.getElementById('searchInput')?.addEventListener('input', filterAssets);
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EXPOSE ON WINDOW
-// ═══════════════════════════════════════════
+// ===========================================
 
 window.openProject = openProject;
 window.renderProjectDetail = renderProjectDetail;
@@ -918,5 +955,100 @@ window.onShotDrop = onShotDrop;
 window.onSeqDrop = onSeqDrop;
 window.refreshAssets = refreshAssets;
 
+// ===========================================
+//  VIDEO SCRUBBING
+// ===========================================
+
+let scrubTimeout = null;
+
+export function handleVideoHover(el, id) {
+    if (el.querySelector('video')) return;
+    
+    scrubTimeout = setTimeout(() => {
+        const img = el.querySelector('img');
+        
+        const video = document.createElement('video');
+        
+        // Check if codec is natively playable by browser
+        const browserCodecs = new Set(['h264', 'h265', 'hevc', 'vp8', 'vp9', 'av1', 'avc', 'avc1']);
+        const codec = el.dataset.codec || '';
+        const needsTranscode = codec && !browserCodecs.has(codec.toLowerCase());
+        
+        video.src = needsTranscode ? `/api/assets/${id}/stream` : `/api/assets/${id}/file`;
+        video.dataset.needsTranscode = needsTranscode ? 'true' : 'false';
+        
+        video.muted = true;
+        video.loop = true;
+        video.playsInline = true;
+        video.preload = 'auto';
+        video.className = 'scrub-video';
+        
+        const scrubBar = document.createElement('div');
+        scrubBar.className = 'scrub-bar';
+        scrubBar.style.width = '0%';
+        
+        // Use database duration if available, fallback to video metadata
+        const dbDuration = parseFloat(el.dataset.duration);
+        if (dbDuration && dbDuration > 0) {
+            video.dataset.duration = dbDuration;
+        } else {
+            video.onloadedmetadata = () => {
+                if (isFinite(video.duration)) {
+                    video.dataset.duration = video.duration;
+                }
+            };
+        }
+        
+        video.onloadeddata = () => {
+            if (img) img.style.opacity = '0';
+            video.play().catch(e => console.log('Autoplay prevented', e));
+        };
+        
+        el.appendChild(video);
+        el.appendChild(scrubBar);
+    }, 300); // 300ms delay before loading video to prevent spam
+}
+
+export function handleVideoMove(e, el) {
+    const video = el.querySelector('video');
+    const scrubBar = el.querySelector('.scrub-bar');
+    if (!video || !video.dataset.duration) return;
+    
+    const rect = el.getBoundingClientRect();
+    const x = Math.max(0, Math.min(e.clientX - rect.left, rect.width));
+    const percent = x / rect.width;
+    
+    if (scrubBar) {
+        scrubBar.style.width = `${percent * 100}%`;
+    }
+    
+    // Only scrub if it's a native file. Transcoded streams can't seek.
+    if (video.dataset.needsTranscode === 'true') return;
+    
+    const targetTime = percent * parseFloat(video.dataset.duration);
+    if (isFinite(targetTime) && video.readyState >= 1) {
+        try {
+            video.currentTime = targetTime;
+        } catch (err) {}
+    }
+}
+
+export function handleVideoLeave(el) {
+    clearTimeout(scrubTimeout);
+    const video = el.querySelector('video');
+    if (video) video.remove();
+    const scrubBar = el.querySelector('.scrub-bar');
+    if (scrubBar) scrubBar.remove();
+    
+    const img = el.querySelector('img');
+    if (img) img.style.opacity = '1';
+}
+
+window.handleVideoHover = handleVideoHover;
+window.handleVideoMove = handleVideoMove;
+window.handleVideoLeave = handleVideoLeave;
+
 // Expose tree expand helper for openProject
 window._treeExpandNode = null; // Set by browser.js orchestrator after treeNav loads
+
+

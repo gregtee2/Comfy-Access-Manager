@@ -5,7 +5,7 @@
  * See LICENSE file for details.
  */
 /**
- * DMV — Import Module
+ * DMV - Import Module
  * File browser, import flow, rename preview.
  */
 
@@ -13,9 +13,9 @@ import { state } from './state.js';
 import { api } from './api.js';
 import { esc, escAttr, formatSize, showToast } from './utils.js';
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  SSE Import Progress Helper
-// ═══════════════════════════════════════════
+// ===========================================
 
 /**
  * POST to /api/assets/import?stream=1 and read SSE progress events.
@@ -71,7 +71,7 @@ async function importWithProgress(body, progressFill, progressText) {
                                 if (progressText) {
                                     const shortName = parsed.file?.length > 40
                                         ? '...' + parsed.file.slice(-37) : parsed.file;
-                                    progressText.textContent = `${parsed.current} / ${parsed.total}  —  ${shortName || ''}`;
+                                    progressText.textContent = `${parsed.current} / ${parsed.total}  -  ${shortName || ''}`;
                                 }
                             }
                         } catch {}
@@ -82,7 +82,7 @@ async function importWithProgress(body, progressFill, progressText) {
 
             if (finalResult) {
                 if (progressFill) progressFill.style.width = '100%';
-                if (progressText) progressText.textContent = `✅ ${finalResult.imported} imported`;
+                if (progressText) progressText.textContent = ` ${finalResult.imported} imported`;
                 resolve(finalResult);
             } else {
                 reject(new Error('Import stream ended without result'));
@@ -93,9 +93,9 @@ async function importWithProgress(body, progressFill, progressText) {
     });
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  IMPORT TAB
-// ═══════════════════════════════════════════
+// ===========================================
 
 export async function loadImportTab() {
     // Populate project dropdown
@@ -154,7 +154,7 @@ function renderFileBrowser(result) {
     // Parent directory (parent='' means "go to drive list", parent=null means "already at top")
     if (result.parent != null) {
         html += `<div class="fb-entry" ondblclick="browseTo('${escAttr(result.parent)}')">
-            <span class="fb-icon">⬆️</span>
+            <span class="fb-icon">Up</span>
             <span class="fb-name">..</span>
         </div>`;
     }
@@ -171,7 +171,7 @@ function renderFileBrowser(result) {
                 ondblclick="browseTo('${escAttr(entry.path)}')"
                 ondragstart="onFolderDragStart(event, '${escAttr(entry.path)}', '${escAttr(entry.name)}')"
                 oncontextmenu="onFolderContextMenu(event, '${escAttr(entry.path)}', '${escAttr(entry.name)}')">
-                <span class="fb-icon">${entry.icon || '📁'}</span>
+                <span class="fb-icon">${entry.icon || ''}</span>
                 <span class="fb-name">${esc(entry.name)}</span>
             </div>`;
         } else {
@@ -190,7 +190,7 @@ function renderFileBrowser(result) {
     if (selBar) selBar.style.display = state.browsedFiles.length > 0 ? 'flex' : 'none';
 
     if (result.entries.length === 0) {
-        html += '<div class="fb-entry" style="color:var(--text-muted)"><span class="fb-icon">📭</span><span>Empty folder</span></div>';
+        html += '<div class="fb-entry" style="color:var(--text-muted)"><span class="fb-icon"></span><span>Empty folder</span></div>';
     }
 
     browser.innerHTML = html;
@@ -208,7 +208,7 @@ function toggleFileSelect(event, fileIdx) {
             if (!state.selectedFiles.some(s => s.path === f.path)) {
                 state.selectedFiles.push({
                     path: f.path, name: f.name, size: f.size,
-                    mediaType: f.mediaType || '', icon: f.icon || '📎'
+                    mediaType: f.mediaType || '', icon: f.icon || ''
                 });
             }
         }
@@ -219,7 +219,7 @@ function toggleFileSelect(event, fileIdx) {
         } else {
             state.selectedFiles.push({
                 path: entry.path, name: entry.name, size: entry.size,
-                mediaType: entry.mediaType || '', icon: entry.icon || '📎'
+                mediaType: entry.mediaType || '', icon: entry.icon || ''
             });
         }
     }
@@ -235,7 +235,7 @@ function selectAllFiles() {
         if (!state.selectedFiles.some(s => s.path === f.path)) {
             state.selectedFiles.push({
                 path: f.path, name: f.name, size: f.size,
-                mediaType: f.mediaType || '', icon: f.icon || '📎'
+                mediaType: f.mediaType || '', icon: f.icon || ''
             });
         }
     }
@@ -270,7 +270,7 @@ function updateSelectedList() {
     document.getElementById('selectedFilesList').innerHTML = state.selectedFiles.map(f => `
         <div class="selected-item">
             <span>${f.icon} ${esc(f.name)}</span>
-            <button class="remove-btn" onclick="removeSelectedFile('${escAttr(f.path)}')">✕</button>
+            <button class="remove-btn" onclick="removeSelectedFile('${escAttr(f.path)}')">x</button>
         </div>
     `).join('');
 }
@@ -362,7 +362,7 @@ async function updateRenamePreview() {
     if (keepOriginal) {
         if (state.selectedFiles.length) {
             const first = state.selectedFiles[0];
-            let txt = `${first.name}  →  ${first.name} (unchanged)`;
+            let txt = `${first.name}  ->  ${first.name} (unchanged)`;
             if (state.selectedFiles.length > 1) txt += `\n  ... and ${state.selectedFiles.length - 1} more files`;
             preview.textContent = txt;
         }
@@ -387,12 +387,12 @@ async function updateRenamePreview() {
         if (seqId) {
             const seqSel = document.getElementById('importSequence');
             const opt = seqSel.options[seqSel.selectedIndex];
-            seqCode = opt?.textContent?.split(' — ')[0]?.trim() || '';
+            seqCode = opt?.textContent?.split(' - ')[0]?.trim() || '';
         }
         if (shotId) {
             const shotSel = document.getElementById('importShot');
             const opt = shotSel.options[shotSel.selectedIndex];
-            shotCode = opt?.textContent?.split(' — ')[0]?.trim() || '';
+            shotCode = opt?.textContent?.split(' - ')[0]?.trim() || '';
         }
 
         // Get role code for naming
@@ -418,7 +418,7 @@ async function updateRenamePreview() {
             },
         });
 
-        let previewText = `${firstFile.name}\n  → ${result.vaultName}`;
+        let previewText = `${firstFile.name}\n  -> ${result.vaultName}`;
         if (state.selectedFiles.length > 1) {
             previewText += `\n  ... and ${state.selectedFiles.length - 1} more files`;
         }
@@ -432,7 +432,7 @@ async function executeImport() {
     const projectId = document.getElementById('importProject').value;
     if (!projectId || !state.selectedFiles.length) return;
 
-    // ─── Auto-create any pending inline sequence/shot ───
+    // --- Auto-create any pending inline sequence/shot ---
     const pendingSeqForm = document.getElementById('inlineNewSequence');
     if (pendingSeqForm && pendingSeqForm.style.display !== 'none') {
         const seqName = document.getElementById('newSeqName').value.trim();
@@ -452,7 +452,7 @@ async function executeImport() {
         }
     }
 
-    // ─── Move-mode confirmation gate ───
+    // --- Move-mode confirmation gate ---
     const importMode = document.querySelector('input[name="importMode"]:checked')?.value || 'move';
     if (importMode === 'move') {
         const confirmed = await showMoveConfirmation(state.selectedFiles.length);
@@ -471,7 +471,7 @@ async function executeImport() {
     const resultDiv = document.getElementById('importResult');
 
     btn.disabled = true;
-    btn.textContent = '⏳ Importing...';
+    btn.textContent = ' Importing...';
     progress.style.display = 'block';
     progressFill.style.width = '0%';
     const progressText = document.getElementById('importProgressText');
@@ -524,20 +524,20 @@ async function executeImport() {
         let resultHtml = '';
         if (result.imported > 0) {
             resultDiv.className = 'import-result success';
-            resultHtml = `✅ Imported ${result.imported} asset(s) successfully!`;
+            resultHtml = ` Imported ${result.imported} asset(s) successfully!`;
             if (result.sequences_detected > 0) {
-                resultHtml += `<br>📽️ ${result.sequences_detected} frame sequence(s) detected`;
+                resultHtml += `<br> ${result.sequences_detected} frame sequence(s) detected`;
             }
             if (result.errors > 0) {
-                resultHtml += `<br>⚠️ ${result.errors} error(s)`;
+                resultHtml += `<br> ${result.errors} error(s)`;
             }
             if (result.derivative_jobs?.length > 0) {
-                resultHtml += `<br>🔄 ${result.derivative_jobs.length} derivative job(s) queued`;
+                resultHtml += `<br> ${result.derivative_jobs.length} derivative job(s) queued`;
                 startDerivativePolling(result.derivative_jobs);
             }
         } else {
             resultDiv.className = 'import-result error';
-            resultHtml = `❌ No files imported. ` +
+            resultHtml = ` No files imported. ` +
                 (result.errors_detail?.map(e => e.error).join(', ') || '');
         }
         resultDiv.innerHTML = resultHtml;
@@ -552,17 +552,17 @@ async function executeImport() {
     } catch (err) {
         resultDiv.style.display = 'block';
         resultDiv.className = 'import-result error';
-        resultDiv.innerHTML = `❌ Import failed: ${err.message}`;
+        resultDiv.innerHTML = ` Import failed: ${err.message}`;
     }
 
     btn.disabled = false;
-    btn.textContent = document.getElementById('keepOriginalNames')?.checked ? '📥 Import' : '📥 Import & Rename';
+    btn.textContent = document.getElementById('keepOriginalNames')?.checked ? ' Import' : ' Import & Rename';
     setTimeout(() => { progress.style.display = 'none'; }, 2000);
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  DERIVATIVE PROGRESS POLLING
-// ═══════════════════════════════════════════
+// ===========================================
 
 let derivativePoller = null;
 
@@ -570,7 +570,7 @@ function startDerivativePolling(jobIds) {
     const statusDiv = document.getElementById('derivativeStatus');
     if (!statusDiv) return;
     statusDiv.style.display = 'block';
-    statusDiv.textContent = `🔄 Processing ${jobIds.length} derivative(s)...`;
+    statusDiv.textContent = ` Processing ${jobIds.length} derivative(s)...`;
 
     let completedCount = 0;
 
@@ -582,9 +582,9 @@ function startDerivativePolling(jobIds) {
             const active = relevant.find(j => j.status === 'running');
 
             completedCount = done.length;
-            let msg = `🔄 Derivatives: ${completedCount}/${jobIds.length} complete`;
+            let msg = ` Derivatives: ${completedCount}/${jobIds.length} complete`;
             if (active) {
-                msg += ` — ${active.formatKey} ${Math.round(active.progress || 0)}%`;
+                msg += ` - ${active.formatKey} ${Math.round(active.progress || 0)}%`;
             }
 
             const errCount = done.filter(j => j.status === 'failed').length;
@@ -596,8 +596,8 @@ function startDerivativePolling(jobIds) {
                 clearInterval(derivativePoller);
                 derivativePoller = null;
                 statusDiv.textContent = errCount > 0
-                    ? `⚠️ Derivatives: ${completedCount - errCount} done, ${errCount} failed`
-                    : `✅ All ${completedCount} derivative(s) complete!`;
+                    ? ` Derivatives: ${completedCount - errCount} done, ${errCount} failed`
+                    : ` All ${completedCount} derivative(s) complete!`;
                 setTimeout(() => { statusDiv.style.display = 'none'; }, 8000);
                 // Refresh browser if user switches to it
                 window.checkSetup?.();
@@ -619,9 +619,9 @@ function importToProject() {
     }, 100);
 }
 
-// ═══════════════════════════════════════════
-//  INIT — Event listeners for rename preview
-// ═══════════════════════════════════════════
+// ===========================================
+//  INIT - Event listeners for rename preview
+// ===========================================
 
 document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('importCustomName')?.addEventListener('input', updateRenamePreview);
@@ -631,7 +631,7 @@ document.addEventListener('DOMContentLoaded', () => {
     document.getElementById('keepOriginalNames')?.addEventListener('change', () => {
         const btn = document.getElementById('importBtn');
         const keepOrig = document.getElementById('keepOriginalNames').checked;
-        btn.textContent = keepOrig ? '📥 Import' : '📥 Import & Rename';
+        btn.textContent = keepOrig ? ' Import' : ' Import & Rename';
         updateRenamePreview();
     });
 
@@ -653,9 +653,9 @@ document.addEventListener('DOMContentLoaded', () => {
     });
 });
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  MOVE-MODE CONFIRMATION DIALOG
-// ═══════════════════════════════════════════
+// ===========================================
 
 function showMoveConfirmation(fileCount) {
     return new Promise((resolve) => {
@@ -667,18 +667,18 @@ function showMoveConfirmation(fileCount) {
 
         overlay.innerHTML = `
             <div class="move-confirm-card">
-                <h3>⚠️ Move & Rename — Are you sure?</h3>
+                <h3> Move & Rename - Are you sure?</h3>
                 <p>You're about to <strong>move ${fileCount} ${plural}</strong> into the vault folder structure. This will:</p>
                 <div class="warn-highlight">
-                    <strong>• Rename files</strong> using the ShotGrid naming convention<br>
-                    <strong>• Move files</strong> from their current location into the vault<br>
-                    <strong>• Delete the originals</strong> — the source files will be removed
+                    <strong>* Rename files</strong> using the ShotGrid naming convention<br>
+                    <strong>* Move files</strong> from their current location into the vault<br>
+                    <strong>* Delete the originals</strong> - the source files will be removed
                 </div>
                 <p>Original file names and locations <strong>cannot be recovered</strong> after this operation.</p>
                 <div class="alt-tip">
-                    <strong>💡 Alternatives:</strong><br>
-                    <em>Copy into vault</em> — does the same renaming but keeps your originals untouched.<br>
-                    <em>Register in place</em> — files stay exactly where they are, nothing is moved or renamed.
+                    <strong> Alternatives:</strong><br>
+                    <em>Copy into vault</em> - does the same renaming but keeps your originals untouched.<br>
+                    <em>Register in place</em> - files stay exactly where they are, nothing is moved or renamed.
                 </div>
                 <div class="move-confirm-actions">
                     <button class="btn-cancel" id="moveConfirmCancel">Cancel</button>
@@ -700,13 +700,13 @@ function showMoveConfirmation(fileCount) {
     });
 }
 
-// ═══════════════════════════════════════════
-//  INLINE CREATE — Sequence & Shot from Import
-// ═══════════════════════════════════════════
+// ===========================================
+//  INLINE CREATE - Sequence & Shot from Import
+// ===========================================
 
 function showInlineNewSequence() {
     const form = document.getElementById('inlineNewSequence');
-    // Always show (don't toggle — Cancel button hides)
+    // Always show (don't toggle - Cancel button hides)
     form.style.display = 'flex';
     // Auto-suggest code based on current sequence count
     const seqSel = document.getElementById('importSequence');
@@ -766,7 +766,7 @@ async function createInlineSequence() {
             body: { name, code }
         });
 
-        showToast(`✅ Sequence "${name}" (${code}) created!`, 'success');
+        showToast(` Sequence "${name}" (${code}) created!`, 'success');
         hideInlineNewSequence();
 
         // Refresh the sequence dropdown and auto-select the new one
@@ -784,7 +784,7 @@ async function createInlineSequence() {
         onImportSequenceChange();
         updateRenamePreview();
     } catch (err) {
-        showToast('❌ ' + (err.message || 'Failed to create sequence'), 'error');
+        showToast(' ' + (err.message || 'Failed to create sequence'), 'error');
     }
 }
 
@@ -793,7 +793,7 @@ function showInlineNewShot() {
     if (!seqId) return showToast('Select a sequence first', 'error');
 
     const form = document.getElementById('inlineNewShot');
-    // Always show (don't toggle — Cancel button hides)
+    // Always show (don't toggle - Cancel button hides)
     form.style.display = 'flex';
     const shotSel = document.getElementById('importShot');
     const count = Math.max(shotSel.options.length - 1, 0);
@@ -826,7 +826,7 @@ async function createInlineShot() {
             body: { name, code }
         });
 
-        showToast(`✅ Shot "${name}" (${code}) created!`, 'success');
+        showToast(` Shot "${name}" (${code}) created!`, 'success');
         hideInlineNewShot();
 
         // Refresh the shot dropdown and auto-select the new one
@@ -839,13 +839,13 @@ async function createInlineShot() {
 
         updateRenamePreview();
     } catch (err) {
-        showToast('❌ ' + (err.message || 'Failed to create shot'), 'error');
+        showToast(' ' + (err.message || 'Failed to create shot'), 'error');
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  QUICK ACCESS (Saved Locations)
-// ═══════════════════════════════════════════
+// ===========================================
 
 let quickAccessItems = [];
 
@@ -873,15 +873,15 @@ function renderQuickAccess() {
     if (!list) return;
 
     if (quickAccessItems.length === 0) {
-        list.innerHTML = '<div class="qa-empty">Drag a folder here<br>or right-click → Add</div>';
+        list.innerHTML = '<div class="qa-empty">Drag a folder here<br>or right-click -> Add</div>';
         return;
     }
 
     list.innerHTML = quickAccessItems.map((item, i) => `
         <div class="qa-item" onclick="browseTo('${escAttr(item.path)}')" title="${esc(item.path)}">
-            <span class="qa-icon">${item.icon || '📁'}</span>
+            <span class="qa-icon">${item.icon || ''}</span>
             <span class="qa-label">${esc(item.label)}</span>
-            <span class="qa-remove" onclick="event.stopPropagation(); removeQuickAccess(${i})" title="Remove">✕</span>
+            <span class="qa-remove" onclick="event.stopPropagation(); removeQuickAccess(${i})" title="Remove">x</span>
         </div>
     `).join('');
 }
@@ -893,16 +893,16 @@ function addQuickAccess(path, name) {
         return;
     }
     // Determine icon based on path pattern
-    let icon = '📁';
+    let icon = '';
     const lp = path.toLowerCase();
-    if (lp.startsWith('\\\\') || lp.startsWith('//') || lp.includes('smb') || lp.includes('nfs')) icon = '🌐';
-    else if (/^[a-z]:\\/i.test(lp)) icon = '💾';
-    else if (lp.startsWith('/volumes/') || lp.startsWith('/mnt/') || lp.startsWith('/media/')) icon = '🗄️';
+    if (lp.startsWith('\\\\') || lp.startsWith('//') || lp.includes('smb') || lp.includes('nfs')) icon = '';
+    else if (/^[a-z]:\\/i.test(lp)) icon = '';
+    else if (lp.startsWith('/volumes/') || lp.startsWith('/mnt/') || lp.startsWith('/media/')) icon = '';
 
     quickAccessItems.push({ path, label: name, icon });
     saveQuickAccess();
     renderQuickAccess();
-    showToast(`⭐ "${name}" added to Quick Access`, 'success');
+    showToast(` "${name}" added to Quick Access`, 'success');
 }
 
 function removeQuickAccess(index) {
@@ -919,7 +919,7 @@ function addCurrentFolderToQuickAccess() {
     addQuickAccess(currentPath, name);
 }
 
-// ─── Drag & Drop onto Quick Access panel ───
+// --- Drag & Drop onto Quick Access panel ---
 
 function onFolderDragStart(event, path, name) {
     event.dataTransfer.setData('text/plain', JSON.stringify({ path, name }));
@@ -962,7 +962,7 @@ function initQuickAccessDropZone() {
     });
 }
 
-// ─── Right-click context menu on folders ───
+// --- Right-click context menu on folders ---
 
 let _qaContextMenu = null;
 
@@ -983,7 +983,7 @@ function onFolderContextMenu(event, path, name) {
     `;
 
     const addItem = document.createElement('div');
-    addItem.textContent = '⭐ Add to Quick Access';
+    addItem.textContent = ' Add to Quick Access';
     addItem.style.cssText = 'padding: 8px 14px; cursor: pointer; color: #ddd; transition: background .15s;';
     addItem.onmouseenter = () => addItem.style.background = '#383840';
     addItem.onmouseleave = () => addItem.style.background = '';
@@ -991,7 +991,7 @@ function onFolderContextMenu(event, path, name) {
     menu.appendChild(addItem);
 
     const openItem = document.createElement('div');
-    openItem.textContent = '📂 Open Folder';
+    openItem.textContent = ' Open Folder';
     openItem.style.cssText = 'padding: 8px 14px; cursor: pointer; color: #ddd; transition: background .15s;';
     openItem.onmouseenter = () => openItem.style.background = '#383840';
     openItem.onmouseleave = () => openItem.style.background = '';
@@ -1012,9 +1012,9 @@ function onFolderContextMenu(event, path, name) {
     setTimeout(() => document.addEventListener('click', closeMenu), 0);
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  INBOX (Watch Folder Ingest)
-// ═══════════════════════════════════════════
+// ===========================================
 
 let inboxWatches = [];
 let activeInboxId = null;
@@ -1047,7 +1047,7 @@ function renderInboxes() {
         const badgeClass = w.file_count > 0 ? 'inbox-badge active' : 'inbox-badge';
         return `
         <div class="inbox-item ${isActive ? 'selected' : ''}" onclick="openInbox(${w.id})" title="${esc(w.path)}">
-            <span class="inbox-icon">📥</span>
+            <span class="inbox-icon"></span>
             <span class="inbox-label">${esc(folderName)}</span>
             ${w.project_name ? `<span class="inbox-project">${esc(w.project_name)}</span>` : ''}
             <span class="${badgeClass}">${w.file_count}</span>
@@ -1056,7 +1056,7 @@ function renderInboxes() {
 }
 
 /**
- * Open an inbox — load its files into the center panel
+ * Open an inbox - load its files into the center panel
  */
 async function openInbox(watchId) {
     activeInboxId = watchId;
@@ -1098,7 +1098,7 @@ function renderInboxFileList(watch) {
     if (inboxFiles.length === 0) {
         browser.innerHTML = `
             <div style="padding:20px;text-align:center;color:var(--text-muted);">
-                <div style="font-size:2rem;margin-bottom:8px;">📭</div>
+                <div style="font-size:2rem;margin-bottom:8px;"></div>
                 <div>No media files in this inbox</div>
                 <div style="font-size:0.8rem;margin-top:4px;">${esc(watch.path)}</div>
             </div>`;
@@ -1111,18 +1111,18 @@ function renderInboxFileList(watch) {
     // Select all files by default
     state.selectedFiles = inboxFiles.map(f => ({
         path: f.path, name: f.name, size: f.size,
-        mediaType: f.mediaType || '', icon: f.icon || '📎'
+        mediaType: f.mediaType || '', icon: f.icon || ''
     }));
 
     let html = `<div class="inbox-header-bar">
-        <span>📥 <strong>${esc(folderName)}</strong> — ${inboxFiles.length} file${inboxFiles.length !== 1 ? 's' : ''}</span>
-        <button class="btn-small" onclick="refreshInbox()" title="Refresh" style="font-size:0.75rem;padding:3px 8px;cursor:pointer;">🔄 Refresh</button>
+        <span> <strong>${esc(folderName)}</strong> - ${inboxFiles.length} file${inboxFiles.length !== 1 ? 's' : ''}</span>
+        <button class="btn-small" onclick="refreshInbox()" title="Refresh" style="font-size:0.75rem;padding:3px 8px;cursor:pointer;"> Refresh</button>
     </div>`;
 
     for (const f of inboxFiles) {
         const isSelected = state.selectedFiles.some(s => s.path === f.path);
         html += `<div class="fb-entry ${isSelected ? 'selected' : ''}" onclick="toggleInboxFile('${escAttr(f.path)}')">
-            <span class="fb-icon">${f.icon || '📎'}</span>
+            <span class="fb-icon">${f.icon || ''}</span>
             <span class="fb-name">${esc(f.name)}</span>
             <span class="fb-size">${formatSize(f.size)}</span>
         </div>`;
@@ -1149,7 +1149,7 @@ function toggleInboxFile(filePath) {
         if (file) {
             state.selectedFiles.push({
                 path: file.path, name: file.name, size: file.size,
-                mediaType: file.mediaType || '', icon: file.icon || '📎'
+                mediaType: file.mediaType || '', icon: file.icon || ''
             });
         }
     }
@@ -1173,12 +1173,12 @@ function updateIngestButton() {
     if (!btn) return;
 
     if (activeInboxId) {
-        btn.textContent = '🚀 Ingest Selected';
+        btn.textContent = ' Ingest Selected';
         btn.onclick = executeIngest;
         btn.disabled = state.selectedFiles.length === 0 || !document.getElementById('importProject').value;
     } else {
         const keepOrig = document.getElementById('keepOriginalNames')?.checked;
-        btn.textContent = keepOrig ? '📥 Import' : '📥 Import & Rename';
+        btn.textContent = keepOrig ? ' Import' : ' Import & Rename';
         btn.onclick = executeImport;
     }
 }
@@ -1221,7 +1221,7 @@ async function executeIngest() {
     const resultDiv = document.getElementById('importResult');
 
     btn.disabled = true;
-    btn.textContent = '⏳ Ingesting...';
+    btn.textContent = ' Ingesting...';
     progress.style.display = 'block';
     progressFill.style.width = '0%';
     if (progressText) progressText.textContent = `0 / ${state.selectedFiles.length}`;
@@ -1271,12 +1271,12 @@ async function executeIngest() {
         resultDiv.style.display = 'block';
         if (result.imported > 0) {
             resultDiv.className = 'import-result success';
-            resultDiv.innerHTML = `✅ Ingested ${result.imported} file(s) — ${modeLabel} to vault.` +
-                (result.errors > 0 ? `<br>⚠️ ${result.errors} error(s)` : '') +
-                (keepOriginals ? '<br>📁 Originals kept in place.' : '');
+            resultDiv.innerHTML = ` Ingested ${result.imported} file(s) - ${modeLabel} to vault.` +
+                (result.errors > 0 ? `<br> ${result.errors} error(s)` : '') +
+                (keepOriginals ? '<br> Originals kept in place.' : '');
         } else {
             resultDiv.className = 'import-result error';
-            resultDiv.innerHTML = `❌ No files ingested. ` +
+            resultDiv.innerHTML = ` No files ingested. ` +
                 (result.errors_detail?.map(e => e.error).join(', ') || '');
         }
 
@@ -1291,11 +1291,11 @@ async function executeIngest() {
     } catch (err) {
         resultDiv.style.display = 'block';
         resultDiv.className = 'import-result error';
-        resultDiv.innerHTML = `❌ Ingest failed: ${err.message}`;
+        resultDiv.innerHTML = ` Ingest failed: ${err.message}`;
     }
 
     btn.disabled = false;
-    btn.textContent = '🚀 Ingest Selected';
+    btn.textContent = ' Ingest Selected';
     setTimeout(() => { progress.style.display = 'none'; }, 2000);
 }
 
@@ -1310,7 +1310,7 @@ function exitInbox() {
     const btn = document.getElementById('importBtn');
     if (btn) {
         const keepOrig = document.getElementById('keepOriginalNames')?.checked;
-        btn.textContent = keepOrig ? '📥 Import' : '📥 Import & Rename';
+        btn.textContent = keepOrig ? ' Import' : ' Import & Rename';
         btn.onclick = executeImport;
     }
 
@@ -1325,9 +1325,9 @@ function exitInbox() {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EXPOSE ON WINDOW (for HTML onclick handlers)
-// ═══════════════════════════════════════════
+// ===========================================
 
 window.browseTo = browseTo;
 window.navigateUp = navigateUp;
@@ -1355,3 +1355,7 @@ window.toggleInboxFile = toggleInboxFile;
 window.refreshInbox = refreshInbox;
 window.executeIngest = executeIngest;
 window.exitInbox = exitInbox;
+
+
+
+

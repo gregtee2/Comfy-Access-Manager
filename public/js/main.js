@@ -5,7 +5,7 @@
  * See LICENSE file for details.
  */
 /**
- * Comfy Asset Manager (CAM) — Main Entry Point
+ * Comfy Asset Manager (CAM) - Main Entry Point
  * Tab switching, initialization, vault setup.
  * All other logic is in feature modules.
  */
@@ -18,17 +18,17 @@ import { loadSettings, loadRoles, openFolderPicker, autoCheckForUpdates } from '
 import pluginRegistry from './pluginRegistry.js';
 import './export.js';
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  INIT
-// ═══════════════════════════════════════════
+// ===========================================
 document.addEventListener('DOMContentLoaded', async () => {
     initFileDropZone();
     await initUserThenSetup();
 });
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  USER IDENTITY
-// ═══════════════════════════════════════════
+// ===========================================
 
 /** Check if user is selected; if not, show picker overlay. Then proceed with setup. */
 async function initUserThenSetup() {
@@ -44,10 +44,10 @@ async function initUserThenSetup() {
                 return;
             }
         } catch (_) {}
-        // User no longer exists — clear and show picker
+        // User no longer exists - clear and show picker
         localStorage.removeItem('cam_user_id');
     }
-    // No user selected — show picker
+    // No user selected - show picker
     await showUserPicker();
 }
 
@@ -65,12 +65,12 @@ function setCurrentUser(user) {
     state.currentUser = user;
     const avatarEl = document.getElementById('userAvatar');
     const nameEl = document.getElementById('userName');
-    if (avatarEl) avatarEl.textContent = user.avatar || '👤';
+    if (avatarEl) avatarEl.textContent = user.name.substring(0, 2).toUpperCase();
     if (nameEl) nameEl.textContent = user.name;
     const btn = document.getElementById('userIndicator');
     if (btn) {
         btn.style.borderColor = user.color || '#888';
-        btn.title = `Signed in as ${user.name}${user.is_admin ? ' (Admin)' : ''} — click to switch`;
+        btn.title = `Signed in as ${user.name}${user.is_admin ? ' (Admin)' : ''} - click to switch`;
     }
 }
 
@@ -82,14 +82,14 @@ async function showUserPicker() {
 
     overlay.style.display = 'flex';
     hidePinPrompt(); // Reset any open PIN prompt
-    listEl.innerHTML = '<div style="text-align:center;padding:20px;opacity:0.5;">Loading users…</div>';
+    listEl.innerHTML = '<div style="text-align:center;padding:20px;opacity:0.5;">Loading users...</div>';
 
     try {
         const users = await fetchUsersRaw();
         if (users.length === 0) {
             listEl.innerHTML = '<div style="text-align:center;padding:20px;opacity:0.7;">No users yet. The first user (Admin) will be created automatically.</div>';
             // Auto-create admin if somehow missing
-            const res = await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Admin', is_admin: 1, avatar: '👑', color: '#4fc3f7' }) });
+            const res = await fetch('/api/users', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ name: 'Admin', is_admin: 1, avatar: 'AD', color: '#4fc3f7' }) });
             if (res.ok) {
                 const newAdmin = await res.json();
                 selectUser(newAdmin);
@@ -99,9 +99,9 @@ async function showUserPicker() {
 
         listEl.innerHTML = users.map(u => `
             <button class="user-picker-btn" onclick="${u.has_pin ? `promptPin(${u.id})` : `selectUser(${u.id})`}" style="border-left: 4px solid ${u.color || '#888'}">
-                <span class="user-picker-avatar">${u.avatar || '👤'}</span>
+                <span class="user-picker-avatar">${u.name.substring(0, 2).toUpperCase()}</span>
                 <span class="user-picker-name">${u.name}</span>
-                ${u.has_pin ? '<span class="user-picker-lock">🔒</span>' : ''}
+                ${u.has_pin ? '<span class="user-picker-lock">[Lock]</span>' : ''}
                 ${u.is_admin ? '<span class="user-picker-badge">Admin</span>' : ''}
             </button>
         `).join('');
@@ -212,9 +212,9 @@ async function checkSetup() {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  TABS
-// ═══════════════════════════════════════════
+// ===========================================
 function switchTab(tab) {
     state.currentTab = tab;
 
@@ -227,15 +227,15 @@ function switchTab(tab) {
     if (tab === 'settings') { loadSettings(); loadRoles(); }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  NETWORK DISCOVERY (setup overlay)
-// ═══════════════════════════════════════════
+// ===========================================
 async function scanForRemoteServers() {
     const statusEl = document.getElementById('setupDiscoveryStatus');
     const listEl = document.getElementById('setupDiscoveredServers');
     if (!statusEl || !listEl) return;
 
-    statusEl.textContent = '🔍 Scanning your network...';
+    statusEl.textContent = ' Scanning your network...';
     statusEl.style.display = 'block';
     listEl.innerHTML = '';
 
@@ -253,9 +253,9 @@ async function scanForRemoteServers() {
                     <div class="setup-server-dot"></div>
                     <div class="setup-server-info">
                         <div class="setup-server-name">${s.name || s.hostname}</div>
-                        <div class="setup-server-meta">${s.ip}:${s.port} · ${s.assets} assets</div>
+                        <div class="setup-server-meta">${s.ip}:${s.port} . ${s.assets} assets</div>
                     </div>
-                    <div class="setup-server-arrow">→</div>
+                    <div class="setup-server-arrow">-></div>
                 </div>
             `).join('');
         }
@@ -265,9 +265,9 @@ async function scanForRemoteServers() {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  VAULT SETUP
-// ═══════════════════════════════════════════
+// ===========================================
 async function setupVault() {
     const pathInput = document.getElementById('setupVaultPath');
     const vaultPath = pathInput.value.trim();
@@ -286,9 +286,9 @@ function browseForVault() {
     openFolderPicker('setupVaultPath');
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EXPOSE ON WINDOW
-// ═══════════════════════════════════════════
+// ===========================================
 window.switchTab = switchTab;
 window.checkSetup = checkSetup;
 window.setupVault = setupVault;
@@ -299,3 +299,6 @@ window.selectUser = selectUser;
 window.promptPin = promptPin;
 window.hidePinPrompt = hidePinPrompt;
 window.submitPin = submitPin;
+
+
+

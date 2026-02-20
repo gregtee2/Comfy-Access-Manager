@@ -5,7 +5,7 @@
  * See LICENSE file for details.
  */
 /**
- * DMV — Global State
+ * DMV - Global State
  * Single source of truth for all application state.
  */
 
@@ -38,3 +38,4 @@ export const state = {
     selectedAssets: [],    // Array of asset IDs
     lastClickedAsset: -1,  // Index in state.assets for shift-select
 };
+

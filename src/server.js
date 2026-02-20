@@ -93,6 +93,31 @@ app.use('/api/crates', crateRoutes);
 async function start() {
     await initDb();
 
+    // Fix 0kb file sizes for existing assets
+    try {
+        const db = require('./database').getDb();
+        const pathResolver = require('./utils/pathResolver');
+        const assets = db.prepare('SELECT id, file_path FROM assets WHERE (file_size = 0 OR file_size IS NULL) AND is_sequence = 0').all();
+        if (assets.length > 0) {
+            console.log(`[DB] Fixing ${assets.length} assets with 0kb file size...`);
+            const updateStmt = db.prepare('UPDATE assets SET file_size = ? WHERE id = ?');
+            db.transaction(() => {
+                for (const a of assets) {
+                    try {
+                        const resolvedPath = pathResolver.resolveFilePath(a.file_path);
+                        if (fs.existsSync(resolvedPath)) {
+                            const size = fs.statSync(resolvedPath).size;
+                            updateStmt.run(size, a.id);
+                        }
+                    } catch (e) {}
+                }
+            })();
+            console.log('[DB] File sizes updated.');
+        }
+    } catch (err) {
+        console.error('[DB] Failed to fix file sizes:', err.message);
+    }
+
     // Load plugins AFTER DB init, BEFORE SPA fallback
     try {
         await pluginLoader.loadAll(app);

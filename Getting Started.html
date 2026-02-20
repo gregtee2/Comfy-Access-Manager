@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Comfy Asset Manager — Getting Started</title>
+<title>Comfy Asset Manager - Getting Started</title>
 <style>
   * { margin: 0; padding: 0; box-sizing: border-box; }
   body {
@@ -199,25 +199,25 @@
 
   <div class="platform-tabs">
     <div class="platform-tab active" onclick="showPlatform('mac')">
-      <span class="icon">🍎</span> Mac
+      <span class="icon">Mac</span> Mac
     </div>
     <div class="platform-tab" onclick="showPlatform('win')">
-      <span class="icon">🪟</span> Windows
+      <span class="icon">Win</span> Windows
     </div>
     <div class="platform-tab" onclick="showPlatform('linux')">
-      <span class="icon">🐧</span> Linux
+      <span class="icon">Linux</span> Linux
     </div>
   </div>
 
-  <!-- ═══════ MAC ═══════ -->
+  <!-- ======= MAC ======= -->
   <div id="platform-mac" class="platform-content active">
     <div class="step">
       <div class="step-header">
         <div class="step-number">1</div>
         <div class="step-title">Open Terminal</div>
       </div>
-      <p>Press <span class="kbd">⌘ Space</span> to open Spotlight, type <strong>Terminal</strong>, and press <span class="kbd">Enter</span>.</p>
-      <p>A window with a dark or white background and a blinking cursor will appear — that's Terminal.</p>
+      <p>Press <span class="kbd">Cmd Space</span> to open Spotlight, type <strong>Terminal</strong>, and press <span class="kbd">Enter</span>.</p>
+      <p>A window with a dark or white background and a blinking cursor will appear - that's Terminal.</p>
     </div>
 
     <div class="step">
@@ -225,22 +225,22 @@
         <div class="step-number">2</div>
         <div class="step-title">Paste this line and press Enter</div>
       </div>
-      <p>Click the green <strong>Copy</strong> button, go back to Terminal, press <span class="kbd">⌘ V</span> to paste, then press <span class="kbd">Enter</span>.</p>
+      <p>Click the green <strong>Copy</strong> button, go back to Terminal, press <span class="kbd">Cmd V</span> to paste, then press <span class="kbd">Enter</span>.</p>
       <div class="code-box" id="mac-command">
 /bin/bash -c "$(curl -fsSL https://raw.githubusercontent.com/gregtee2/Comfy-Access-Manager/main/scripts/mac-install.sh)"
         <button class="copy-btn" onclick="copyCommand('mac-command', this)">Copy</button>
       </div>
       <div class="note">
         <strong>What this does:</strong> Downloads the app, installs any missing tools
-        (Node.js, FFmpeg), and sets everything up. Takes about 2–5 minutes on a typical connection.
-        You may be asked for your Mac password during installation — that's normal.
+        (Node.js, FFmpeg), and sets everything up. Takes about 2-5 minutes on a typical connection.
+        You may be asked for your Mac password during installation - that's normal.
       </div>
     </div>
 
     <div class="step">
       <div class="step-header">
         <div class="step-number">3</div>
-        <div class="step-title">Done — the app launches automatically</div>
+        <div class="step-title">Done - the app launches automatically</div>
       </div>
       <p>When installation finishes, it will ask if you want to launch the app. Press <span class="kbd">Enter</span> to say yes.</p>
       <p>Your web browser will open to the app automatically.</p>
@@ -251,13 +251,13 @@
     </div>
 
     <div class="success-box">
-      <div class="icon">✅</div>
+      <div class="icon">Success:</div>
       <p>The app runs in your browser at:</p>
       <span class="url">http://localhost:7700</span>
     </div>
   </div>
 
-  <!-- ═══════ WINDOWS ═══════ -->
+  <!-- ======= WINDOWS ======= -->
   <div id="platform-win" class="platform-content">
     <div class="step">
       <div class="step-header">
@@ -278,7 +278,7 @@
       <p>If Windows asks "Do you want to allow this?", click <strong>Yes</strong> or <strong>Run anyway</strong>.</p>
       <div class="note">
         <strong>What this does:</strong> Downloads and installs Node.js, Git, FFmpeg, and the
-        app's dependencies. Takes about 2–5 minutes.
+        app's dependencies. Takes about 2-5 minutes.
       </div>
     </div>
 
@@ -295,13 +295,13 @@
     </div>
 
     <div class="success-box">
-      <div class="icon">✅</div>
+      <div class="icon">Success:</div>
       <p>The app runs in your browser at:</p>
       <span class="url">http://localhost:7700</span>
     </div>
   </div>
 
-  <!-- ═══════ LINUX ═══════ -->
+  <!-- ======= LINUX ======= -->
   <div id="platform-linux" class="platform-content">
     <div class="step">
       <div class="step-header">
@@ -317,7 +317,7 @@ git clone https://github.com/gregtee2/Comfy-Access-Manager.git ~/Comfy-Asset-Man
     <div class="step">
       <div class="step-header">
         <div class="step-number">2</div>
-        <div class="step-title">Done — launches automatically</div>
+        <div class="step-title">Done - launches automatically</div>
       </div>
       <p>The installer sets up Node.js, FFmpeg, and dependencies, then offers to launch the app.</p>
       <div class="note">
@@ -326,13 +326,13 @@ git clone https://github.com/gregtee2/Comfy-Access-Manager.git ~/Comfy-Asset-Man
     </div>
 
     <div class="success-box">
-      <div class="icon">✅</div>
+      <div class="icon">Success:</div>
       <p>The app runs in your browser at:</p>
       <span class="url">http://localhost:7700</span>
     </div>
   </div>
 
-  <!-- ═══════ FAQ ═══════ -->
+  <!-- ======= FAQ ======= -->
   <div class="faq">
     <h2>Common Questions</h2>
 
@@ -344,14 +344,14 @@ git clone https://github.com/gregtee2/Comfy-Access-Manager.git ~/Comfy-Asset-Man
     </details>
 
     <details class="faq-item">
-      <summary>It's asking for my password — is that safe?</summary>
+      <summary>It's asking for my password - is that safe?</summary>
       <p>Yes. Some tools (like Homebrew) need your Mac admin password to install system-wide
-      software. Your password is never sent anywhere — it stays on your Mac. The cursor won't
-      move while you type it — that's normal. Just type it and press Enter.</p>
+      software. Your password is never sent anywhere - it stays on your Mac. The cursor won't
+      move while you type it - that's normal. Just type it and press Enter.</p>
     </details>
 
     <details class="faq-item">
-      <summary>The install seems stuck — what do I do?</summary>
+      <summary>The install seems stuck - what do I do?</summary>
       <p>Some steps (like downloading OpenRV at 642 MB) can take several minutes. If nothing has
       happened for more than 10 minutes, press <span class="kbd">Ctrl</span> + <span class="kbd">C</span>
       to cancel, then try running the command again.</p>
@@ -359,8 +359,8 @@ git clone https://github.com/gregtee2/Comfy-Access-Manager.git ~/Comfy-Asset-Man
 
     <details class="faq-item">
       <summary>Can I uninstall it?</summary>
-      <p>Yes — just delete the <code>Comfy-Asset-Manager</code> folder from your home directory.
-      On Mac: open Finder, press <span class="kbd">⌘ Shift H</span> to go to your home folder,
+      <p>Yes - just delete the <code>Comfy-Asset-Manager</code> folder from your home directory.
+      On Mac: open Finder, press <span class="kbd">Cmd Shift H</span> to go to your home folder,
       and drag Comfy-Asset-Manager to the Trash.</p>
     </details>
 
@@ -374,7 +374,7 @@ git clone https://github.com/gregtee2/Comfy-Access-Manager.git ~/Comfy-Asset-Man
 
     <details class="faq-item">
       <summary>Do I need an internet connection?</summary>
-      <p>Only for the initial install. After that, the app runs entirely on your local computer — 
+      <p>Only for the initial install. After that, the app runs entirely on your local computer - 
       no cloud, no accounts, no subscriptions.</p>
     </details>
   </div>
@@ -407,3 +407,4 @@ else if (ua.includes('Linux')) showPlatform('linux');
 </script>
 </body>
 </html>
+

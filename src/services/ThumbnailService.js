@@ -91,17 +91,36 @@ class ThumbnailService {
 
             const args = [
                 '-y',
-                '-i', videoPath,
                 '-ss', '00:00:01',   // Grab frame at 1 second
+                '-i', videoPath,
                 '-vframes', '1',
                 '-vf', `scale=${size}:-1`,
                 '-q:v', '5',
+                '-update', '1',
+                '-strict', 'unofficial',
                 thumbPath
             ];
 
             execFile(ffmpegPath, args, { timeout: 15000, windowsHide: true }, (err) => {
-                if (err) reject(err);
-                else resolve(thumbPath);
+                if (err || !fs.existsSync(thumbPath)) {
+                    // If it failed or file wasn't created (e.g. video shorter than 1s), try at 00:00:00
+                    const fallbackArgs = [
+                        '-y',
+                        '-i', videoPath,
+                        '-vframes', '1',
+                        '-vf', `scale=${size}:-1`,
+                        '-q:v', '5',
+                        '-update', '1',
+                        '-strict', 'unofficial',
+                        thumbPath
+                    ];
+                    execFile(ffmpegPath, fallbackArgs, { timeout: 15000, windowsHide: true }, (err2) => {
+                        if (err2) reject(err2);
+                        else resolve(thumbPath);
+                    });
+                } else {
+                    resolve(thumbPath);
+                }
             });
         });
     }
@@ -127,6 +146,7 @@ class ThumbnailService {
                     '-y', '-i', imagePath,
                     '-vf', `scale=${size}:-1`,
                     '-q:v', '5',
+                    '-update', '1',
                     thumbPath
                 ];
                 execFile(ffmpegPath, args, { timeout: 10000, windowsHide: true }, (err) => {

@@ -5,7 +5,7 @@
  * See LICENSE file for details.
  */
 /**
- * DMV — Player Module
+ * DMV - Player Module
  * Built-in media player and external player launch (RV / OpenRV).
  */
 
@@ -13,18 +13,18 @@ import { state } from './state.js';
 import { api } from './api.js';
 import { esc, formatSize, formatDuration, showToast } from './utils.js';
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  OVERLAY STATE
-// ═══════════════════════════════════════════
+// ===========================================
 let overlayEnabled = false;
 let overlayOptions = loadOverlayPrefs();
 let overlayRafId = null;
 let overlayCanvas = null;
 let overlayCtx = null;
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  POP-OUT PLAYER STATE
-// ═══════════════════════════════════════════
+// ===========================================
 let popoutWindow = null;
 let presentationMode = false;
 let presentationFrameRaf = null;
@@ -42,9 +42,9 @@ function saveOverlayPrefs() {
     try { localStorage.setItem('dmv_overlay_prefs', JSON.stringify(overlayOptions)); } catch {}
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  MEDIA PLAYER
-// ═══════════════════════════════════════════
+// ===========================================
 
 export function openPlayer(index) {
     state.playerAssets = state.assets;
@@ -167,7 +167,7 @@ function playerKeyHandler(e) {
     // Frame stepping: , = prev frame, . = next frame
     if (e.key === ',' || e.key === '<') { keyFrameStep(-1); }
     if (e.key === '.' || e.key === '>') { keyFrameStep(1); }
-    // J/K/L shuttle (video only — cache uses fixed fps)
+    // J/K/L shuttle (video only - cache uses fixed fps)
     if (e.key === 'j' || e.key === 'J') {
         const video = document.querySelector('#playerContent video');
         if (video && !cachedPlaybackState?.playing) { video.playbackRate = Math.max(0.25, (video.playbackRate || 1) - 0.5); video.play(); }
@@ -218,20 +218,20 @@ function renderPlayer() {
         const videoUrl = needsTranscode ? `/api/assets/${asset.id}/stream` : fileUrl;
         const fps = asset.fps || 24;
         content.innerHTML = `
-            ${needsTranscode ? '<div style="text-align:center;color:var(--accent);font-size:0.75rem;margin-bottom:6px;">⚡ Transcoding from ' + esc(asset.codec) + ' — may take a moment to start</div>' : ''}
+            ${needsTranscode ? '<div style="text-align:center;color:var(--accent);font-size:0.75rem;margin-bottom:6px;">* Transcoding from ' + esc(asset.codec) + ' - may take a moment to start</div>' : ''}
             <video autoplay loop src="${videoUrl}" style="max-width:100%;max-height:calc(70vh - 44px);cursor:pointer;"></video>
             <div class="player-transport" data-fps="${fps}">
-                <button class="pt-btn pt-play" title="Play/Pause (Space)">⏸</button>
-                <button class="pt-btn pt-prev-frame" title="Previous frame (,)">⏮</button>
+                <button class="pt-btn pt-play" title="Play/Pause (Space)">||</button>
+                <button class="pt-btn pt-prev-frame" title="Previous frame (,)">|<</button>
                 <div class="pt-scrub-wrap">
                     <input type="range" class="pt-scrub" min="0" max="1000" value="0" step="1">
                     <div class="pt-scrub-fill" style="width:0%"></div>
                 </div>
-                <button class="pt-btn pt-next-frame" title="Next frame (.)">⏭</button>
+                <button class="pt-btn pt-next-frame" title="Next frame (.)">>|</button>
                 <span class="pt-time">00:00 / 00:00</span>
                 <span class="pt-frame-counter"></span>
-                <button class="pt-btn pt-loop active" title="Loop (L)">🔁</button>
-                <div class="pt-cache-bar" style="display:none" title="Caching frames for instant scrub…"><div class="pt-cache-fill"></div></div>
+                <button class="pt-btn pt-loop active" title="Loop (L)"></button>
+                <div class="pt-cache-bar" style="display:none" title="Caching frames for instant scrub..."><div class="pt-cache-fill"></div></div>
             </div>
         `;
         initTransportControls(content, fps);
@@ -240,14 +240,14 @@ function renderPlayer() {
     } else if (asset.media_type === 'audio') {
         content.innerHTML = `
             <div style="text-align:center;padding:40px;">
-                <div style="font-size:4rem;margin-bottom:20px;">🔊</div>
+                <div style="font-size:4rem;margin-bottom:20px;"></div>
                 <audio controls autoplay src="${fileUrl}" style="width:400px;"></audio>
             </div>
         `;
     } else {
         content.innerHTML = `
             <div style="text-align:center;padding:40px;color:var(--text-dim);">
-                <div style="font-size:4rem;margin-bottom:12px;">📎</div>
+                <div style="font-size:4rem;margin-bottom:12px;"></div>
                 <p>Preview not available for this file type.</p>
                 <a href="${fileUrl}" download style="color:var(--accent-light);">Download File</a>
             </div>
@@ -257,16 +257,16 @@ function renderPlayer() {
     // Meta info
     const meta = document.getElementById('playerMeta');
     const parts = [];
-    if (asset.width && asset.height) parts.push(`<span>📐 ${asset.width}×${asset.height}</span>`);
-    if (asset.duration) parts.push(`<span>⏱️ ${formatDuration(asset.duration)}</span>`);
-    if (asset.fps) parts.push(`<span>🎞️ ${asset.fps} fps</span>`);
-    if (asset.codec) parts.push(`<span>🔧 ${asset.codec}</span>`);
-    parts.push(`<span>📦 ${formatSize(asset.file_size)}</span>`);
+    if (asset.width && asset.height) parts.push(`<span> ${asset.width}x${asset.height}</span>`);
+    if (asset.duration) parts.push(`<span>Dur: ${formatDuration(asset.duration)}</span>`);
+    if (asset.fps) parts.push(`<span> ${asset.fps} fps</span>`);
+    if (asset.codec) parts.push(`<span> ${asset.codec}</span>`);
+    parts.push(`<span> ${formatSize(asset.file_size)}</span>`);
     if (asset.original_name !== asset.vault_name) {
-        parts.push(`<span>📄 Originally: ${esc(asset.original_name)}</span>`);
+        parts.push(`<span> Originally: ${esc(asset.original_name)}</span>`);
     }
-    parts.push(`<button class="player-rv-btn" onclick="openInRV(${asset.id})" title="Open in RV">🎬 RV</button>`);
-    parts.push(`<button class="player-rv-btn" onclick="sendToRV(${asset.id}, 'merge')" title="Add to running RV session">➕ Add to RV</button>`);
+    parts.push(`<button class="player-rv-btn" onclick="openInRV(${asset.id})" title="Open in RV"> RV</button>`);
+    parts.push(`<button class="player-rv-btn" onclick="sendToRV(${asset.id}, 'merge')" title="Add to running RV session">+ Add to RV</button>`);
     meta.innerHTML = parts.join('');
 
     // Update generation metadata panel if it's open
@@ -276,9 +276,9 @@ function renderPlayer() {
     requestAnimationFrame(() => setupOverlay(asset));
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  REVIEW OVERLAY SYSTEM
-// ═══════════════════════════════════════════
+// ===========================================
 
 function setupOverlay(asset) {
     // Stop any existing overlay loop
@@ -372,7 +372,7 @@ function drawOverlay() {
     const fontSize = Math.max(12, Math.min(w * 0.018, 22));
     const padding = fontSize * 0.8;
 
-    // ─── Safe Areas ───
+    // --- Safe Areas ---
     if (overlayOptions.safeAreas) {
         // Action safe = 90% of frame
         ctx.strokeStyle = 'rgba(255, 255, 255, 0.35)';
@@ -406,7 +406,7 @@ function drawOverlay() {
         ctx.setLineDash([]);
     }
 
-    // ─── Burn-in Text (top-left: metadata, top-right: resolution/codec) ───
+    // --- Burn-in Text (top-left: metadata, top-right: resolution/codec) ---
     if (overlayOptions.burnIn) {
         ctx.font = `bold ${fontSize}px monospace`;
         ctx.textBaseline = 'top';
@@ -422,7 +422,7 @@ function drawOverlay() {
         if (asset.project_name) hierarchy.push(asset.project_name);
         if (asset.sequence_name) hierarchy.push(asset.sequence_name);
         if (asset.shot_name) hierarchy.push(asset.shot_name);
-        const hierStr = hierarchy.length > 0 ? hierarchy.join(' › ') : '';
+        const hierStr = hierarchy.length > 0 ? hierarchy.join(' > ') : '';
 
         ctx.fillText(hierStr || asset.vault_name, padding, padding * 0.5);
 
@@ -438,10 +438,10 @@ function drawOverlay() {
         ctx.font = `bold ${fontSize}px monospace`;
         ctx.fillStyle = '#ffffff';
         const techParts = [];
-        if (asset.width && asset.height) techParts.push(`${asset.width}×${asset.height}`);
+        if (asset.width && asset.height) techParts.push(`${asset.width}x${asset.height}`);
         if (asset.codec) techParts.push(asset.codec.toUpperCase());
         if (asset.fps) techParts.push(`${asset.fps}fps`);
-        ctx.fillText(techParts.join('  •  '), w - padding, padding * 0.5);
+        ctx.fillText(techParts.join('  .  '), w - padding, padding * 0.5);
 
         // File size on second line top-right
         ctx.font = `${fontSize * 0.85}px monospace`;
@@ -451,7 +451,7 @@ function drawOverlay() {
         ctx.textAlign = 'left';
     }
 
-    // ─── Frame Counter + Timecode (bottom-left) ───
+    // --- Frame Counter + Timecode (bottom-left) ---
     if (overlayOptions.frameCounter && mediaEl.tagName === 'VIDEO') {
         const fps = asset.fps || 24;
         const currentTime = mediaEl.currentTime || 0;
@@ -480,7 +480,7 @@ function drawOverlay() {
         ctx.fillText(`F${String(currentFrame).padStart(5, '0')} / ${totalFrames}`, padding, h - padding * 0.6 - fontSize * 1.1);
     }
 
-    // ─── Watermark (center, semi-transparent) ───
+    // --- Watermark (center, semi-transparent) ---
     if (overlayOptions.watermark && overlayOptions.watermarkText) {
         const wmText = overlayOptions.watermarkText;
         const wmSize = Math.max(16, w * 0.04);
@@ -511,7 +511,7 @@ function timeToTimecode(seconds, fps) {
     return `${String(hh).padStart(2, '0')}:${String(mm).padStart(2, '0')}:${String(ss).padStart(2, '0')}:${String(ff).padStart(2, '0')}`;
 }
 
-// ─── Overlay Toolbar ───
+// --- Overlay Toolbar ---
 
 function renderOverlayToolbar() {
     // Insert toolbar into player header if not already there
@@ -531,18 +531,18 @@ function renderOverlayToolbar() {
     toolbar.innerHTML = `
         <button class="overlay-toggle ${overlayEnabled ? 'active' : ''}" 
                 onclick="toggleOverlayMaster()" title="Toggle review overlays">
-            🎬 Overlay ${overlayEnabled ? 'ON' : 'OFF'}
+             Overlay ${overlayEnabled ? 'ON' : 'OFF'}
         </button>
         ${overlayEnabled ? `
             <button class="overlay-opt-btn ${overlayOptions.burnIn ? 'active' : ''}" 
-                    onclick="toggleOverlayOption('burnIn')" title="Burn-in metadata text">🔤</button>
+                    onclick="toggleOverlayOption('burnIn')" title="Burn-in metadata text"></button>
             <button class="overlay-opt-btn ${overlayOptions.frameCounter ? 'active' : ''}" 
-                    onclick="toggleOverlayOption('frameCounter')" title="Frame counter + timecode">🎞️</button>
+                    onclick="toggleOverlayOption('frameCounter')" title="Frame counter + timecode"></button>
             <button class="overlay-opt-btn ${overlayOptions.watermark ? 'active' : ''}" 
-                    onclick="toggleOverlayOption('watermark')" title="Watermark text">💧</button>
+                    onclick="toggleOverlayOption('watermark')" title="Watermark text"></button>
             <button class="overlay-opt-btn ${overlayOptions.safeAreas ? 'active' : ''}" 
-                    onclick="toggleOverlayOption('safeAreas')" title="Safe area guides">📐</button>
-            <button class="overlay-opt-btn" onclick="editWatermarkText()" title="Edit watermark text">✏️</button>
+                    onclick="toggleOverlayOption('safeAreas')" title="Safe area guides"></button>
+            <button class="overlay-opt-btn" onclick="editWatermarkText()" title="Edit watermark text">Edit</button>
         ` : ''}
     `;
 }
@@ -581,9 +581,9 @@ function cleanupOverlay() {
     if (toolbar) toolbar.remove();
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EXTERNAL PLAYER LAUNCH
-// ═══════════════════════════════════════════
+// ===========================================
 
 async function openInExternalPlayer(assetId) {
     try {
@@ -654,7 +654,7 @@ async function sendSelectedToRV(mode = 'set') {
 
 
 
-// ═══════════════════════════════════════════
+// ===========================================
 
 /**
  * Open built-in player using whatever is already set in state.playerAssets/playerIndex.
@@ -666,15 +666,15 @@ function openPlayerDirect() {
     document.addEventListener('keydown', playerKeyHandler);
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  CUSTOM VIDEO TRANSPORT CONTROLS + FRAME CACHE
-// ═══════════════════════════════════════════
+// ===========================================
 
 // Active frame cache pointer (points to an entry in the pool)
 let frameCache = null;  // { frames: ImageBitmap[], fps, duration, width, height, ready }
 let frameCacheAbort = null;  // AbortController for current clip's cache build
 
-// ─── Multi-Clip Cache Pool (RV-style pre-buffering) ───
+// --- Multi-Clip Cache Pool (RV-style pre-buffering) ---
 const frameCachePool = new Map();  // Map<assetId, { frames, fps, duration, width, height, ready }>
 const precacheAborts = new Map();  // Map<assetId, AbortController>
 const MAX_POOL_SIZE = 5;           // Max clips to keep cached in memory
@@ -682,7 +682,7 @@ const MAX_POOL_SIZE = 5;           // Max clips to keep cached in memory
 /** Clear active cache pointer + abort current build (pool entries preserved) */
 function destroyFrameCache() {
     if (frameCacheAbort) { frameCacheAbort.abort(); frameCacheAbort = null; }
-    frameCache = null;  // Don't close bitmaps — they live in the pool
+    frameCache = null;  // Don't close bitmaps - they live in the pool
 }
 
 /** Close all ImageBitmaps in a cache entry (handles gap-fill shared refs) */
@@ -715,7 +715,7 @@ function evictOldCaches(keepAssetId) {
     }
 }
 
-/** Destroy ALL caches (pool + active) — call on player close */
+/** Destroy ALL caches (pool + active) - call on player close */
 function destroyAllCaches() {
     for (const [, ac] of precacheAborts) ac.abort();
     precacheAborts.clear();
@@ -726,7 +726,7 @@ function destroyAllCaches() {
 }
 
 /**
- * Show a cached frame on the scrub canvas overlay — instant, no decode lag.
+ * Show a cached frame on the scrub canvas overlay - instant, no decode lag.
  * Can be called from anywhere (keyboard handler, scrub, frame step).
  * Accepts optional canvas/ctx/video elements, or finds them from DOM.
  */
@@ -759,7 +759,7 @@ function showCachedFrame(timePos, canvas, ctx, videoEl) {
 }
 
 /**
- * Frame cache builder — dispatches to WebCodecs (primary) or RVFC (fallback).
+ * Frame cache builder - dispatches to WebCodecs (primary) or RVFC (fallback).
  *
  * WebCodecs + mp4box.js gives 100% frame-accurate decode at GPU speed.
  * RVFC fallback handles WebM or browsers without WebCodecs.
@@ -786,21 +786,21 @@ async function buildFrameCache(videoSrc, fps, onProgress, externalAbort) {
 }
 
 /**
- * WebCodecs path: fetch → mp4box demux → VideoDecoder → ImageBitmap[].
+ * WebCodecs path: fetch -> mp4box demux -> VideoDecoder -> ImageBitmap[].
  * Split into 3 phases to avoid async race conditions in mp4box callbacks:
  *   Phase 1: Download video file
- *   Phase 2: Demux — parse MP4 container and collect all encoded samples (fully sync)
- *   Phase 3: Decode — validate config, decode frames with VideoDecoder
+ *   Phase 2: Demux - parse MP4 container and collect all encoded samples (fully sync)
+ *   Phase 3: Decode - validate config, decode frames with VideoDecoder
  */
 async function _buildCacheWebCodecs(videoSrc, fps, onProgress, ac) {
-    // ── Phase 1: Download ──
+    // -- Phase 1: Download --
     console.log('[FrameCache] WC: fetching video...');
     const response = await fetch(videoSrc, { signal: ac.signal });
     const buffer = await response.arrayBuffer();
     console.log('[FrameCache] WC: downloaded', (buffer.byteLength / 1024 / 1024).toFixed(1), 'MB');
     if (ac.signal.aborted) return null;
 
-    // ── Phase 2: Demux (all mp4box callbacks are synchronous — no awaits!) ──
+    // -- Phase 2: Demux (all mp4box callbacks are synchronous - no awaits!) --
     const demux = await _demuxMP4(buffer);
     if (!demux) return null;
 
@@ -815,9 +815,9 @@ async function _buildCacheWebCodecs(videoSrc, fps, onProgress, ac) {
     const totalFrames = Math.ceil(duration * fps);
     if (totalFrames > 1800) { if (onProgress) onProgress(-1, totalFrames); return null; }
 
-    console.log('[FrameCache] WC: demuxed', samples.length, 'samples, codec:', track.codec, w + '×' + h);
+    console.log('[FrameCache] WC: demuxed', samples.length, 'samples, codec:', track.codec, w + 'x' + h);
 
-    // ── Phase 3: Decode (async is fine here — no mp4box interaction) ──
+    // -- Phase 3: Decode (async is fine here - no mp4box interaction) --
     const description = _getCodecDescription(trak);
 
     let config = { codec: track.codec, codedWidth: w, codedHeight: h, hardwareAcceleration: 'prefer-hardware' };
@@ -840,8 +840,8 @@ async function _buildCacheWebCodecs(videoSrc, fps, onProgress, ac) {
 }
 
 /**
- * Phase 2: Demux MP4 container with mp4box.js — extract track info and all encoded samples.
- * CRITICAL: onReady is NOT async — everything is synchronous so mp4box can deliver
+ * Phase 2: Demux MP4 container with mp4box.js - extract track info and all encoded samples.
+ * CRITICAL: onReady is NOT async - everything is synchronous so mp4box can deliver
  * samples during appendBuffer/flush without race conditions.
  */
 function _demuxMP4(buffer) {
@@ -868,7 +868,7 @@ function _demuxMP4(buffer) {
         };
 
         file.onReady = (info) => {
-            // NOT async — must be fully synchronous so samples arrive during appendBuffer/flush
+            // NOT async - must be fully synchronous so samples arrive during appendBuffer/flush
             const track = info.videoTracks?.[0];
             if (!track) { finish(); return; }
 
@@ -900,8 +900,8 @@ function _demuxMP4(buffer) {
 }
 
 /**
- * Phase 3: Decode all collected samples with VideoDecoder → ImageBitmap array.
- * Samples are pre-collected from demux phase — no mp4box interaction needed.
+ * Phase 3: Decode all collected samples with VideoDecoder -> ImageBitmap array.
+ * Samples are pre-collected from demux phase - no mp4box interaction needed.
  */
 function _decodeAllFrames(samples, config, totalFrames, fps, w, h, duration, onProgress, ac) {
     const frames = new Array(totalFrames).fill(null);
@@ -948,7 +948,7 @@ function _decodeAllFrames(samples, config, totalFrames, fps, w, h, duration, onP
             }));
         }
 
-        // Flush decoder — waits for all queued frames to be decoded
+        // Flush decoder - waits for all queued frames to be decoded
         decoder.flush().then(async () => {
             await Promise.all(pendingBitmaps);
             if (ac.signal.aborted) { resolve(null); return; }
@@ -958,7 +958,7 @@ function _decodeAllFrames(samples, config, totalFrames, fps, w, h, duration, onP
 
             const elapsed = ((performance.now() - cacheStartTime) / 1000).toFixed(1);
             const gaps = frames.filter(f => !f).length;
-            console.log(`[FrameCache] ✅ WebCodecs: ${totalFrames} frames in ${elapsed}s (${gaps} gaps), codec: ${config.codec}, ${w}×${h}`);
+            console.log(`[FrameCache] Success: WebCodecs: ${totalFrames} frames in ${elapsed}s (${gaps} gaps), codec: ${config.codec}, ${w}x${h}`);
             try { decoder.close(); } catch {}
             resolve({ frames, fps, duration, width: w, height: h, ready: true });
         }).catch(() => resolve(null));
@@ -1161,14 +1161,14 @@ async function precacheAdjacent(currentAssetId) {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  CACHED PLAYBACK ENGINE (RV-style)
 //  Once cache is ready, all playback runs from
-//  the ImageBitmap array — no video decode needed.
-// ═══════════════════════════════════════════
+//  the ImageBitmap array - no video decode needed.
+// ===========================================
 
 let cachedPlaybackState = null; // { playing, frameIdx, loop, rafId, startTime, startFrame, onTick }
-let playerTransportAPI = null;  // { stepFrame(delta), togglePlayPause() } — set by initTransportControls
+let playerTransportAPI = null;  // { stepFrame(delta), togglePlayPause() } - set by initTransportControls
 
 function destroyCachedPlayback() {
     if (cachedPlaybackState?.rafId) cancelAnimationFrame(cachedPlaybackState.rafId);
@@ -1216,7 +1216,7 @@ function cachedPlay() {
             st.frameIdx = newFrame;
             if (st.onTick) st.onTick(st.frameIdx, true);
         }
-        // Always schedule next frame — even when frame index hasn't changed.
+        // Always schedule next frame - even when frame index hasn't changed.
         // At 24fps on a 60Hz monitor, the same frame must persist for 2-3 refreshes.
         st.rafId = requestAnimationFrame(tick);
     }
@@ -1279,15 +1279,15 @@ function initTransportControls(container, fps) {
     scrubCanvas.className = 'pt-scrub-canvas';
     scrubCanvas.style.display = 'none';
     video.parentElement.insertBefore(scrubCanvas, video);
-    // desynchronized: bypass vsync compositor — canvas paints independently, reducing latency
-    // alpha: false — canvas is opaque, skip alpha-blending during composite
+    // desynchronized: bypass vsync compositor - canvas paints independently, reducing latency
+    // alpha: false - canvas is opaque, skip alpha-blending during composite
     const scrubCtx = scrubCanvas.getContext('2d', { desynchronized: true, alpha: false });
 
     let isScrubbing = false;
     const frameDuration = 1 / fps;
     let useCache = false;  // Flips to true when cache is ready
 
-    // Format seconds → MM:SS or HH:MM:SS
+    // Format seconds -> MM:SS or HH:MM:SS
     function fmtTime(sec) {
         if (!isFinite(sec)) return '00:00';
         const h = Math.floor(sec / 3600);
@@ -1296,7 +1296,7 @@ function initTransportControls(container, fps) {
         return h > 0 ? `${h}:${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}` : `${String(m).padStart(2,'0')}:${String(s).padStart(2,'0')}`;
     }
 
-    // ─── Draw a cached frame by index and update transport UI ───
+    // --- Draw a cached frame by index and update transport UI ---
     let _lastDrawnRect = null;  // Cache to avoid redundant style updates
     let _uiThrottle = 0;        // Throttle DOM updates during playback
     function drawCachedFrame(idx) {
@@ -1305,7 +1305,7 @@ function initTransportControls(container, fps) {
         const bmp = frameCache.frames[idx];
         if (!bmp) return;
 
-        // Size canvas — use cached rect, only recompute if missing
+        // Size canvas - use cached rect, only recompute if missing
         if (!_lastDrawnRect) {
             const container = video.parentElement || document.getElementById('playerContent');
             _lastDrawnRect = scrubCanvas._cachedRect || container.getBoundingClientRect();
@@ -1322,10 +1322,10 @@ function initTransportControls(container, fps) {
             scrubCanvas._styleH = _lastDrawnRect.height;
         }
 
-        // HOT PATH — blit the bitmap (this is the only thing that MUST happen every frame)
+        // HOT PATH - blit the bitmap (this is the only thing that MUST happen every frame)
         scrubCtx.drawImage(bmp, 0, 0);
 
-        // Transport UI updates — throttle during playback to reduce DOM layout churn.
+        // Transport UI updates - throttle during playback to reduce DOM layout churn.
         // During playback: update every 3rd frame (~8x/sec at 24fps, still visually smooth).
         // When paused/stepping: always update immediately.
         const isPlaying = cachedPlaybackState?.playing;
@@ -1342,7 +1342,7 @@ function initTransportControls(container, fps) {
         frameEl.textContent = `F ${idx} / ${totalFrames}`;
     }
 
-    // ─── Update UI from video state (used before cache is ready) ───
+    // --- Update UI from video state (used before cache is ready) ---
     function updateTransport() {
         if (useCache) return; // Cache handles its own UI
         if (!video.duration || !isFinite(video.duration)) return;
@@ -1355,21 +1355,21 @@ function initTransportControls(container, fps) {
         const currentFrame = Math.floor(video.currentTime * fps);
         const totalFrames = Math.floor(video.duration * fps);
         frameEl.textContent = `F ${currentFrame} / ${totalFrames}`;
-        playBtn.textContent = video.paused ? '▶' : '⏸';
+        playBtn.textContent = video.paused ? 'Play' : '||';
     }
 
     video.addEventListener('timeupdate', updateTransport);
     video.addEventListener('loadedmetadata', updateTransport);
-    video.addEventListener('play', () => { if (!useCache) { playBtn.textContent = '⏸'; } });
-    video.addEventListener('pause', () => { if (!useCache) { playBtn.textContent = '▶'; } });
+    video.addEventListener('play', () => { if (!useCache) { playBtn.textContent = '||'; } });
+    video.addEventListener('pause', () => { if (!useCache) { playBtn.textContent = 'Play'; } });
 
-    // ─── Switch to cached playback mode ───
+    // --- Switch to cached playback mode ---
     function activateCache() {
         useCache = true;
-        // DON'T pause video — keep it playing (hidden) for AUDIO output.
+        // DON'T pause video - keep it playing (hidden) for AUDIO output.
         // Canvas handles visuals; video provides audio.
 
-        // Capture display rect — prefer video, fallback to container (pre-cache hit case)
+        // Capture display rect - prefer video, fallback to container (pre-cache hit case)
         let rect = video.getBoundingClientRect();
         if (!rect.width || !rect.height) {
             const cont = video.parentElement || document.getElementById('playerContent');
@@ -1404,7 +1404,7 @@ function initTransportControls(container, fps) {
                     }
                 }
                 // Only update play button on actual state transitions (not every frame)
-                if (!playing) playBtn.textContent = '▶';
+                if (!playing) playBtn.textContent = 'Play';
             }
         };
         // Show first frame
@@ -1412,29 +1412,29 @@ function initTransportControls(container, fps) {
         // If video was playing before cache activated, resume cached + video playback
         if (wasPlaying) {
             cachedPlay();
-            playBtn.textContent = '⏸';
+            playBtn.textContent = '||';
         } else {
             video.pause();
-            playBtn.textContent = '▶';
+            playBtn.textContent = 'Play';
         }
     }
 
-    // ─── Unified toggle play/pause (works for both video and cache) ───
+    // --- Unified toggle play/pause (works for both video and cache) ---
     function togglePlayPause() {
         if (useCache) {
             if (cachedPlaybackState?.playing) {
                 cachedPause();
-                playBtn.textContent = '▶';
+                playBtn.textContent = 'Play';
             } else {
                 cachedPlay();
-                playBtn.textContent = '⏸';
+                playBtn.textContent = '||';
             }
         } else {
             video.paused ? video.play() : video.pause();
         }
     }
 
-    // ─── Unified frame step ───
+    // --- Unified frame step ---
     function stepFrame(delta) {
         if (useCache && cachedPlaybackState) {
             cachedPause();
@@ -1460,7 +1460,7 @@ function initTransportControls(container, fps) {
             drawCachedFrame(newIdx);
             // Sync video position for audio (paused, so it just sets the seek point)
             if (frameCache?.fps) video.currentTime = newIdx / frameCache.fps;
-            playBtn.textContent = '▶';
+            playBtn.textContent = 'Play';
         } else {
             video.pause();
             const newTime = Math.max(0, Math.min(video.duration || 0, video.currentTime + delta * frameDuration));
@@ -1471,7 +1471,7 @@ function initTransportControls(container, fps) {
     // Expose transport API for keyboard handler
     playerTransportAPI = { stepFrame, togglePlayPause };
 
-    // ─── Scrub handling ───
+    // --- Scrub handling ---
     scrub.addEventListener('input', () => {
         isScrubbing = true;
         if (useCache && frameCache?.ready) {
@@ -1549,7 +1549,7 @@ function initTransportControls(container, fps) {
         const currentAssetId = state.playerAssets?.[state.playerIndex]?.id;
         const totalFrames = Math.ceil(video.duration * fps);
 
-        // ─── Pool HIT: instant activation (pre-cached by adjacent clip pre-fetch) ───
+        // --- Pool HIT: instant activation (pre-cached by adjacent clip pre-fetch) ---
         if (currentAssetId && frameCachePool.has(currentAssetId)) {
             frameCache = frameCachePool.get(currentAssetId);
             if (cacheBar) cacheBar.style.display = 'none';
@@ -1558,7 +1558,7 @@ function initTransportControls(container, fps) {
             return;
         }
 
-        // ─── Pool MISS: build cache for this clip ───
+        // --- Pool MISS: build cache for this clip ---
         if (totalFrames > 1800) {
             if (cacheBar) { cacheBar.title = 'Clip too long for frame cache (>60s)'; cacheFill.style.width = '0%'; }
             return;
@@ -1590,9 +1590,9 @@ function initTransportControls(container, fps) {
     }, { once: true });
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  GENERATION METADATA PANEL (Tab key toggle)
-// ═══════════════════════════════════════════
+// ===========================================
 
 let metaPanelVisible = false;
 
@@ -1630,7 +1630,7 @@ function renderMetaPanel() {
     if (!gen || Object.keys(gen).length === 0) {
         container.innerHTML = `
             <div class="meta-empty">
-                <div style="font-size:1.6rem;margin-bottom:8px;">🤖</div>
+                <div style="font-size:1.6rem;margin-bottom:8px;"></div>
                 No generation metadata for this asset.
                 <div style="margin-top:8px;font-size:0.72rem;color:#666;">
                     Generation info is automatically captured when saving from ComfyUI via the SaveToMediaVault node.
@@ -1644,7 +1644,7 @@ function renderMetaPanel() {
 
     // Model
     if (gen.model) {
-        html += metaRow('🧠', 'Model', gen.model);
+        html += metaRow('', 'Model', gen.model);
     }
 
     // Sampler + Scheduler
@@ -1652,7 +1652,7 @@ function renderMetaPanel() {
         const parts = [];
         if (gen.sampler) parts.push(gen.sampler);
         if (gen.scheduler) parts.push(gen.scheduler);
-        html += metaRow('🎛️', 'Sampler', parts.join(' / '));
+        html += metaRow('', 'Sampler', parts.join(' / '));
     }
 
     // Steps + CFG
@@ -1660,50 +1660,50 @@ function renderMetaPanel() {
         const parts = [];
         if (gen.steps != null) parts.push(`${gen.steps} steps`);
         if (gen.cfg != null) parts.push(`CFG ${gen.cfg}`);
-        html += metaRow('⚙️', 'Settings', parts.join(', '));
+        html += metaRow('Settings', 'Settings', parts.join(', '));
     }
 
     // Denoise
     if (gen.denoise != null) {
-        html += metaRow('🔽', 'Denoise', gen.denoise);
+        html += metaRow('', 'Denoise', gen.denoise);
     }
 
     // Seed
     if (gen.seed != null) {
-        html += metaRow('🎲', 'Seed', gen.seed);
+        html += metaRow('', 'Seed', gen.seed);
     }
 
     // VAE
     if (gen.vae) {
-        html += metaRow('📦', 'VAE', gen.vae);
+        html += metaRow('', 'VAE', gen.vae);
     }
 
     // LoRAs
     if (gen.loras && gen.loras.length) {
         const loraHtml = gen.loras.map(l => `<div class="meta-lora">${esc(l.name)} <span class="meta-dim">@ ${l.strength}</span></div>`).join('');
-        html += `<div class="meta-section"><div class="meta-label">🔗 LoRAs</div><div class="meta-value">${loraHtml}</div></div>`;
+        html += `<div class="meta-section"><div class="meta-label"> LoRAs</div><div class="meta-value">${loraHtml}</div></div>`;
     }
 
     // Upscale model
     if (gen.upscale_model) {
-        html += metaRow('🔍', 'Upscaler', gen.upscale_model);
+        html += metaRow('', 'Upscaler', gen.upscale_model);
     }
 
     // Prompt
     if (gen.prompt) {
         const promptText = Array.isArray(gen.prompt) ? gen.prompt.join('\\n---\\n') : gen.prompt;
         html += `<div class="meta-section meta-section-prompt">
-            <div class="meta-label">📝 Prompt</div>
+            <div class="meta-label"> Prompt</div>
             <div class="meta-prompt">${esc(promptText)}</div>
         </div>`;
     }
 
     // File info section
     html += '<div class="meta-divider"></div>';
-    if (asset.width && asset.height) html += metaRow('📐', 'Resolution', `${asset.width}×${asset.height}`);
-    if (asset.codec) html += metaRow('🔧', 'Codec', asset.codec);
-    if (asset.file_size) html += metaRow('📦', 'Size', formatSize(asset.file_size));
-    if (asset.created_at) html += metaRow('📅', 'Created', new Date(asset.created_at).toLocaleString());
+    if (asset.width && asset.height) html += metaRow('', 'Resolution', `${asset.width}x${asset.height}`);
+    if (asset.codec) html += metaRow('', 'Codec', asset.codec);
+    if (asset.file_size) html += metaRow('', 'Size', formatSize(asset.file_size));
+    if (asset.created_at) html += metaRow('', 'Created', new Date(asset.created_at).toLocaleString());
 
     container.innerHTML = html;
 }
@@ -1712,9 +1712,9 @@ function metaRow(icon, label, value) {
     return `<div class="meta-section"><div class="meta-label">${icon} ${label}</div><div class="meta-value">${esc(String(value))}</div></div>`;
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  POP-OUT PLAYER (separate window for second monitor)
-// ═══════════════════════════════════════════
+// ===========================================
 
 function popoutPlayer() {
     // If pop-out already open, focus it
@@ -1727,7 +1727,7 @@ function popoutPlayer() {
         return;
     }
 
-    // Open new window — sized for a secondary monitor
+    // Open new window - sized for a secondary monitor
     popoutWindow = window.open(
         '/popout-player.html',
         'dmv-player',
@@ -1735,7 +1735,7 @@ function popoutPlayer() {
     );
 
     if (!popoutWindow) {
-        showToast('Pop-up blocked — allow pop-ups for this site', 4000);
+        showToast('Pop-up blocked - allow pop-ups for this site', 4000);
         return;
     }
 
@@ -1751,7 +1751,7 @@ function handlePopoutMessage(e) {
     const msg = e.data;
 
     if (msg.type === 'dmv-popout-ready') {
-        // Pop-out window is ready — send it the assets
+        // Pop-out window is ready - send it the assets
         sendToPopout('dmv-popout-init', {
             assets: state.playerAssets,
             index: state.playerIndex
@@ -1759,7 +1759,7 @@ function handlePopoutMessage(e) {
     }
 
     if (msg.type === 'dmv-popout-navigate') {
-        // Pop-out navigated — keep main window state in sync
+        // Pop-out navigated - keep main window state in sync
         state.playerIndex = msg.index;
     }
 
@@ -1775,9 +1775,9 @@ function sendToPopout(type, data) {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  PRESENTATION MODE (fullscreen in main player)
-// ═══════════════════════════════════════════
+// ===========================================
 
 function togglePresentationMode() {
     const modal = document.getElementById('playerModal');
@@ -1790,7 +1790,7 @@ function togglePresentationMode() {
         modal.classList.add('presentation-mode');
         modal.requestFullscreen?.().catch(() => {});
         ensurePresentationHud();
-        showToast('Presentation Mode — F to exit, H to toggle HUD, ←→ to navigate', 4000);
+        showToast('Presentation Mode - F to exit, H to toggle HUD, <--> to navigate', 4000);
         resetPresentationHudTimer();
     } else {
         modal.classList.remove('presentation-mode');
@@ -1810,7 +1810,7 @@ function ensurePresentationHud() {
     const asset = state.playerAssets[state.playerIndex];
     if (!asset) return;
 
-    // Top HUD — shot name + index
+    // Top HUD - shot name + index
     const hudTop = document.createElement('div');
     hudTop.className = 'pres-hud pres-hud-top';
     hudTop.id = 'presHudTop';
@@ -1820,13 +1820,13 @@ function ensurePresentationHud() {
     `;
     content.appendChild(hudTop);
 
-    // Bottom HUD — frame counter + resolution
+    // Bottom HUD - frame counter + resolution
     const hudBot = document.createElement('div');
     hudBot.className = 'pres-hud pres-hud-bottom';
     hudBot.id = 'presHudBottom';
     hudBot.innerHTML = `
         <div class="pres-hud-frame" id="presHudFrame"></div>
-        <div class="pres-hud-res" id="presHudRes">${prefs.resolution && asset.width ? `${asset.width}×${asset.height}` : ''}</div>
+        <div class="pres-hud-res" id="presHudRes">${prefs.resolution && asset.width ? `${asset.width}x${asset.height}` : ''}</div>
     `;
     content.appendChild(hudBot);
 
@@ -1855,7 +1855,7 @@ function updatePresentationHud() {
 
     if (shotEl) shotEl.textContent = prefs.shotName !== false ? (asset.vault_name || '') : '';
     if (idxEl) idxEl.textContent = prefs.index !== false ? `${state.playerIndex + 1} / ${state.playerAssets.length}` : '';
-    if (resEl) resEl.textContent = prefs.resolution && asset.width ? `${asset.width}×${asset.height}` : '';
+    if (resEl) resEl.textContent = prefs.resolution && asset.width ? `${asset.width}x${asset.height}` : '';
 }
 
 function startPresentationFrameCounter(video, asset) {
@@ -1901,17 +1901,17 @@ document.addEventListener('mousemove', () => {
     if (presentationMode) resetPresentationHudTimer();
 });
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  PLAYER CONTEXT MENU (Ctrl + Right-click)
 //  Shows sibling assets by role for quick swap / RV push
-// ═══════════════════════════════════════════
+// ===========================================
 
 function dismissPlayerCtxMenu() {
     const old = document.getElementById('playerCtxMenu');
     if (old) old.remove();
 }
 
-// Ctrl+Right-click in the player → version/role context menu
+// Ctrl+Right-click in the player -> version/role context menu
 document.addEventListener('contextmenu', async (e) => {
     const modal = document.getElementById('playerModal');
     const content = document.getElementById('playerContent');
@@ -1919,7 +1919,7 @@ document.addEventListener('contextmenu', async (e) => {
     // Only fire inside the player modal + only when Ctrl is held
     if (!modal || modal.style.display === 'none') return;
     if (!content || !content.contains(e.target)) return;
-    if (!e.ctrlKey) return; // Regular right-click → native menu
+    if (!e.ctrlKey) return; // Regular right-click -> native menu
 
     e.preventDefault();
     e.stopImmediatePropagation(); // Prevent dismiss listener on same event from killing the menu
@@ -1934,9 +1934,9 @@ document.addEventListener('contextmenu', async (e) => {
     menu.className = 'context-menu';
     menu.style.left = e.clientX + 'px';
     menu.style.top = e.clientY + 'px';
-    menu.innerHTML = `<div class="ctx-item ctx-muted" style="pointer-events:none;font-size:0.75rem;opacity:0.6;">📎 ${esc(asset.vault_name)}</div>`
+    menu.innerHTML = `<div class="ctx-item ctx-muted" style="pointer-events:none;font-size:0.75rem;opacity:0.6;"> ${esc(asset.vault_name)}</div>`
         + `<div class="ctx-separator"></div>`
-        + `<div class="ctx-item ctx-loading" style="pointer-events:none">Loading versions…</div>`;
+        + `<div class="ctx-item ctx-loading" style="pointer-events:none">Loading versions...</div>`;
     document.body.appendChild(menu);
 
     // Keep menu within viewport
@@ -1952,13 +1952,13 @@ document.addEventListener('contextmenu', async (e) => {
         const data = await resp.json();
 
         if (!data.roles || data.roles.length === 0) {
-            menu.innerHTML = `<div class="ctx-item ctx-muted" style="pointer-events:none;font-size:0.75rem;opacity:0.6;">📎 ${esc(asset.vault_name)}</div>`
+            menu.innerHTML = `<div class="ctx-item ctx-muted" style="pointer-events:none;font-size:0.75rem;opacity:0.6;"> ${esc(asset.vault_name)}</div>`
                 + `<div class="ctx-separator"></div>`
                 + `<div class="ctx-item ctx-muted" style="pointer-events:none">No other versions in this shot</div>`;
             return;
         }
 
-        let html = `<div class="ctx-item ctx-muted" style="pointer-events:none;font-size:0.75rem;opacity:0.6;">📎 ${esc(asset.vault_name)}</div>`
+        let html = `<div class="ctx-item ctx-muted" style="pointer-events:none;font-size:0.75rem;opacity:0.6;"> ${esc(asset.vault_name)}</div>`
             + `<div class="ctx-separator"></div>`;
 
         for (const role of data.roles) {
@@ -1966,18 +1966,18 @@ document.addEventListener('contextmenu', async (e) => {
                 const a = role.assets[0];
                 const ext = (a.file_ext || '').toLowerCase();
                 const vLabel = a.version ? `v${String(a.version).padStart(3, '0')}` : ext;
-                // Single asset — show action sub-menu on hover
+                // Single asset - show action sub-menu on hover
                 html += `<div class="ctx-item ctx-item-parent" style="position:relative">`
-                    + `<span>${role.icon || '📁'} ${esc(role.name)} — ${vLabel} ${ext}</span>`
+                    + `<span>${role.icon || ''} ${esc(role.name)} - ${vLabel} ${ext}</span>`
                     + `<div class="ctx-submenu">`
-                    + `<div class="ctx-sub-item" data-pctx-play="${a.id}">▶️ Play Here</div>`
-                    + `<div class="ctx-sub-item" data-pctx-rv-set="${a.id}">📤 Send to RV</div>`
-                    + `<div class="ctx-sub-item" data-pctx-rv-merge="${a.id}">➕ Add to RV</div>`
+                    + `<div class="ctx-sub-item" data-pctx-play="${a.id}">Play Play Here</div>`
+                    + `<div class="ctx-sub-item" data-pctx-rv-set="${a.id}"> Send to RV</div>`
+                    + `<div class="ctx-sub-item" data-pctx-rv-merge="${a.id}">+ Add to RV</div>`
                     + `</div></div>`;
             } else {
-                // Multiple versions — nested: role → version → actions
+                // Multiple versions - nested: role -> version -> actions
                 html += `<div class="ctx-item ctx-item-parent" style="position:relative">`
-                    + `<span>${role.icon || '📁'} ${esc(role.name)} (${role.assets.length})</span>`
+                    + `<span>${role.icon || ''} ${esc(role.name)} (${role.assets.length})</span>`
                     + `<div class="ctx-submenu">`;
                 for (const a of role.assets) {
                     const ext = (a.file_ext || '').toLowerCase();
@@ -1985,9 +1985,9 @@ document.addEventListener('contextmenu', async (e) => {
                     html += `<div class="ctx-sub-item ctx-item-parent" style="position:relative">`
                         + `<span>${vLabel} ${ext}</span>`
                         + `<div class="ctx-submenu">`
-                        + `<div class="ctx-sub-item" data-pctx-play="${a.id}">▶️ Play Here</div>`
-                        + `<div class="ctx-sub-item" data-pctx-rv-set="${a.id}">📤 Send to RV</div>`
-                        + `<div class="ctx-sub-item" data-pctx-rv-merge="${a.id}">➕ Add to RV</div>`
+                        + `<div class="ctx-sub-item" data-pctx-play="${a.id}">Play Play Here</div>`
+                        + `<div class="ctx-sub-item" data-pctx-rv-set="${a.id}"> Send to RV</div>`
+                        + `<div class="ctx-sub-item" data-pctx-rv-merge="${a.id}">+ Add to RV</div>`
                         + `</div></div>`;
                 }
                 html += `</div></div>`;
@@ -2032,9 +2032,9 @@ document.addEventListener('keydown', (e) => {
     if (e.key === 'Escape') dismissPlayerCtxMenu();
 });
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EXPOSE ON WINDOW (for HTML onclick handlers)
-// ═══════════════════════════════════════════
+// ===========================================
 
 window.openPlayer = openPlayer;
 window.openPlayerDirect = openPlayerDirect;
@@ -2059,7 +2059,7 @@ function openPlayerById(assetId) {
     if (idx >= 0) {
         openPlayer(idx);
     } else {
-        // Asset not in current view — fetch it and play directly
+        // Asset not in current view - fetch it and play directly
         fetch(`/api/assets/${assetId}`)
             .then(r => r.json())
             .then(asset => {
@@ -2080,3 +2080,5 @@ function openPlayerById(assetId) {
     }
 }
 window.openPlayerById = openPlayerById;
+
+

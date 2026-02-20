@@ -5,19 +5,19 @@
  * See LICENSE file for details.
  */
 /**
- * CAM — Tree Navigation Module
- * Left-side hierarchical tree: projects → sequences → shots → roles.
+ * CAM - Tree Navigation Module
+ * Left-side hierarchical tree: projects -> sequences -> shots -> roles.
  */
 
 import { state } from './state.js';
 import { api } from './api.js';
-import { esc, ensureReadableColor } from './utils.js';
+import { esc, ensureReadableColor, icon } from './utils.js';
 import { isShowArchived } from './projectView.js';
 import { clearCrateState } from './crate.js';
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  MODULE STATE
-// ═══════════════════════════════════════════
+// ===========================================
 
 let treeData = [];
 let treeExpanded = {};  // { 'p_1': true, 'seq_3': true }
@@ -25,9 +25,9 @@ let treeExpanded = {};  // { 'p_1': true, 'seq_3': true }
 /** Expand a tree node programmatically (used by assetGrid.openProject) */
 export function expandNode(key) { treeExpanded[key] = true; }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  LOAD & RENDER TREE
-// ═══════════════════════════════════════════
+// ===========================================
 
 export async function loadTree() {
     try {
@@ -41,6 +41,8 @@ export async function loadTree() {
 }
 
 function refreshTree() { loadTree(); }
+
+const CHEVRON = `<svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
 
 function renderTree() {
     const container = document.getElementById('treeContainer');
@@ -57,12 +59,12 @@ function renderTree() {
         const isOpen = treeExpanded[pKey];
         const isActive = state.currentProject?.id === project.id && !state.currentSequence && !state.currentShot;
         const hasChildren = project.sequences.length > 0;
-        const icon = project.type === 'shot_based' ? '🎬' : '📁';
+        const treeIcon = project.type === 'shot_based' ? icon('project') : icon('folder');
 
         html += `<div class="tree-node ${isActive ? 'tree-active' : ''}" onclick="treeSelectProject(${project.id})"
             oncontextmenu="treeSelectProject(${project.id});showProjectContextMenu(event)">
-            <span class="tree-toggle" onclick="event.stopPropagation();treeToggle('${pKey}')">${hasChildren ? (isOpen ? '▼' : '▶') : '  '}</span>
-            <span class="tree-icon">${icon}</span>
+            <span class="tree-toggle ${isOpen ? 'open' : ''}" onclick="event.stopPropagation();treeToggle('${pKey}')">${hasChildren ? CHEVRON : ''}</span>
+            <span class="tree-icon">${treeIcon}</span>
             <span class="tree-label">${esc(project.name)}</span>
             <span class="tree-count">${project.asset_count}</span>
         </div>`;
@@ -81,8 +83,8 @@ function renderTree() {
                     oncontextmenu="showSeqContextMenu(event, ${seq.id}, '${esc(seq.name).replace(/'/g, "\\'")}')"
                     ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                     ondrop="onSeqDrop(event, ${seq.id}, ${project.id})">
-                    <span class="tree-toggle" onclick="event.stopPropagation();treeToggle('${sKey}')">${sExpandable ? (sOpen ? '▼' : '▶') : '  '}</span>
-                    <span class="tree-icon">📋</span>
+                    <span class="tree-toggle ${sOpen ? 'open' : ''}" onclick="event.stopPropagation();treeToggle('${sKey}')">${sExpandable ? CHEVRON : ''}</span>
+                    <span class="tree-icon">${icon('sequence')}</span>
                     <span class="tree-label">${esc(seq.name)}</span>
                     <span class="tree-count">${seq.asset_count}</span>
                 </div>`;
@@ -93,8 +95,8 @@ function renderTree() {
                         const rActive = state.currentRole?.id === role.role_id && state.currentSequence?.id === seq.id && !state.currentShot;
                         const roleColor = ensureReadableColor(role.role_color);
                         html += `<div class="tree-node tree-indent-2 ${rActive ? 'tree-active' : ''}" onclick="treeSelectSeqRole(${project.id}, ${seq.id}, ${role.role_id})">
-                            <span class="tree-toggle">  </span>
-                            <span class="tree-icon">${role.role_icon || '🎭'}</span>
+                            <span class="tree-toggle"></span>
+                            <span class="tree-icon">${role.role_icon || icon('role')}</span>
                             <span class="tree-label" style="color:${roleColor}">${esc(role.role_name)}</span>
                             <span class="tree-count">${role.asset_count}</span>
                         </div>`;
@@ -111,8 +113,8 @@ function renderTree() {
                             oncontextmenu="showShotContextMenu(event, ${seq.id}, ${shot.id}, '${esc(shot.name).replace(/'/g, "\\'")}')"
                             ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                             ondrop="event.stopPropagation();onShotDrop(event, ${seq.id}, ${shot.id})">
-                            <span class="tree-toggle" onclick="event.stopPropagation();treeToggle('${shKey}')">${shHasRoles ? (shOpen ? '▼' : '▶') : '  '}</span>
-                            <span class="tree-icon">🎬</span>
+                            <span class="tree-toggle ${shOpen ? 'open' : ''}" onclick="event.stopPropagation();treeToggle('${shKey}')">${shHasRoles ? CHEVRON : ''}</span>
+                            <span class="tree-icon">${icon('shot')}</span>
                             <span class="tree-label">${esc(shot.name)}</span>
                             <span class="tree-count">${shot.asset_count}</span>
                         </div>`;
@@ -122,8 +124,8 @@ function renderTree() {
                                 const rActive = state.currentRole?.id === role.role_id && state.currentShot?.id === shot.id;
                                 const roleColor = ensureReadableColor(role.role_color);
                                 html += `<div class="tree-node tree-indent-3 ${rActive ? 'tree-active' : ''}" onclick="treeSelectRole(${project.id}, ${seq.id}, ${shot.id}, ${role.role_id})">
-                                    <span class="tree-toggle">  </span>
-                                    <span class="tree-icon">${role.role_icon || '🎭'}</span>
+                                    <span class="tree-toggle"></span>
+                                    <span class="tree-icon">${role.role_icon || icon('role')}</span>
                                     <span class="tree-label" style="color:${roleColor}">${esc(role.role_name)}</span>
                                     <span class="tree-count">${role.asset_count}</span>
                                 </div>`;
@@ -138,9 +140,9 @@ function renderTree() {
     container.innerHTML = html;
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  TREE INTERACTION
-// ═══════════════════════════════════════════
+// ===========================================
 
 function treeToggle(key) {
     treeExpanded[key] = !treeExpanded[key];
@@ -280,9 +282,9 @@ async function treeSelectSeqRole(projectId, seqId, roleId) {
     renderTree();
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EXPOSE ON WINDOW
-// ═══════════════════════════════════════════
+// ===========================================
 
 window.loadTree = loadTree;
 window.refreshTree = refreshTree;
@@ -292,3 +294,4 @@ window.treeSelectShot = treeSelectShot;
 window.treeSelectRole = treeSelectRole;
 window.treeSelectSeqRole = treeSelectSeqRole;
 window.treeToggle = treeToggle;
+

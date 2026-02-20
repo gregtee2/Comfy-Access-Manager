@@ -5,7 +5,7 @@
  * See LICENSE file for details.
  */
 /**
- * DMV — API Helper
+ * DMV - API Helper
  * Centralized fetch wrapper for all backend calls.
  */
 
@@ -32,3 +32,4 @@ export async function api(url, opts = {}) {
     }
     return res.json();
 }
+

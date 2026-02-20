@@ -1,37 +1,37 @@
 /**
  * Comfy Asset Manager - Copyright (c) 2026 Greg Tee. All Rights Reserved.
- * Shot Builder — Drag-and-drop naming convention builder
+ * Shot Builder - Drag-and-drop naming convention builder
  */
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  TILE DEFINITIONS
-// ═══════════════════════════════════════════
+// ===========================================
 
 const TILE_DEFS = [
-    { type: 'project',   label: 'Project',   icon: '📁', example: 'myproj',   color: '#5b8c6b',  hint: 'Your project code (set when creating the project)' },
-    { type: 'episode',   label: 'Episode',   icon: '🎬', example: 'E01',      color: '#6b7b8c',  hint: 'Episode code (you define these in your sequences)' },
-    { type: 'sequence',  label: 'Sequence',  icon: '📋', example: 'SQ010',    color: '#8c7b5b',  hint: 'Sequence code (SQ010, SQ020, etc.)' },
-    { type: 'shot',      label: 'Shot',      icon: '🎯', example: 'SH010',    color: '#8c5b5b',  hint: 'Shot code (SH010, SH020, etc.)' },
-    { type: 'role',      label: 'Role',      icon: '🎭', example: 'comp',     color: '#7b5b8c',  hint: 'Pipeline step (comp, light, anim, fx, etc.)' },
-    { type: 'version',   label: 'Version',   icon: '🔢', example: 'v001',     color: '#5b7b8c',  hint: 'Auto-incremented version number' },
-    { type: 'take',      label: 'Take',      icon: '🎬', example: 'T01',      color: '#8c8c5b',  hint: 'Take number' },
-    { type: 'date',      label: 'Date',      icon: '📅', example: '20260217', color: '#5b8c8c',  hint: 'Import date (auto-filled)' },
-    { type: 'counter',   label: 'Counter',   icon: '#️⃣', example: '0001',     color: '#7b8c5b',  hint: 'Auto counter' },
-    { type: 'wildcard',  label: 'Wildcard',  icon: '✏️', example: '???',      color: '#b89050',  hint: 'Custom value (you name it, you fill it)' },
+    { type: 'project',   label: 'Project',   icon: '[P]', example: 'myproj',   color: '#5b8c6b',  hint: 'Your project code (set when creating the project)' },
+    { type: 'episode',   label: 'Episode',   icon: '[S]', example: 'E01',      color: '#6b7b8c',  hint: 'Episode code (you define these in your sequences)' },
+    { type: 'sequence',  label: 'Sequence',  icon: '', example: 'SQ010',    color: '#8c7b5b',  hint: 'Sequence code (SQ010, SQ020, etc.)' },
+    { type: 'shot',      label: 'Shot',      icon: '', example: 'SH010',    color: '#8c5b5b',  hint: 'Shot code (SH010, SH020, etc.)' },
+    { type: 'role',      label: 'Role',      icon: '[R]', example: 'comp',     color: '#7b5b8c',  hint: 'Pipeline step (comp, light, anim, fx, etc.)' },
+    { type: 'version',   label: 'Version',   icon: '', example: 'v001',     color: '#5b7b8c',  hint: 'Auto-incremented version number' },
+    { type: 'take',      label: 'Take',      icon: '[S]', example: 'T01',      color: '#8c8c5b',  hint: 'Take number' },
+    { type: 'date',      label: 'Date',      icon: '[D]', example: '20260217', color: '#5b8c8c',  hint: 'Import date (auto-filled)' },
+    { type: 'counter',   label: 'Counter',   icon: '[#]', example: '0001',     color: '#7b8c5b',  hint: 'Auto counter' },
+    { type: 'wildcard',  label: 'Wildcard',  icon: '[W]', example: '???',      color: '#b89050',  hint: 'Custom value (you name it, you fill it)' },
 ];
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  STATE
-// ═══════════════════════════════════════════
+// ===========================================
 
 let assemblyTokens = [];  // Array of { type, separator, label?, value?, askAtImport? }
 let dragSource = null;     // { from: 'inventory'|'assembly', index?, type, def }
 let dropTargetIndex = -1;
-let projectContext = null; // { code, name } — set when editing an existing project
+let projectContext = null; // { code, name } - set when editing an existing project
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  RENDER
-// ═══════════════════════════════════════════
+// ===========================================
 
 /**
  * Render the entire Shot Builder into a container element.
@@ -50,7 +50,7 @@ export function renderShotBuilder(container, existingConvention = null, context 
     container.innerHTML = `
         <div class="sb-wrapper">
             <div class="sb-header">
-                <span class="sb-title">🏗️ Naming Convention</span>
+                <span class="sb-title"> Naming Convention</span>
                 <span class="sb-subtitle">Click or drag tokens to build pattern</span>
             </div>
 
@@ -60,7 +60,7 @@ export function renderShotBuilder(container, existingConvention = null, context 
 
             <div class="sb-assembly-label">
                 <span>Filename pattern</span>
-                ${assemblyTokens.length > 0 ? '<button class="sb-clear-btn" id="sbClearAll">✕ Clear</button>' : ''}
+                ${assemblyTokens.length > 0 ? '<button class="sb-clear-btn" id="sbClearAll">x Clear</button>' : ''}
             </div>
             <div class="sb-assembly" id="sbAssembly">
                 ${assemblyTokens.length === 0
@@ -93,7 +93,7 @@ export function renderShotBuilder(container, existingConvention = null, context 
 function renderInventoryTile(def) {
     return `<div class="sb-tile sb-tile-inv" draggable="true" data-type="${def.type}"
                  style="--tile-color: ${def.color};"
-                 title="${def.hint || def.label} — click to add, or drag to position">
+                 title="${def.hint || def.label} - click to add, or drag to position">
         <span class="sb-tile-icon">${def.icon}</span>
         <span class="sb-tile-label">${def.label}</span>
     </div>`;
@@ -109,7 +109,7 @@ function renderAssemblyTokens() {
         const sepHtml = i > 0
             ? `<input class="sb-sep" type="text" maxlength="4"
                       data-sep-index="${i}" value="${escHtml(sepValue)}"
-                      placeholder="·" title="Separator — click to edit (e.g. _ - . or empty)">`
+                      placeholder="." title="Separator - click to edit (e.g. _ - . or empty)">`
             : '';
 
         const label = tok.type === 'wildcard' ? (tok.label || 'Wildcard') : def.label;
@@ -118,7 +118,7 @@ function renderAssemblyTokens() {
                      style="--tile-color: ${def.color};">
             <span class="sb-tile-icon">${def.icon}</span>
             <span class="sb-tile-label">${label}</span>
-            <button class="sb-tile-remove" data-remove="${i}" title="Remove">✕</button>
+            <button class="sb-tile-remove" data-remove="${i}" title="Remove">x</button>
         </div>`;
     }).join('');
 
@@ -126,7 +126,7 @@ function renderAssemblyTokens() {
     const wcRows = assemblyTokens.map((tok, i) => {
         if (tok.type !== 'wildcard') return '';
         return `<div class="sb-wc-row" data-wc-for="${i}">
-            <span class="sb-wc-tag" style="background: #b89050;">✏️ ${escHtml(tok.label || 'Wildcard')}</span>
+            <span class="sb-wc-tag" style="background: #b89050;">[W] ${escHtml(tok.label || 'Wildcard')}</span>
             <input class="sb-wc-label" type="text" value="${escHtml(tok.label || 'Custom')}"
                    placeholder="Label" data-wc-label="${i}" title="Name for this wildcard">
             <input class="sb-wc-value" type="text" value="${escHtml(tok.value || '')}"
@@ -156,7 +156,7 @@ function getExampleForToken(tok) {
 }
 
 function generatePreview() {
-    if (assemblyTokens.length === 0) return '<span class="sb-preview-empty">— no tokens yet —</span>';
+    if (assemblyTokens.length === 0) return '<span class="sb-preview-empty">- no tokens yet -</span>';
 
     // Line 1: the filename with color-coded tokens
     const filenameParts = assemblyTokens.map((tok, i) => {
@@ -174,16 +174,16 @@ function generatePreview() {
         const val = getExampleForToken(tok);
         return `<span style="color: ${def?.color || '#aaa'}">${label}:<b>${escHtml(val)}</b></span>`;
     });
-    const legendLine = legendParts.join(' · ');
+    const legendLine = legendParts.join(' . ');
 
     // Note: role + version + extension are appended by the Saver node at save time
     return `<div>${filenameLine}<span class="sb-preview-ext">_role_v001.ext</span></div>`
-        + `<div class="sb-prev-legend">↳ ${legendLine} <span style="color:#666">+ role, version, format added at save time</span></div>`;
+        + `<div class="sb-prev-legend">-> ${legendLine} <span style="color:#666">+ role, version, format added at save time</span></div>`;
 }
 
-// ═══════════════════════════════════════════
-//  DRAG & DROP — INVENTORY
-// ═══════════════════════════════════════════
+// ===========================================
+//  DRAG & DROP - INVENTORY
+// ===========================================
 
 function bindInventoryDragEvents(container) {
     container.querySelectorAll('.sb-tile-inv').forEach(tile => {
@@ -215,9 +215,9 @@ function bindInventoryDragEvents(container) {
     });
 }
 
-// ═══════════════════════════════════════════
-//  DRAG & DROP — ASSEMBLY ZONE
-// ═══════════════════════════════════════════
+// ===========================================
+//  DRAG & DROP - ASSEMBLY ZONE
+// ===========================================
 
 function bindAssemblyDropZone(container) {
     const zone = container.querySelector('#sbAssembly');
@@ -326,9 +326,9 @@ function clearDropIndicators(container) {
     if (zone) zone.classList.remove('sb-drop-here');
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  CONTROL EVENTS (separators, remove, wildcard)
-// ═══════════════════════════════════════════
+// ===========================================
 
 function bindControlEvents(container) {
     // Separator inputs
@@ -392,22 +392,22 @@ function updatePreview(container) {
     if (previewEl) previewEl.innerHTML = generatePreview();
 }
 
-// Live project code updater — called from browser.js when user types in code input
+// Live project code updater - called from browser.js when user types in code input
 let _activeContainer = null;
 window._sbSetProjectCode = function(code) {
     projectContext = code ? { code, name: code } : null;
     if (_activeContainer) updatePreview(_activeContainer);
 };
 
-// Live episode updater — called from browser.js when user types in episode input
+// Live episode updater - called from browser.js when user types in episode input
 window._sbSetEpisode = function(ep) {
     if (projectContext) projectContext.episode = ep;
     if (_activeContainer) updatePreview(_activeContainer);
 };
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  PUBLIC API
-// ═══════════════════════════════════════════
+// ===========================================
 
 /** Get the current convention as a JSON-serializable array */
 export function getConvention() {
@@ -430,12 +430,14 @@ export function getAskAtImportWildcards() {
         .map(t => ({ label: t.label || 'Custom', defaultValue: t.value || '' }));
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  UTILITY
-// ═══════════════════════════════════════════
+// ===========================================
 
 function escHtml(str) {
     if (!str) return '';
     return str.replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;')
               .replace(/"/g, '&quot;').replace(/'/g, '&#039;');
 }
+
+

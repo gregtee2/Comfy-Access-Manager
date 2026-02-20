@@ -5,7 +5,7 @@
  * See LICENSE file for details.
  */
 /**
- * DMV — Settings Module
+ * DMV - Settings Module
  * Settings tab, vault migration, watch folders, folder picker.
  */
 
@@ -14,9 +14,9 @@ import { api } from './api.js';
 import { esc, escAttr, showToast } from './utils.js';
 import pluginRegistry from './pluginRegistry.js';
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  SETTINGS
-// ═══════════════════════════════════════════
+// ===========================================
 
 export async function loadSettings() {
     try {
@@ -48,8 +48,8 @@ export async function loadSettings() {
                 <div>Projects: <strong>${status.projects}</strong></div>
                 <div>Assets: <strong>${status.assets}</strong></div>
                 <div>Watch Folders: <strong>${status.watchFolders}</strong></div>
-                <div>FFmpeg: ${status.ffmpegAvailable ? '<span style="color:var(--success)">✓ Available</span>' : '<span style="color:var(--danger)">✗ Not found</span>'}</div>
-                <div>Vault: ${status.vaultConfigured ? '<span style="color:var(--success)">✓ Configured</span>' : '<span style="color:var(--warning)">⚠ Not configured</span>'}</div>
+                <div>FFmpeg: ${status.ffmpegAvailable ? '<span style="color:var(--success)">Success: Available</span>' : '<span style="color:var(--danger)">Error: Not found</span>'}</div>
+                <div>Vault: ${status.vaultConfigured ? '<span style="color:var(--success)">Success: Configured</span>' : '<span style="color:var(--warning)">Warning: Not configured</span>'}</div>
             </div>
         `;
 
@@ -59,9 +59,9 @@ export async function loadSettings() {
             const folderName = w.path.split(/[\\/]/).filter(Boolean).pop() || w.path;
             return `
             <div class="watch-item">
-                <span>📥 <strong>${esc(folderName)}</strong> ${w.project_name ? `→ ${esc(w.project_name)}` : '<em style="color:var(--text-muted)">(no project)</em>'}</span>
+                <span> <strong>${esc(folderName)}</strong> ${w.project_name ? `-> ${esc(w.project_name)}` : '<em style="color:var(--text-muted)">(no project)</em>'}</span>
                 <span style="color:var(--text-dim);font-size:0.75rem;">${esc(w.path)}</span>
-                <button onclick="removeWatch(${w.id})" title="Remove">✕</button>
+                <button onclick="removeWatch(${w.id})" title="Remove">x</button>
             </div>`;
         }).join('') || '<div style="color:var(--text-muted);font-size:0.8rem;">No watch folders configured.</div>';
 
@@ -121,13 +121,13 @@ async function saveSettings() {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  VAULT MIGRATION
-// ═══════════════════════════════════════════
+// ===========================================
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  VAULT MIGRATION
-// ═══════════════════════════════════════════
+// ===========================================
 
 let _lastKnownOldRoot = null;
 
@@ -166,7 +166,7 @@ async function migrateVault() {
     if (!confirm(`Move all vault files from:\n${_lastKnownOldRoot}\n\nTo:\n${newRoot}\n\nThis may take a while for large vaults.`)) return;
 
     btn.disabled = true;
-    btn.textContent = '⏳ Migrating...';
+    btn.textContent = 'Wait: Migrating...';
     prog.style.display = 'block';
     fill.style.width = '30%';
     statusEl.textContent = 'Copying files...';
@@ -179,8 +179,8 @@ async function migrateVault() {
 
         fill.style.width = '100%';
         fill.style.background = '#7ab87a';
-        statusEl.textContent = `✅ Done! ${result.filesCopied} files moved, ${result.pathsUpdated} paths updated.`;
-        btn.textContent = '✅ Migration Complete';
+        statusEl.textContent = `Success: Done! ${result.filesCopied} files moved, ${result.pathsUpdated} paths updated.`;
+        btn.textContent = 'Success: Migration Complete';
 
         setTimeout(() => {
             document.getElementById('migrateSection').style.display = 'none';
@@ -189,15 +189,15 @@ async function migrateVault() {
     } catch (err) {
         fill.style.width = '100%';
         fill.style.background = '#b85c5c';
-        statusEl.textContent = `❌ Error: ${err.message}`;
+        statusEl.textContent = `Error: Error: ${err.message}`;
         btn.disabled = false;
-        btn.textContent = '📦 Retry Migration';
+        btn.textContent = 'Retry Migration';
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  SHARED DATABASE
-// ═══════════════════════════════════════════
+// ===========================================
 
 async function loadDbConfig() {
     const statusEl = document.getElementById('sharedDbStatus');
@@ -212,9 +212,9 @@ async function loadDbConfig() {
             const accessible = cfg.shared_accessible;
             statusEl.innerHTML = `
                 <span style="color:${accessible ? 'var(--success)' : 'var(--danger)'};">
-                    ${accessible ? '✓ Shared' : '✗ Unreachable'}
+                    ${accessible ? 'Success: Shared' : 'Error: Unreachable'}
                 </span>
-                — <code style="font-size:0.78rem;">${esc(cfg.active_db_path)}</code>
+                - <code style="font-size:0.78rem;">${esc(cfg.active_db_path)}</code>
                 <span style="color:var(--text-dim);margin-left:6px;">(${esc(cfg.hostname)})</span>
             `;
         } else {
@@ -239,18 +239,18 @@ async function saveSharedDbPath() {
         });
 
         if (!newPath) {
-            statusEl.innerHTML = '<span style="color:var(--success);">✓ Cleared — using local database. Restart the app to apply.</span>';
+            statusEl.innerHTML = '<span style="color:var(--success);">Success: Cleared - using local database. Restart the app to apply.</span>';
         } else {
-            statusEl.innerHTML = `<span style="color:var(--success);">✓ Saved! Restart the app to switch to shared database.</span>`;
+            statusEl.innerHTML = `<span style="color:var(--success);">Success: Saved! Restart the app to switch to shared database.</span>`;
         }
     } catch (err) {
         statusEl.innerHTML = `<span style="color:var(--danger);">Error: ${esc(err.message)}</span>`;
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  WATCH FOLDERS
-// ═══════════════════════════════════════════
+// ===========================================
 
 async function addWatchFolder() {
     const pathInput = document.getElementById('newWatchPath');
@@ -268,7 +268,7 @@ async function addWatchFolder() {
         pathInput.value = '';
         if (projectSel) projectSel.value = '';
         loadSettings();
-        showToast('📥 Watch folder added', 'success');
+        showToast('Watch folder added', 'success');
     } catch (err) {
         alert('Error: ' + err.message);
     }
@@ -283,9 +283,9 @@ async function removeWatch(id) {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  FOLDER PICKER
-// ═══════════════════════════════════════════
+// ===========================================
 let fpTargetInput = null;
 let fpCurrentDir = '';
 
@@ -330,7 +330,7 @@ async function fpNavigate(dir) {
         if (data.parent || dir) {
             const parentPath = data.parent || '';
             html += `<div class="fp-entry fp-entry-up" ondblclick="fpNavigate('${escAttr(parentPath)}')">
-                <span class="fp-icon">⬆️</span>
+                <span class="fp-icon">Up</span>
                 <span class="fp-name">..</span>
             </div>`;
         }
@@ -344,7 +344,7 @@ async function fpNavigate(dir) {
             for (const entry of networkDrives) {
                 const subtitle = entry.server ? `<span class="fp-subtitle" style="font-size:0.72rem;color:var(--text-muted);margin-left:8px;">${esc(entry.server)}</span>` : '';
                 html += `<div class="fp-entry fp-entry-network" onclick="fpSelectEntry('${escAttr(entry.path)}')" ondblclick="fpNavigate('${escAttr(entry.path)}')" style="background:rgba(59,130,246,0.06);">
-                    <span class="fp-icon">${entry.icon || '🌐'}</span>
+                    <span class="fp-icon">${entry.icon || ''}</span>
                     <span class="fp-name">${esc(entry.name)}${subtitle}</span>
                 </div>`;
             }
@@ -355,7 +355,7 @@ async function fpNavigate(dir) {
 
         for (const entry of (networkDrives.length > 0 && !dir ? otherEntries : data.entries.filter(e => e.isDirectory))) {
             html += `<div class="fp-entry" onclick="fpSelectEntry('${escAttr(entry.path)}')" ondblclick="fpNavigate('${escAttr(entry.path)}')">
-                <span class="fp-icon">${entry.icon || '📁'}</span>
+                <span class="fp-icon">${entry.icon || '[Folder]'}</span>
                 <span class="fp-name">${esc(entry.name)}</span>
             </div>`;
         }
@@ -376,9 +376,9 @@ function fpSelectEntry(path) {
     event.currentTarget.classList.add('fp-entry-selected');
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  ROLES MANAGEMENT
-// ═══════════════════════════════════════════
+// ===========================================
 
 export async function loadRoles() {
     try {
@@ -408,7 +408,7 @@ function renderRolesList() {
                     onchange="updateRoleColor(${r.id}, this.value)">
                 <span class="role-name" ondblclick="startRoleRename(${r.id}, this)">${esc(r.name)}</span>
                 <span class="role-code">${esc(r.code)}</span>
-                <button class="role-delete" onclick="deleteRole(${r.id}, '${esc(r.name).replace(/'/g, "\\'")}')" title="Delete role">✕</button>
+                <button class="role-delete" onclick="deleteRole(${r.id}, '${esc(r.name).replace(/'/g, "\\'")}')" title="Delete role">x</button>
             </div>
         `).join('');
     });
@@ -426,7 +426,7 @@ async function addRole() {
     try {
         await api('/api/roles', {
             method: 'POST',
-            body: { name, code, color, icon: '🎭' }
+            body: { name, code, color, icon: '' }
         });
         nameInput.value = '';
         await loadRoles();
@@ -490,9 +490,9 @@ async function deleteRole(id, name) {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  PREFERENCES
-// ═══════════════════════════════════════════
+// ===========================================
 
 /** Load preferences into the Settings UI */
 function loadPrefs() {
@@ -508,7 +508,7 @@ function loadPrefs() {
     if (autoUpdate) autoUpdate.checked = s.auto_check_updates !== 'false';
 }
 
-/** Save a single preference to the server */
+/** Save a single preference to theServer */
 async function savePref(key, value) {
     try {
         await api('/api/settings', {
@@ -523,9 +523,9 @@ async function savePref(key, value) {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  GITHUB TOKEN (private repo auto-updates)
-// ═══════════════════════════════════════════
+// ===========================================
 
 /** Load current GitHub token status (never returns actual token) */
 async function loadGithubTokenStatus() {
@@ -535,16 +535,16 @@ async function loadGithubTokenStatus() {
         const statusEl = document.getElementById('githubTokenStatus');
         if (!statusEl) return;
         if (data.configured) {
-            statusEl.innerHTML = `<span style="color:var(--success);">✓ Token configured</span> <span style="opacity:0.6">(${data.masked})</span>`;
+            statusEl.innerHTML = `<span style="color:var(--success);">Success: Token configured</span> <span style="opacity:0.6">(${data.masked})</span>`;
         } else {
-            statusEl.innerHTML = '<span style="opacity:0.6">No token — update checks require a public repo or a PAT.</span>';
+            statusEl.innerHTML = '<span style="opacity:0.6">No token - update checks require a public repo or a PAT.</span>';
         }
     } catch (err) {
         console.error('[Settings] Failed to load GitHub token status:', err);
     }
 }
 
-/** Save GitHub PAT to server config */
+/** Save GitHub PAT toServer config */
 async function saveGithubToken() {
     const input = document.getElementById('githubPatInput');
     const token = input?.value?.trim();
@@ -560,7 +560,7 @@ async function saveGithubToken() {
         });
         const data = await res.json();
         if (data.success) {
-            showToast('✅ GitHub token saved!', 3000);
+            showToast('Success: GitHub token saved!', 3000);
             input.value = ''; // Clear input after save
             loadGithubTokenStatus();
         } else {
@@ -589,9 +589,9 @@ async function clearGithubToken() {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  UPDATE CHECKER
-// ═══════════════════════════════════════════
+// ===========================================
 
 let _pendingUpdate = null;
 
@@ -603,7 +603,7 @@ async function checkForUpdates(silent = false) {
     const changelogEl = document.getElementById('updateChangelog');
 
     if (btn) btn.disabled = true;
-    if (btn) btn.textContent = '⏳ Checking...';
+    if (btn) btn.textContent = 'Wait: Checking...';
 
     try {
         const result = await api('/api/update/check?force=true');
@@ -615,19 +615,19 @@ async function checkForUpdates(silent = false) {
                     statusEl.style.display = 'block';
                     statusEl.style.background = 'rgba(255, 82, 82, 0.15)';
                     statusEl.style.border = '1px solid rgba(255, 82, 82, 0.3)';
-                    statusEl.innerHTML = `⚠️ Couldn't check for updates: ${esc(result.error)}`;
+                    statusEl.innerHTML = `Warning: Couldn'tCheck for Updates: ${esc(result.error)}`;
                 }
             }
             return;
         }
 
         if (result.hasUpdate) {
-            // ── Settings tab UI (if visible) ──
+            //  Settings tab UI (if visible) 
             if (statusEl) {
                 statusEl.style.display = 'block';
                 statusEl.style.background = 'rgba(0, 255, 136, 0.1)';
                 statusEl.style.border = '1px solid rgba(0, 255, 136, 0.3)';
-                statusEl.innerHTML = `🎉 <strong>Update available!</strong> v${esc(result.currentVersion)} → v${esc(result.remoteVersion)}`;
+                statusEl.innerHTML = `<strong>Update available!</strong> v${esc(result.currentVersion)} -> v${esc(result.remoteVersion)}`;
             }
             if (applyBtn) applyBtn.style.display = 'inline-block';
             if (result.changelog && changelogEl) {
@@ -637,7 +637,7 @@ async function checkForUpdates(silent = false) {
                 changelogEl.style.display = 'none';
             }
 
-            // ── Persistent banner on ANY tab ──
+            //  Persistent banner on ANY tab 
             const dismissed = sessionStorage.getItem('dmv_update_dismissed');
             if (dismissed !== result.remoteVersion) {
                 showUpdateBanner(result);
@@ -648,7 +648,7 @@ async function checkForUpdates(silent = false) {
                     statusEl.style.display = 'block';
                     statusEl.style.background = 'rgba(136, 136, 136, 0.1)';
                     statusEl.style.border = '1px solid rgba(136, 136, 136, 0.2)';
-                    statusEl.innerHTML = `✅ You're on the latest version (v${esc(result.currentVersion)})`;
+                    statusEl.innerHTML = `Success: You're on the latest version (v${esc(result.currentVersion)})`;
                 }
                 if (applyBtn) applyBtn.style.display = 'none';
                 if (changelogEl) changelogEl.style.display = 'none';
@@ -660,38 +660,38 @@ async function checkForUpdates(silent = false) {
                 statusEl.style.display = 'block';
                 statusEl.style.background = 'rgba(255, 82, 82, 0.15)';
                 statusEl.style.border = '1px solid rgba(255, 82, 82, 0.3)';
-                statusEl.innerHTML = `⚠️ Update check failed: ${esc(err.message)}`;
+                statusEl.innerHTML = `Warning: Update check failed: ${esc(err.message)}`;
             }
         }
     } finally {
         if (btn) {
             btn.disabled = false;
-            btn.textContent = '🔄 Check for Updates';
+            btn.textContent = 'RetryCheck for Updates';
         }
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  PERSISTENT UPDATE BANNER (any tab)
-// ═══════════════════════════════════════════
+// ===========================================
 
 function showUpdateBanner(updateInfo) {
     const banner = document.getElementById('updateBanner');
     const versionSpan = document.getElementById('updateBannerVersion');
     if (!banner) return;
-    versionSpan.textContent = `v${updateInfo.currentVersion} → v${updateInfo.remoteVersion}`;
+    versionSpan.textContent = `v${updateInfo.currentVersion} -> v${updateInfo.remoteVersion}`;
     banner.style.display = 'flex';
 }
 
 function dismissUpdateBanner() {
     const banner = document.getElementById('updateBanner');
     if (banner) banner.style.display = 'none';
-    // Don't set sessionStorage here — just hides banner. "Later" in modal sets it.
+    // Don't set sessionStorage here - just hides banner. "Later" in modal sets it.
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  UPDATE MODAL
-// ═══════════════════════════════════════════
+// ===========================================
 
 function showUpdateModal() {
     if (!_pendingUpdate || !_pendingUpdate.hasUpdate) return;
@@ -707,7 +707,7 @@ function showUpdateModal() {
 
     const applyBtn = document.getElementById('btnUpdateModalApply');
     applyBtn.disabled = false;
-    applyBtn.textContent = '⬇️ Update Now';
+    applyBtn.textContent = 'Update Now';
 
     modal.style.display = 'flex';
 }
@@ -731,26 +731,26 @@ async function applyUpdateFromModal() {
     const applyBtn = document.getElementById('btnUpdateModalApply');
 
     applyBtn.disabled = true;
-    applyBtn.textContent = '⏳ Updating...';
+    applyBtn.textContent = 'Wait: Updating...';
     statusEl.style.display = 'block';
     statusEl.style.color = 'var(--warning)';
-    statusEl.textContent = '⬇️ Downloading update...';
+    statusEl.textContent = 'Downloading update...';
 
     try {
         const result = await api('/api/update/apply', { method: 'POST' });
         statusEl.style.color = 'var(--success)';
-        statusEl.textContent = `✅ ${result.message || 'Updated!'} Waiting for restart...`;
+        statusEl.textContent = `Success: ${result.message || 'Updated!'} Waiting for restart...`;
         setTimeout(() => pollForRestartModal(), 3000);
     } catch (err) {
         if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
             statusEl.style.color = 'var(--warning)';
-            statusEl.textContent = '🔄 Server restarting...';
+            statusEl.textContent = 'RetryServer restarting...';
             setTimeout(() => pollForRestartModal(), 3000);
         } else {
             statusEl.style.color = 'var(--danger)';
-            statusEl.textContent = `❌ Update failed: ${err.message}`;
+            statusEl.textContent = `Error: Update failed: ${err.message}`;
             applyBtn.disabled = false;
-            applyBtn.textContent = '⬇️ Update Now';
+            applyBtn.textContent = 'Update Now';
         }
     }
 }
@@ -759,7 +759,7 @@ function pollForRestartModal(attempts = 0) {
     const statusEl = document.getElementById('updateModalStatus');
     if (attempts > 30) {
         statusEl.style.color = 'var(--warning)';
-        statusEl.textContent = '⚠️ Server taking too long. Try refreshing the page manually.';
+        statusEl.textContent = 'Warning:Server taking too long. Try refreshing the page manually.';
         return;
     }
 
@@ -767,60 +767,60 @@ function pollForRestartModal(attempts = 0) {
         .then(r => r.json())
         .then(data => {
             statusEl.style.color = 'var(--success)';
-            statusEl.textContent = `✅ Updated to v${data.version}! Reloading...`;
+            statusEl.textContent = `Success: Updated to v${data.version}! Reloading...`;
             setTimeout(() => window.location.reload(), 1000);
         })
         .catch(() => {
             statusEl.style.color = 'var(--text-dim)';
-            statusEl.textContent = `🔄 Server restarting... (${attempts + 1}s)`;
+            statusEl.textContent = `RetryServer restarting... (${attempts + 1}s)`;
             setTimeout(() => pollForRestartModal(attempts + 1), 2000);
         });
 }
 
-/** Download and apply the update from Settings tab, then poll for server restart */
+/** Download and apply the update from Settings tab, then poll forServer restart */
 async function applyUpdate() {
     const statusEl = document.getElementById('updateStatus');
     const applyBtn = document.getElementById('btnApplyUpdate');
     const checkBtn = document.getElementById('btnCheckUpdate');
 
-    if (!confirm('Apply update now?\n\nThe server will restart briefly. Your data is safe.')) return;
+    if (!confirm('Apply update now?\n\nTheServer will restart briefly. Your data is safe.')) return;
 
     if (applyBtn) applyBtn.disabled = true;
-    if (applyBtn) applyBtn.textContent = '⏳ Updating...';
+    if (applyBtn) applyBtn.textContent = 'Wait: Updating...';
     if (checkBtn) checkBtn.disabled = true;
 
     if (statusEl) {
         statusEl.style.display = 'block';
         statusEl.style.background = 'rgba(255, 170, 0, 0.15)';
         statusEl.style.border = '1px solid rgba(255, 170, 0, 0.3)';
-        statusEl.innerHTML = '⬇️ Downloading update...';
+        statusEl.innerHTML = 'Downloading update...';
     }
 
     try {
         const result = await api('/api/update/apply', { method: 'POST' });
-        if (statusEl) statusEl.innerHTML = `✅ ${esc(result.message || 'Updated!')} Waiting for restart...`;
+        if (statusEl) statusEl.innerHTML = `Success: ${esc(result.message || 'Updated!')} Waiting for restart...`;
         setTimeout(() => pollForRestart(), 3000);
     } catch (err) {
         if (err.message.includes('Failed to fetch') || err.message.includes('NetworkError')) {
-            if (statusEl) statusEl.innerHTML = '🔄 Server restarting...';
+            if (statusEl) statusEl.innerHTML = 'RetryServer restarting...';
             setTimeout(() => pollForRestart(), 3000);
         } else {
             if (statusEl) {
                 statusEl.style.background = 'rgba(255, 82, 82, 0.15)';
                 statusEl.style.border = '1px solid rgba(255, 82, 82, 0.3)';
-                statusEl.innerHTML = `❌ Update failed: ${esc(err.message)}`;
+                statusEl.innerHTML = `Error: Update failed: ${esc(err.message)}`;
             }
-            if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = '⬇️ Update Now'; }
+            if (applyBtn) { applyBtn.disabled = false; applyBtn.textContent = 'Update Now'; }
             if (checkBtn) checkBtn.disabled = false;
         }
     }
 }
 
-/** Poll server until it's back up after restart */
+/** PollServer until it's back up after restart */
 function pollForRestart(attempts = 0) {
     const statusEl = document.getElementById('updateStatus');
     if (attempts > 30) {
-        if (statusEl) statusEl.innerHTML = '⚠️ Server taking too long to restart. Try refreshing the page manually.';
+        if (statusEl) statusEl.innerHTML = 'Warning:Server taking too long to restart. Try refreshing the page manually.';
         return;
     }
 
@@ -830,24 +830,24 @@ function pollForRestart(attempts = 0) {
             if (statusEl) {
                 statusEl.style.background = 'rgba(0, 255, 136, 0.15)';
                 statusEl.style.border = '1px solid rgba(0, 255, 136, 0.3)';
-                statusEl.innerHTML = `✅ Updated to v${data.version}! Reloading...`;
+                statusEl.innerHTML = `Success: Updated to v${data.version}! Reloading...`;
             }
             setTimeout(() => window.location.reload(), 1000);
         })
         .catch(() => {
-            if (statusEl) statusEl.innerHTML = `🔄 Server restarting... (${attempts + 1}s)`;
+            if (statusEl) statusEl.innerHTML = `RetryServer restarting... (${attempts + 1}s)`;
             setTimeout(() => pollForRestart(attempts + 1), 2000);
         });
 }
 
-/** Auto-check on app load (silent — shows banner if update available) */
+/** Auto-check on app load (silent - shows banner if update available) */
 export function autoCheckForUpdates() {
     setTimeout(() => checkForUpdates(true), 5000);
 }
 
-// ═══════════════════════════════════════════
-//  NETWORK / SERVER DISCOVERY
-// ═══════════════════════════════════════════
+// ===========================================
+//  NETWORK /Server DISCOVERY
+// ===========================================
 
 let _serverPanelOpen = false;
 
@@ -890,7 +890,7 @@ async function loadServerInfo() {
                 .join('<br>');
         }
     } catch (err) {
-        console.error('[Network] Failed to load server info:', err);
+        console.error('[Network] Failed to loadServer info:', err);
     }
 }
 
@@ -899,12 +899,12 @@ async function scanForServers() {
     const list = document.getElementById('serverDiscoveredList');
     if (!list) return;
 
-    if (btn) { btn.classList.add('scanning'); btn.textContent = '⏳ Scanning...'; }
+    if (btn) { btn.classList.add('scanning'); btn.textContent = 'Wait: Scanning...'; }
     list.innerHTML = '<div class="server-list-empty">Scanning network...</div>';
 
     try {
         const data = await api('/api/servers/discover?timeout=3000');
-        const servers = data.servers || [];
+        constServers = data.servers || [];
 
         if (servers.length === 0) {
             list.innerHTML = '<div class="server-list-empty">No other instances found on this network</div>';
@@ -912,12 +912,12 @@ async function scanForServers() {
             // Show green dot on network button
             document.getElementById('networkBtn')?.classList.add('has-servers');
 
-            list.innerHTML = servers.map((s, i) => `
+            list.innerHTML =Servers.map((s, i) => `
                 <div class="server-card" ondblclick="window.open('${esc(s.url)}','_blank')">
-                    <span class="server-dot server-dot-active"></span>
+                    <span class="server-dotServer-dot-active"></span>
                     <div class="server-card-info">
                         <div class="server-card-name">${esc(s.name || s.hostname)}</div>
-                        <div class="server-card-meta">${esc(s.ip)}:${s.port} · ${s.assets} assets · ${platformLabel(s.platform)} · v${esc(s.version)}</div>
+                        <div class="server-card-meta">${esc(s.ip)}:${s.port} . ${s.assets} assets . ${platformLabel(s.platform)} . v${esc(s.version)}</div>
                     </div>
                     <div class="server-card-actions">
                         <button class="btn-open" onclick="window.open('${esc(s.url)}','_blank')">Open</button>
@@ -927,18 +927,18 @@ async function scanForServers() {
             `).join('');
         }
 
-        window._discoveredServers = servers;
+        window._discoveredServers =Servers;
     } catch (err) {
         list.innerHTML = `<div class="server-list-empty" style="color:#e57373;">Scan failed: ${esc(err.message)}</div>`;
     }
 
-    if (btn) { btn.classList.remove('scanning'); btn.textContent = '🔍 Scan'; }
+    if (btn) { btn.classList.remove('scanning'); btn.textContent = 'Scan Scan'; }
 }
 
 function platformLabel(p) {
-    if (p === 'win32') return '🪟 Windows';
-    if (p === 'darwin') return '🍎 Mac';
-    if (p === 'linux') return '🐧 Linux';
+    if (p === 'win32') return 'Win Windows';
+    if (p === 'darwin') return 'Mac Mac';
+    if (p === 'linux') return 'Linux Linux';
     return p || 'Unknown';
 }
 
@@ -983,42 +983,42 @@ async function loadSavedServers() {
 
     try {
         const data = await api('/api/servers/saved');
-        const servers = data.servers || [];
+        constServers = data.servers || [];
 
         if (servers.length === 0) {
-            list.innerHTML = '<div class="server-list-empty">No saved servers</div>';
+            list.innerHTML = '<div class="server-list-empty">No savedServers</div>';
             return;
         }
 
-        // Ping each server in parallel for status
+        // Ping eachServer in parallel for status
         const pings = await Promise.allSettled(
-            servers.map(s =>
+           Servers.map(s =>
                 api('/api/servers/ping', { method: 'POST', body: { url: s.url } })
                     .catch(() => ({ online: false }))
             )
         );
 
-        list.innerHTML = servers.map((s, i) => {
+        list.innerHTML =Servers.map((s, i) => {
             const ping = pings[i]?.value || { online: false };
             const dotClass = ping.online ? 'server-dot-active' : 'server-dot-offline';
-            const statusText = ping.online ? `${ping.assets} assets · v${ping.version}` : 'Offline';
+            const statusText = ping.online ? `${ping.assets} assets . v${ping.version}` : 'Offline';
 
             return `
                 <div class="server-card" ondblclick="window.open('${esc(s.url)}','_blank')">
                     <span class="server-dot ${dotClass}"></span>
                     <div class="server-card-info">
                         <div class="server-card-name">${esc(s.name)}</div>
-                        <div class="server-card-meta">${esc(s.url)} · ${statusText}</div>
+                        <div class="server-card-meta">${esc(s.url)} . ${statusText}</div>
                     </div>
                     <div class="server-card-actions">
                         ${ping.online ? `<button class="btn-open" onclick="window.open('${esc(s.url)}','_blank')">Open</button>` : ''}
-                        <button onclick="removeSavedServer(${i})">✕</button>
+                        <button onclick="removeSavedServer(${i})">x</button>
                     </div>
                 </div>
             `;
         }).join('');
     } catch (err) {
-        list.innerHTML = '<div class="server-list-empty">Failed to load saved servers</div>';
+        list.innerHTML = '<div class="server-list-empty">Failed to load savedServers</div>';
     }
 }
 
@@ -1044,7 +1044,7 @@ async function saveServerName() {
     }
 }
 
-// ─── Path Mappings ───
+// --- Path Mappings ---
 
 async function loadPathMappings() {
     const list = document.getElementById('pathMappingList');
@@ -1059,9 +1059,9 @@ async function loadPathMappings() {
         list.innerHTML = mappings.map((m, i) => `
             <div class="path-mapping-row">
                 <span class="pm-from" title="${esc(m.from)}">${esc(m.from)}</span>
-                <span class="pm-arrow">→</span>
+                <span class="pm-arrow">-></span>
                 <span class="pm-to" title="${esc(m.to)}">${esc(m.to)}</span>
-                <button class="pm-remove" onclick="removePathMapping(${i})" title="Remove">✕</button>
+                <button class="pm-remove" onclick="removePathMapping(${i})" title="Remove">x</button>
             </div>
         `).join('');
     } catch {}
@@ -1110,9 +1110,9 @@ function loadNetworkSettings() {
     loadDiscoveredServersForPull();
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  DATABASE TRANSFER
-// ═══════════════════════════════════════════
+// ===========================================
 
 async function loadDbInfo() {
     try {
@@ -1124,8 +1124,8 @@ async function loadDbInfo() {
         const el = document.getElementById('dbInfo');
         if (el) {
             el.innerHTML = `
-                <div>Projects: <strong>${info.projects}</strong> · Assets: <strong>${info.assets}</strong> · Sequences: <strong>${info.sequences}</strong> · Shots: <strong>${info.shots}</strong></div>
-                <div>File size: <strong>${sizeStr}</strong> · Last modified: <strong>${modified}</strong></div>
+                <div>Projects: <strong>${info.projects}</strong> . Assets: <strong>${info.assets}</strong> . Sequences: <strong>${info.sequences}</strong> . Shots: <strong>${info.shots}</strong></div>
+                <div>File size: <strong>${sizeStr}</strong> . Last modified: <strong>${modified}</strong></div>
             `;
         }
     } catch (err) {
@@ -1136,7 +1136,7 @@ async function loadDbInfo() {
 function exportDatabase() {
     // Direct download via browser
     window.location.href = '/api/settings/export-db';
-    showToast('Database export started — check your Downloads folder', 'success');
+    showToast('Database export started - check your Downloads folder', 'success');
 }
 
 async function importDatabase(input) {
@@ -1165,7 +1165,7 @@ async function importDatabase(input) {
             return;
         }
 
-        showToast(`✓ ${result.message}`, 'success');
+        showToast(`Success: ${result.message}`, 'success');
         // Reload the entire page to pick up new data
         setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
@@ -1177,7 +1177,7 @@ async function pullRemoteDatabase() {
     const urlInput = document.getElementById('pullDbUrl');
     const url = urlInput?.value?.trim();
     if (!url) {
-        showToast('Enter the URL of a remote MediaVault server', 'error');
+        showToast('Enter the URL of a remote MediaVaultServer', 'error');
         return;
     }
 
@@ -1186,12 +1186,12 @@ async function pullRemoteDatabase() {
     }
 
     try {
-        showToast('Pulling database from remote server...', 'info');
+        showToast('Pulling database from remoteServer...', 'info');
         const result = await api('/api/settings/pull-db', {
             method: 'POST',
             body: { url },
         });
-        showToast(`✓ ${result.message}`, 'success');
+        showToast(`Success: ${result.message}`, 'success');
         setTimeout(() => window.location.reload(), 1500);
     } catch (err) {
         showToast(`Pull failed: ${err.message}`, 'error');
@@ -1203,7 +1203,7 @@ async function loadDiscoveredServersForPull() {
     if (!container) return;
 
     try {
-        // Show saved/discovered servers as quick-pick buttons
+        // Show saved/discoveredServers as quick-pick buttons
         const saved = await api('/api/servers/saved');
         const discovered = await api('/api/servers/discover');
 
@@ -1219,7 +1219,7 @@ async function loadDiscoveredServersForPull() {
         }
 
         if (allServers.length === 0) {
-            container.innerHTML = '<span style="font-size:0.78rem;color:var(--text-muted);">No other servers detected on network.</span>';
+            container.innerHTML = '<span style="font-size:0.78rem;color:var(--text-muted);">No otherServers detected on network.</span>';
             return;
         }
 
@@ -1243,9 +1243,9 @@ setTimeout(() => {
     if (main) _settingsTabObserver.observe(main, { subtree: true, attributes: true, attributeFilter: ['class'] });
 }, 1000);
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  TEAM MANAGEMENT
-// ═══════════════════════════════════════════
+// ===========================================
 
 export async function loadTeamSettings() {
     const container = document.getElementById('teamUserList');
@@ -1258,15 +1258,15 @@ export async function loadTeamSettings() {
         }
         container.innerHTML = users.map(u => `
             <div class="team-user-row" style="border-left: 3px solid ${u.color || '#888'}">
-                <span class="team-user-avatar">${u.avatar || '👤'}</span>
+                <span class="team-user-avatar">${u.name.substring(0, 2).toUpperCase()}</span>
                 <span class="team-user-name">${esc(u.name)}</span>
-                ${u.has_pin ? '<span class="team-pin-badge" title="PIN protected">🔒</span>' : ''}
+                ${u.has_pin ? '<span class="team-pin-badge" title="PIN protected">[Lock]</span>' : ''}
                 ${u.is_admin ? '<span class="team-badge-admin">Admin</span>' : '<span class="team-badge-user">User</span>'}
                 <div class="team-user-actions">
-                    <button class="btn-xs" onclick="showSetPinModal(${u.id}, '${escAttr(u.name)}', ${!!u.has_pin})" title="${u.has_pin ? 'Change PIN' : 'Set PIN'}">${u.has_pin ? '🔒' : '🔓'}</button>
-                    ${u.is_admin ? '' : `<button class="btn-xs" onclick="toggleUserAdmin(${u.id}, true)" title="Promote to admin">⬆ Admin</button>`}
-                    ${u.is_admin ? `<button class="btn-xs" onclick="toggleUserAdmin(${u.id}, false)" title="Demote to regular user">⬇ User</button>` : ''}
-                    <button class="btn-xs btn-danger-xs" onclick="deleteTeamUser(${u.id}, '${escAttr(u.name)}')" title="Delete user">✕</button>
+                    <button class="btn-xs" onclick="showSetPinModal(${u.id}, '${escAttr(u.name)}', ${!!u.has_pin})" title="${u.has_pin ? 'Change PIN' : 'Set PIN'}">${u.has_pin ? '[Lock]' : '[Unlock]'}</button>
+                    ${u.is_admin ? '' : `<button class="btn-xs" onclick="toggleUserAdmin(${u.id}, true)" title="Promote to admin">Up Admin</button>`}
+                    ${u.is_admin ? `<button class="btn-xs" onclick="toggleUserAdmin(${u.id}, false)" title="Demote to regular user">Down User</button>` : ''}
+                    <button class="btn-xs btn-danger-xs" onclick="deleteTeamUser(${u.id}, '${escAttr(u.name)}')" title="Delete user">x</button>
                 </div>
             </div>
         `).join('');
@@ -1285,7 +1285,7 @@ async function addTeamUser() {
     try {
         await api('/api/users', {
             method: 'POST',
-            body: { name, avatar: avatarSelect?.value || '👤', color: colorInput?.value || '#888888', is_admin: 0 }
+            body: { name, avatar: name.substring(0, 2).toUpperCase(), color: colorInput?.value || '#888888', is_admin: 0 }
         });
         nameInput.value = '';
         showToast(`User "${name}" created`, 'success');
@@ -1328,12 +1328,12 @@ function showSetPinModal(userId, userName, hasPin) {
     if (!modal || !content) return;
 
     content.innerHTML = `
-        <h2 style="margin:0 0 8px;">${hasPin ? '🔒 Change PIN' : '🔓 Set PIN'}</h2>
+        <h2 style="margin:0 0 8px;">${hasPin ? '[Lock] Change PIN' : '[Unlock] Set PIN'}</h2>
         <p style="opacity:0.6;font-size:0.85rem;margin:0 0 16px;">
             ${hasPin ? `Change or remove the PIN for <strong>${userName}</strong>.` : `Set a PIN on <strong>${userName}</strong>'s profile to prevent impersonation.`}
         </p>
-        <label style="font-size:0.82rem;opacity:0.8;">New PIN (4–8 characters)</label>
-        <input type="password" id="setPinInput" maxlength="8" placeholder="••••"
+        <label style="font-size:0.82rem;opacity:0.8;">New PIN (4-8 characters)</label>
+        <input type="password" id="setPinInput" maxlength="8" placeholder="****"
                style="width:100%;margin:6px 0 12px;"
                onkeydown="if(event.key==='Enter')saveUserPin(${userId});"
                onpointerdown="event.stopPropagation();">
@@ -1341,7 +1341,7 @@ function showSetPinModal(userId, userName, hasPin) {
         <div class="form-actions">
             ${hasPin ? `<button class="btn-cancel" onclick="removeUserPin(${userId})" style="margin-right:auto;">Remove PIN</button>` : '<span></span>'}
             <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-            <button class="btn-primary" onclick="saveUserPin(${userId})">💾 Save PIN</button>
+            <button class="btn-primary" onclick="saveUserPin(${userId})">Save Save PIN</button>
         </div>
     `;
     modal.style.display = 'flex';
@@ -1380,9 +1380,9 @@ async function removeUserPin(userId) {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EXPOSE ON WINDOW (for HTML onclick handlers)
-// ═══════════════════════════════════════════
+// ===========================================
 
 window.loadSettings = loadSettings;
 window.saveSettings = saveSettings;
@@ -1430,3 +1430,7 @@ window.loadTeamSettings = loadTeamSettings;
 window.showSetPinModal = showSetPinModal;
 window.saveUserPin = saveUserPin;
 window.removeUserPin = removeUserPin;
+
+
+
+

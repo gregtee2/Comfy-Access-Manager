@@ -4,7 +4,7 @@
 
 **Comfy Asset Manager (CAM)** — formerly Digital Media Vault (DMV) — is a local media asset manager for creative production. Organize, browse, import, export, and play media files with a project-based hierarchy following ShotGrid/Flow Production Tracking naming conventions.
 
-**Version**: 1.3.0
+**Version**: 1.4.1
 **Port**: 7700
 **Repo**: `github.com/gregtee2/Comfy-Access-Manager` (branches: `main`, `stable`)
 **Status**: Active development (February 2026)
@@ -26,7 +26,7 @@ Built for artists and studios who work with video, images, EXR sequences, 3D fil
 ### Tech Stack
 - **Frontend**: Vanilla JavaScript ES6 modules, HTML, CSS (no build step, no framework)
 - **Backend**: Node.js + Express
-- **Database**: sql.js v1.11.0 (WASM SQLite — no native compilation needed)
+- **Database**: better-sqlite3 (Native SQLite — replaced sql.js for better performance)
 - **Thumbnails**: Sharp (images), FFmpeg (video)
 - **Transcode/Export**: FFmpeg (NVENC GPU on Windows, VideoToolbox on macOS, CPU fallback everywhere)
 - **External Player**: OpenRV 3.1.0 (compiled from source, bundled in `tools/rv/`)
@@ -42,7 +42,7 @@ Built for artists and studios who work with video, images, EXR sequences, 3D fil
 Comfy-Asset-Manager/
 ├── src/
 │   ├── server.js                 # Express server entry (140 lines)
-│   ├── database.js               # sql.js wrapper, better-sqlite3 compat API, config.json (615 lines)
+│   ├── database.js               # better-sqlite3 wrapper, config.json (615 lines)
 │   ├── routes/
 │   │   ├── assetRoutes.js        # Import, browse, stream, delete, RV launch, compare, overlay (1817 lines)
 │   │   ├── projectRoutes.js      # Project + Sequence + Shot CRUD + access control (497 lines)
@@ -253,7 +253,7 @@ The Settings → "Database Transfer" section allows copying the full SQLite data
 
 ### Import/Pull Flow
 1. Backup current DB to `data/mediavault.db.backup-<timestamp>`
-2. `closeDb()` — flush and close current sql.js instance
+2. `closeDb()` — flush and close current database instance
 3. Replace `data/mediavault.db` with new file
 4. `initDb()` — re-open database
 5. On failure: restore from backup, re-init, return error
@@ -362,13 +362,13 @@ Requires Xcode Command Line Tools (`xcode-select --install`).
 
 ## Database Schema
 
-sql.js (WASM SQLite). All queries go through `database.js` which wraps the raw sql.js API to be compatible with better-sqlite3's `.prepare().run/get/all()` pattern.
+better-sqlite3 (Native SQLite). All queries go through `database.js` which wraps the better-sqlite3 API.
 
 ### database.js Exports
 
 | Export | Purpose |
 |--------|---------|
-| `initDb()` | Initialize sql.js WASM, create tables, seed roles |
+| `initDb()` | Initialize database, create tables, seed roles |
 | `closeDb()` | Flush and close database (used before DB import/pull) |
 | `getDb()` | Get the database wrapper instance |
 | `getSetting(key)` / `setSetting(key, value)` | Read/write settings table |
@@ -869,7 +869,7 @@ ES6 modules scope functions. Expose via `window.functionName = functionName` for
 
 When `node src/server.js` runs (or the .app launches it):
 
-1. `initDb()` — Initialize sql.js WASM SQLite
+1. `initDb()` — Initialize better-sqlite3 Native SQLite
 2. `app.listen(PORT)` — Start Express on port 7700
 3. `WatcherService.start()` — Resume folder watching
 4. **`RVPluginSync.sync()`** — Build and deploy MediaVault RV plugin to all detected RV installations
@@ -902,7 +902,7 @@ Users pick up updates automatically via the in-app update banner.
 ## Important Rules for AI Agents
 
 1. **Port is 7700** — `http://localhost:7700`
-2. **Database is sql.js (WASM)** — NOT better-sqlite3. The wrapper in database.js provides compatibility.
+2. **Database is better-sqlite3 (Native)** — Replaced sql.js in v1.4.1. The wrapper in database.js provides the connection.
 3. **`generateVaultName()` returns `{ vaultName, ext }`** — Always destructure! Never assign to a string.
 4. **Shots have both `sequence_id` AND `project_id`** — Update both when migrating.
 5. **Frontend is plain ES6 modules** — No React, no build step. `document.createElement()` or template literals.
@@ -941,6 +941,7 @@ Users pick up updates automatically via the in-app update banner.
 38. **`ensureReadableColor(hex)` prevents invisible text** — Role colors with luminance < 90 are auto-boosted by +80 RGB. Applied in tree nav rendering (`browser.js`). If a role color looks bad on dark bg, the DB color itself should be updated.
 39. **Naming convention uses `?.name || ?.code` fallback** — When calling `generateFromConvention()`, always pass `sequence?.name || sequence?.code` and `shot?.name || shot?.code`. Three call sites in `assetRoutes.js` were fixed for this.
 40. **DaVinci Resolve bridge uses Python subprocess** — Resolve's scripting API is Python-only. Use `scripts/resolve_bridge.py` called via `child_process.execFile()` from Node.js routes.
+41. **No Emojis in UI** — The frontend is 100% ASCII-compliant. Do not use emojis (✅, 📁, ⚙️) in the UI; use text labels (Success:, [Folder], [Settings]) or SVG icons to maintain a professional VFX aesthetic.
 
 ---
 
@@ -1118,6 +1119,9 @@ CAM (Node.js) ← GET /api/resolve/timeline ← scripts/resolve_bridge.py ← Da
 | — | feat: Centered watermark text (CONFIDENTIAL / INTERNAL USE ONLY) |
 | — | feat: Shift+O toggle + MediaVault menu checkboxes for overlay layers |
 | — | feat: `GET /api/assets/overlay-info` endpoint — returns asset metadata for overlay display |
+| — | **v1.4.1 — SQLite Migration & UI Professionalization (February 2026)** |
+| — | refactor: Migrated from sql.js (WASM) to better-sqlite3 (Native) for improved performance and concurrency |
+| — | refactor: Purged all emojis and non-ASCII characters from frontend UI and docs for a professional aesthetic |
 
 ---
 

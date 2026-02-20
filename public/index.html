@@ -13,10 +13,10 @@
     <link rel="stylesheet" href="/css/styles.css?v=1.4.1">
 </head>
 <body>
-    <!-- ═══ SETUP OVERLAY (first-time vault config) ═══ -->
+    <!-- === SETUP OVERLAY (first-time vault config) === -->
     <div id="setupOverlay" class="overlay" style="display:none;">
         <div class="setup-card">
-            <h1>🗄️ Comfy Asset Manager</h1>
+            <h1>Comfy Asset Manager</h1>
             <p class="subtitle">Local Digital Asset Manager</p>
             <p>Choose where to store your organized media files:</p>
             <div class="vault-path-picker">
@@ -29,56 +29,56 @@
             <div class="setup-divider"><span>or connect to a server</span></div>
 
             <div id="setupDiscovery" class="setup-discovery">
-                <div id="setupDiscoveryStatus" class="setup-discovery-status">🔍 Scanning your network...</div>
+                <div id="setupDiscoveryStatus" class="setup-discovery-status">Scanning your network...</div>
                 <div id="setupDiscoveredServers" class="setup-discovered-servers"></div>
-                <button class="btn-sm" onclick="scanForRemoteServers()" style="margin-top:8px;opacity:0.6;">↻ Rescan</button>
+                <button class="btn-sm" onclick="scanForRemoteServers()" style="margin-top:8px;opacity:0.6;">Rescan</button>
             </div>
         </div>
     </div>
 
-    <!-- ═══ USER PICKER OVERLAY (who's using this machine?) ═══ -->
+    <!-- === USER PICKER OVERLAY (who's using this machine?) === -->
     <div id="userPickerOverlay" class="overlay" style="display:none;">
         <div class="setup-card user-picker-card">
-            <h1>👤 Who's Using CAM?</h1>
+            <h1>Who's Using CAM?</h1>
             <p class="subtitle">Select your profile to continue</p>
             <div id="userPickerList" class="user-picker-list">
                 <!-- Populated by JS -->
             </div>
             <div id="pinPromptRow" class="pin-prompt-row" style="display:none;">
-                <label class="pin-label">🔐 Enter PIN</label>
+                <label class="pin-label">Enter PIN</label>
                 <div class="pin-input-group">
-                    <input type="password" id="pinInput" class="pin-input" maxlength="8" placeholder="••••"
+                    <input type="password" id="pinInput" class="pin-input" maxlength="8" placeholder="****"
                            onkeydown="if(event.key==='Enter')submitPin(); if(event.key==='Escape')hidePinPrompt();"
                            onpointerdown="event.stopPropagation();">
-                    <button class="btn-sm pin-submit-btn" onclick="submitPin()">→</button>
-                    <button class="btn-sm pin-cancel-btn" onclick="hidePinPrompt()">✕</button>
+                    <button class="btn-sm pin-submit-btn" onclick="submitPin()">-></button>
+                    <button class="btn-sm pin-cancel-btn" onclick="hidePinPrompt()">x</button>
                 </div>
                 <div id="pinError" class="pin-error" style="display:none;"></div>
             </div>
             <p class="hint" style="margin-top:12px;font-size:0.78rem;opacity:0.5;">
-                Your selection is remembered on this machine. Admins can manage users in Settings → Team.
+                Your selection is remembered on this machine. Admins can manage users in Settings -> Team.
             </p>
         </div>
     </div>
 
-    <!-- ═══ TOP BAR ═══ -->
+    <!-- === TOP BAR === -->
     <header id="topBar">
         <div class="topbar-left">
-            <span class="logo" title="Comfy Asset Manager">🗄️ CAM</span>
+            <span class="logo" title="Comfy Asset Manager">CAM</span>
             <nav class="tabs">
-                <button class="tab active" data-tab="projects" onclick="switchTab('projects')" title="View and manage all projects">📁 Projects</button>
-                <button class="tab" data-tab="browser" onclick="switchTab('browser')" title="Browse assets with tree navigation, filters, and grid/list views">🔍 Browser</button>
-                <button class="tab" data-tab="import" onclick="switchTab('import')" title="Import media files into the vault with auto-naming">📥 Import</button>
-                <button class="tab" data-tab="settings" onclick="switchTab('settings')" title="Configure vault path, naming, players, roles, and integrations">⚙️ Settings</button>
+                <button class="tab active" data-tab="projects" onclick="switchTab('projects')" title="View and manage all projects">Projects</button>
+                <button class="tab" data-tab="browser" onclick="switchTab('browser')" title="Browse assets with tree navigation, filters, and grid/list views">Browser</button>
+                <button class="tab" data-tab="import" onclick="switchTab('import')" title="Import media files into the vault with auto-naming">Import</button>
+                <button class="tab" data-tab="settings" onclick="switchTab('settings')" title="Configure vault path, naming, players, roles, and integrations">Settings</button>
             </nav>
         </div>
         <div class="topbar-right">
             <button id="userIndicator" class="topbar-user-btn" onclick="showUserPicker()" title="Switch user">
-                <span id="userAvatar">👤</span>
+                <span id="userAvatar"></span>
                 <span id="userName">No User</span>
             </button>
-            <button id="networkBtn" class="topbar-icon-btn" onclick="toggleServerPanel()" title="Network — find other MediaVault instances">
-                🖧
+            <button id="networkBtn" class="topbar-icon-btn" onclick="toggleServerPanel()" title="Network - find other MediaVault instances">
+                
             </button>
             <span id="statusIndicator" class="status-dot" title="Green = vault configured and running. Yellow = needs setup."></span>
             <span id="assetCount" class="stat" title="Total assets across all projects">0 assets</span>
@@ -86,11 +86,11 @@
         </div>
     </header>
 
-    <!-- ═══ SERVER PANEL (network discovery dropdown) ═══ -->
+    <!-- === SERVER PANEL (network discovery dropdown) === -->
     <div id="serverPanel" class="server-panel" style="display:none">
         <div class="server-panel-header">
-            <span>🖧 Network Servers</span>
-            <button onclick="toggleServerPanel()" class="server-panel-close">✕</button>
+            <span>Network Servers</span>
+            <button onclick="toggleServerPanel()" class="server-panel-close">x</button>
         </div>
         <div class="server-panel-body">
             <div class="server-panel-section">
@@ -103,7 +103,7 @@
             <div class="server-panel-section">
                 <div class="server-panel-subhead">
                     <span>Discovered on Network</span>
-                    <button onclick="scanForServers()" class="server-scan-btn" id="serverScanBtn" title="Scan network">🔍 Scan</button>
+                    <button onclick="scanForServers()" class="server-scan-btn" id="serverScanBtn" title="Scan network">Scan</button>
                 </div>
                 <div id="serverDiscoveredList" class="server-list">
                     <div class="server-list-empty">Click Scan to find other MediaVault instances</div>
@@ -122,15 +122,15 @@
         </div>
     </div>
 
-    <!-- ═══ MAIN CONTENT ═══ -->
+    <!-- === MAIN CONTENT === -->
     <main id="mainContent">
 
-        <!-- ─── PROJECTS TAB ─── -->
+        <!-- --- PROJECTS TAB --- -->
         <section id="tab-projects" class="tab-content active">
             <div class="section-header">
-                <h2>Projects <span class="help-icon" data-tip="Projects are the top-level containers for your media. Each project can hold Sequences → Shots → Roles, following ShotGrid/Flow conventions.">?</span></h2>
+                <h2>Projects <span class="help-icon" data-tip="Projects are the top-level containers for your media. Each project can hold Sequences -> Shots -> Roles, following ShotGrid/Flow conventions.">?</span></h2>
                 <div style="display:flex;gap:6px;">
-                    <button class="btn-primary" onclick="importFromResolve()" title="Pull media from DaVinci Resolve's media pool into CAM" style="background:#334;border-color:#445;">🎬 Import from Resolve</button>
+Import from Resolve</button>
                     <button class="btn-primary" onclick="showCreateProjectModal()" title="Create a new project with name, code, and type">+ New Project</button>
                 </div>
             </div>
@@ -139,7 +139,7 @@
             </div>
         </section>
 
-        <!-- ─── BROWSER TAB (single project view) ─── -->
+        <!-- --- BROWSER TAB (single project view) --- -->
         <section id="tab-browser" class="tab-content">
             <div class="browser-layout">
                 <!-- LEFT: Tree Navigation -->
@@ -147,10 +147,10 @@
                     <!-- CRATE PANEL (collapsible, above tree) -->
                     <div id="cratePanel" class="crate-panel">
                         <div class="crate-header" onclick="window.toggleCratePanel?.()">
-                            <span>📦 Crates</span>
+                            <span>Crates</span>
                             <div style="display:flex;gap:4px;align-items:center;">
                                 <button class="btn-tiny" onclick="event.stopPropagation();window.createCratePrompt?.()" title="Create a new crate">+</button>
-                                <span id="crateChevron" class="crate-chevron">▾</span>
+                                <span id="crateChevron" class="crate-chevron">v</span>
                             </div>
                         </div>
                         <div id="crateList" class="crate-list">
@@ -159,8 +159,8 @@
                     </div>
 
                     <div class="tree-header">
-                        <span title="Navigate the project hierarchy: Project → Sequence → Shot → Role">🌳 Tree Navigation</span>
-                        <button class="btn-tiny" onclick="refreshTree()" title="Reload the project tree from the database">↻</button>
+                        <span title="Navigate the project hierarchy: Project -> Sequence -> Shot -> Role">Tree Navigation</span>
+                        <button class="btn-tiny" onclick="refreshTree()" title="Reload the project tree from the database">Refresh</button>
                     </div>
                     <div id="treeContainer" class="tree-container">
                         <div class="tree-loading">Loading...</div>
@@ -185,17 +185,17 @@
                     </div>
                     <div class="project-actions">
                         <button class="btn-sm" onclick="showAddSequenceModal()">+ Sequence</button>
-                        <button class="btn-sm" onclick="importToProject()">📥 Import Files</button>
-                        <button class="btn-sm" onclick="reorganizeAndRelink()" title="Move linked files into vault structure, rename, and relink in Resolve" style="background:#334;border-color:#445;">🔄 Reorganize & Relink</button>
-                        <button class="btn-sm btn-subtle" onclick="archiveCurrentProject()" title="Archive this project (hides from view, doesn't delete)">📦 Archive</button>
-                        <button class="btn-sm btn-subtle" onclick="deleteCurrentProject()" title="Right-click project in tree for more options">🗑️ Delete Project</button>
+                        <button class="btn-sm" onclick="importToProject()">Import Files</button>
+                        <button class="btn-sm" onclick="reorganizeAndRelink()" title="Move linked files into vault structure, rename, and relink in Resolve" style="background:#334;border-color:#445;">Reorganize & Relink</button>
+                        <button class="btn-sm btn-subtle" onclick="archiveCurrentProject()" title="Archive this project (hides from view, doesn't delete)">Archive</button>
+                        <button class="btn-sm btn-subtle" onclick="deleteCurrentProject()" title="Right-click project in tree for more options">Delete Project</button>
                     </div>
                 </div>
 
                 <!-- Sequences & Shots panel (for shot-based projects) -->
                 <div id="sequencesPanel" class="sequences-panel">
                     <div id="seqPanelToggle" class="seq-panel-toggle" onclick="toggleSeqPanel()">
-                        <span id="seqPanelArrow">▶</span> Sequences &amp; Shots
+                        <span id="seqPanelArrow">></span> Sequences &amp; Shots
                     </div>
                     <div id="sequenceList" class="sequence-list" style="display:none"></div>
                 </div>
@@ -204,35 +204,35 @@
                 <div class="filter-bar">
                     <select id="filterMediaType" title="Filter assets by media type">
                         <option value="">All Types</option>
-                        <option value="video">🎬 Video</option>
-                        <option value="image">🖼️ Image</option>
-                        <option value="audio">🔊 Audio</option>
-                        <option value="exr">✨ EXR/HDR</option>
+                        <option value="video">Video</option>
+                        <option value="image">Image</option>
+                        <option value="audio">Audio</option>
+                        <option value="exr">EXR/HDR</option>
                     </select>
                     <select id="filterSequence" style="display:none" title="Filter assets by sequence">
                         <option value="">All Sequences</option>
                     </select>
                     <input type="text" id="searchInput" placeholder="Search assets..." title="Search by filename, vault name, or tags">
-                    <button class="btn-tiny" onclick="refreshAssets()" title="Reload assets from the database">🔄</button>
+                    <button class="btn-tiny" onclick="refreshAssets()" title="Reload assets from the database">Refresh</button>
                     <span id="assetCount" class="asset-count-label"></span>
                     <div class="view-toggle">
-                        <button class="active" onclick="setView('grid')" title="Grid view — thumbnails with metadata">▦</button>
-                        <button onclick="setView('list')" title="List view — compact table with columns">≡</button>
+                        <button class="active" onclick="setView('grid')" title="Grid view - thumbnails with metadata">Grid</button>
+                        <button onclick="setView('list')" title="List view - compact table with columns">List</button>
                     </div>
                 </div>
 
                 <!-- Selection toolbar (hidden until assets selected) -->
                 <div id="selectionToolbar" class="selection-toolbar" style="display:none">
                     <span id="selectionCount">0 selected</span>
-                    <button class="btn-small" onclick="selectAllAssets()" title="Select all visible assets">☑ Select All</button>
-                    <button class="btn-small" onclick="clearAssetSelection()" title="Clear selection">☐ Deselect All</button>
-                    <button class="btn-small btn-accent" onclick="showMoveToSequenceModal()" title="Move selected assets to a different sequence/shot">📋 Move to Sequence</button>
-                    <button class="btn-small btn-role" onclick="showAssignRoleModal()" title="Assign a pipeline role (Comp, Light, Anim, etc.) to selected assets">🎭 Set Role</button>
-                    <button class="btn-small btn-export" onclick="showExportModal()" title="Transcode/export selected assets via FFmpeg (GPU-accelerated)">📤 Export</button>
-                    <button class="btn-small" onclick="sendSelectedToRV('set')" title="Send selected clips to RV (replaces current media). If RV is running, clips load instantly without restarting." style="background:#334">📤 Send to RV</button>
-                    <button class="btn-small" onclick="sendSelectedToRV('merge')" title="Add selected clips to the running RV session (keeps existing sources)" style="background:#334">➕ Add to RV</button>
-                    <button class="btn-small btn-danger" onclick="bulkDeleteAssets()" title="Delete selected assets from the database AND remove files from disk">🗑 Delete Selected</button>
-                    <button class="btn-small" onclick="bulkDeleteAssets(true)" title="Remove from database only — files stay on disk">🗑 DB Only (keep files)</button>
+                    <button class="btn-small" onclick="selectAllAssets()" title="Select all visible assets">Select All</button>
+                    <button class="btn-small" onclick="clearAssetSelection()" title="Clear selection">Deselect All</button>
+                    <button class="btn-small btn-accent" onclick="showMoveToSequenceModal()" title="Move selected assets to a different sequence/shot">Move to Sequence</button>
+                    <button class="btn-small btn-role" onclick="showAssignRoleModal()" title="Assign a pipeline role (Comp, Light, Anim, etc.) to selected assets">Set Role</button>
+                    <button class="btn-small btn-export" onclick="showExportModal()" title="Transcode/export selected assets via FFmpeg (GPU-accelerated)">Export</button>
+                    <button class="btn-small" onclick="sendSelectedToRV('set')" title="Send selected clips to RV (replaces current media). If RV is running, clips load instantly without restarting." style="background:#334">Send to RV</button>
+                    <button class="btn-small" onclick="sendSelectedToRV('merge')" title="Add selected clips to the running RV session (keeps existing sources)" style="background:#334">Add to RV</button>
+                    <button class="btn-small btn-danger" onclick="bulkDeleteAssets()" title="Delete selected assets from the database AND remove files from disk">Delete Selected</button>
+                    <button class="btn-small" onclick="bulkDeleteAssets(true)" title="Remove from database only - files stay on disk">DB Only (keep files)</button>
                 </div>
               </div><!-- /.project-sticky-header -->
 
@@ -240,7 +240,7 @@
                 <div id="assetContainerWrap" style="position:relative; flex:1;">
                     <div id="fileDropOverlay" class="file-drop-overlay" style="display:none">
                         <div class="file-drop-inner">
-                            <div class="file-drop-icon">📥</div>
+                            <div class="file-drop-icon"></div>
                             <div class="file-drop-text">Drop files to import</div>
                             <div class="file-drop-sub" id="dropTargetLabel"></div>
                         </div>
@@ -251,7 +251,7 @@
             </div><!-- /.browser-layout -->
         </section>
 
-        <!-- ─── IMPORT TAB ─── -->
+        <!-- --- IMPORT TAB --- -->
         <section id="tab-import" class="tab-content">
             <div class="section-header">
                 <h2>Import Media <span class="help-icon" data-tip="Browse your filesystem, select files, choose a project/sequence/shot/role, preview the ShotGrid-standard rename, then import. Files are moved, copied, or registered in-place.">?</span></h2>
@@ -259,34 +259,34 @@
             <div class="import-layout">
                 <!-- Quick Access sidebar -->
                 <div class="import-quickaccess" id="quickAccessPanel">
-                    <h3>⭐ Quick Access</h3>
+                    <h3>Quick Access</h3>
                     <div class="qa-list" id="quickAccessList">
                         <div class="qa-empty">Drag a folder here<br>or right-click &rarr; Add</div>
                     </div>
                     <div class="qa-drop-zone" id="qaDropZone">
-                        <span>⭐ Drop to save</span>
+                        <span>Drop to save</span>
                     </div>
 
                     <!-- Inbox Section -->
                     <div class="inbox-section" id="inboxSection" style="display:none">
-                        <h3>📥 Inboxes</h3>
+                        <h3>Inboxes</h3>
                         <div id="inboxList" class="inbox-list"></div>
                     </div>
                 </div>
 
                 <!-- File picker panel -->
                 <div class="import-source">
-                    <h3>📂 Source Files</h3>
+                    <h3>Source Files</h3>
                     <div class="file-browser-bar">
-                        <button onclick="navigateUp()" title="Go up">⬆️</button>
+                        <button onclick="navigateUp()" title="Go up">Up</button>
                         <input type="text" id="importPath" placeholder="Browse to select files..." onkeydown="if(event.key==='Enter')browseTo(this.value)">
                         <button onclick="browseTo(document.getElementById('importPath').value)">Go</button>
-                        <button onclick="addCurrentFolderToQuickAccess()" title="Save this folder to Quick Access" style="font-size:0.9rem">⭐</button>
+                        <button onclick="addCurrentFolderToQuickAccess()" title="Save this folder to Quick Access" style="font-size:0.9rem">Save</button>
                     </div>
                     <div id="fileBrowser" class="file-browser"></div>
                     <div id="fileBrowserSelectBar" style="display:none;padding:6px 8px;gap:8px;border-top:1px solid var(--border-color);background:var(--bg-card);">
-                        <button class="btn-small" onclick="selectAllFiles()" style="font-size:0.75rem;padding:3px 8px;cursor:pointer;">☑ Select All Media</button>
-                        <button class="btn-small" onclick="deselectAllFiles()" style="font-size:0.75rem;padding:3px 8px;cursor:pointer;">☐ Deselect All</button>
+                        <button class="btn-small" onclick="selectAllFiles()" style="font-size:0.75rem;padding:3px 8px;cursor:pointer;">Select All Media</button>
+                        <button class="btn-small" onclick="deselectAllFiles()" style="font-size:0.75rem;padding:3px 8px;cursor:pointer;">Deselect All</button>
                     </div>
                     <div class="selected-files">
                         <h4>Selected Files (<span id="selectedCount">0</span>)</h4>
@@ -296,16 +296,16 @@
 
                 <!-- Import settings -->
                 <div class="import-settings">
-                    <h3>⚙️ Import Settings</h3>
+                    <h3>Import Settings</h3>
                     <label>Project <span class="help-icon" data-tip="Required. Files are organized under this project in the vault folder hierarchy.">?</span></label>
                     <select id="importProject" onchange="onImportProjectChange()" title="Choose the target project">
                         <option value="">-- Select Project --</option>
                     </select>
 
                     <div id="importShotFields" style="display:none">
-                        <label>Sequence <span class="help-icon" data-tip="A sequence groups related shots (e.g., SQ010, ACT1). Optional — leave blank for project-level assets. Click '+' to create a new one.">?</span></label>
+                        <label>Sequence <span class="help-icon" data-tip="A sequence groups related shots (e.g., SQ010, ACT1). Optional - leave blank for project-level assets. Click '+' to create a new one.">?</span></label>
                         <div class="import-field-row">
-                            <select id="importSequence" onchange="onImportSequenceChange()" title="Optional — group assets by sequence">
+                            <select id="importSequence" onchange="onImportSequenceChange()" title="Optional - group assets by sequence">
                                 <option value="">-- None --</option>
                             </select>
                             <button class="btn-inline-create" id="btnNewSeq" onclick="showInlineNewSequence()" title="Create a new sequence">+</button>
@@ -314,12 +314,12 @@
                             <input type="text" id="newSeqName" placeholder="Sequence name (e.g. Car Chase)">
                             <input type="text" id="newSeqCode" placeholder="Code" maxlength="12" style="width:80px;text-transform:uppercase;">
                             <button class="btn-inline-confirm" onclick="createInlineSequence()">Create</button>
-                            <button class="btn-inline-cancel" onclick="hideInlineNewSequence()">✕</button>
+                            <button class="btn-inline-cancel" onclick="hideInlineNewSequence()">x</button>
                         </div>
 
                         <label>Shot <span class="help-icon" data-tip="A shot within the sequence (e.g., SH0010). This is where assets get their ShotGrid-standard name. Click '+' to create one.">?</span></label>
                         <div class="import-field-row">
-                            <select id="importShot" title="Optional — assign to a specific shot">
+                            <select id="importShot" title="Optional - assign to a specific shot">
                                 <option value="">-- None --</option>
                             </select>
                             <button class="btn-inline-create" id="btnNewShot" onclick="showInlineNewShot()" title="Create a new shot" disabled>+</button>
@@ -328,11 +328,11 @@
                             <input type="text" id="newShotName" placeholder="Shot name (e.g. Hero Close-Up)">
                             <input type="text" id="newShotCode" placeholder="Code" maxlength="12" style="width:80px;text-transform:uppercase;">
                             <button class="btn-inline-confirm" onclick="createInlineShot()">Create</button>
-                            <button class="btn-inline-cancel" onclick="hideInlineNewShot()">✕</button>
+                            <button class="btn-inline-cancel" onclick="hideInlineNewShot()">x</button>
                         </div>
 
                         <label>Role <span class="help-icon" data-tip="Pipeline step / department (Comp, Light, Anim, FX, etc.). Drives the '{step}' token in naming. Manage roles in Settings.">?</span></label>
-                        <select id="importRole" title="Optional — categorize by pipeline role">
+                        <select id="importRole" title="Optional - categorize by pipeline role">
                             <option value="">-- None --</option>
                         </select>
 
@@ -342,15 +342,15 @@
 
                     <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin:8px 0 4px 0;">
                         <input type="checkbox" id="keepOriginalNames">
-                        <span>📎 Keep original filenames <span class="help-icon" data-tip="Import files without renaming — the original filename is preserved as-is. Files are still organized into the vault folder structure.">?</span></span>
+                        <span>Keep original filenames <span class="help-icon" data-tip="Import files without renaming - the original filename is preserved as-is. Files are still organized into the vault folder structure.">?</span></span>
                     </label>
 
                     <div id="namingOptions">
                         <label>Custom Name (optional) <span class="help-icon" data-tip="Override the auto-generated ShotGrid name. Leave blank to use the standard naming template.">?</span></label>
-                        <input type="text" id="importCustomName" placeholder="Leave blank for auto-naming" title="Custom filename override — leave blank for ShotGrid auto-naming">
+                        <input type="text" id="importCustomName" placeholder="Leave blank for auto-naming" title="Custom filename override - leave blank for ShotGrid auto-naming">
 
                         <div class="rename-preview">
-                            <h4>📝 Name Preview</h4>
+                            <h4>Name Preview</h4>
                             <div id="renamePreview" class="preview-box">Select files and project to preview...</div>
                         </div>
                     </div>
@@ -360,41 +360,41 @@
                         <div class="import-mode-option">
                             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
                                 <input type="radio" name="importMode" value="move" checked>
-                                <span>📦 Move into vault (default)</span>
+                                <span>Move into vault (default)</span>
                             </label>
                             <div class="import-mode-desc">Files are <strong>moved and renamed</strong> using the ShotGrid naming convention. Originals are removed from their source location. Best for organizing raw deliveries.</div>
                         </div>
                         <div class="import-mode-option">
                             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
                                 <input type="radio" name="importMode" value="copy">
-                                <span>📋 Copy into vault (keep originals)</span>
+                                <span>Copy into vault (keep originals)</span>
                             </label>
                             <div class="import-mode-desc">Files are <strong>copied and renamed</strong> into the vault. Originals stay untouched at their source location. Safest option if you want to keep your source files.</div>
                         </div>
                         <div class="import-mode-option">
                             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
                                 <input type="radio" name="importMode" value="register">
-                                <span>📍 Register in place (files stay where they are)</span>
+                                <span>Register in place (files stay where they are)</span>
                             </label>
-                            <div class="import-mode-desc">Files stay exactly where they are — only a database reference is created. Good for network drives or files you can't move. No files are renamed or relocated.</div>
+                            <div class="import-mode-desc">Files stay exactly where they are - only a database reference is created. Good for network drives or files you can't move. No files are renamed or relocated.</div>
                         </div>
-                        <div id="registerWarning" style="display:none; font-size:0.8em; color:#ffaa00; margin-left:24px;">⚠️ Files remain on their current drive/network. If moved or deleted externally, MediaVault will show broken references.</div>
+                        <div id="registerWarning" style="display:none; font-size:0.8em; color:#ffaa00; margin-left:24px;"> Files remain on their current drive/network. If moved or deleted externally, MediaVault will show broken references.</div>
                     </div>
 
                     <!-- Derivative Generation -->
                     <div class="derivative-group" style="margin:12px 0; padding:10px; border:1px solid #333; border-radius:6px; background:#1e1e1e;">
                         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;">
                             <input type="checkbox" id="generateDerivatives">
-                            <span style="font-size:0.95em;">🔄 Generate Derivatives <span class="help-icon" data-tip="Automatically create alternate file formats after import. Derivatives are linked to the parent asset and appear in the format sub-menu.">?</span></span>
+                            <span style="font-size:0.95em;">Generate Derivatives <span class="help-icon" data-tip="Automatically create alternate file formats after import. Derivatives are linked to the parent asset and appear in the format sub-menu.">?</span></span>
                         </label>
                         <div id="derivativeOptions" style="display:none; margin-left:24px;">
                             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:4px;" title="Creates an H.264 MOV file for review/playback">
                                 <input type="checkbox" class="derivFormat" value="h264_mov" checked>
-                                <span style="font-size:0.85em;">🎬 H.264 MOV (review proxy)</span>
+                                <span style="font-size:0.85em;">H.264 MOV (review proxy)</span>
                             </label>
                             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;margin-bottom:8px;" title="Creates a PNG image sequence (lossless, RGBA)">
                                 <input type="checkbox" class="derivFormat" value="png_sequence">
-                                <span style="font-size:0.85em;">🖼️ PNG Sequence (lossless)</span>
+                                <span style="font-size:0.85em;">PNG Sequence (lossless)</span>
                             </label>
                             <div style="display:flex;align-items:center;gap:8px;margin-top:4px;">
                                 <label style="font-size:0.82em;color:#aaa;">Sequence FPS</label>
@@ -408,7 +408,7 @@
                     <input type="checkbox" id="importKeepOriginals" style="display:none">
 
                     <button class="btn-primary btn-large" onclick="executeImport()" id="importBtn" disabled>
-                        📥 Import & Rename
+                        Import & Rename
                     </button>
 
                     <div id="importProgress" class="progress-bar" style="display:none">
@@ -420,27 +420,27 @@
             </div>
         </section>
 
-        <!-- ─── SETTINGS TAB ─── -->
+        <!-- --- SETTINGS TAB --- -->
         <section id="tab-settings" class="tab-content">
             <div class="section-header">
                 <h2>Settings</h2>
             </div>
             <div class="settings-grid">
                 <div class="settings-section">
-                    <h3>⚙️ Preferences</h3>
+                    <h3>Preferences</h3>
 
                     <label>Start Tab <span class="help-icon" data-tip="Which tab the app opens to when you first launch it.">?</span></label>
                     <select id="prefStartTab" class="setting-select" onchange="savePref('start_tab', this.value)">
-                        <option value="projects">📁 Projects</option>
-                        <option value="browser">🔍 Browser</option>
-                        <option value="import">📥 Import</option>
-                        <option value="settings">⚙️ Settings</option>
+                        <option value="projects">Projects</option>
+                        <option value="browser">Browser</option>
+                        <option value="import">Import</option>
+                        <option value="settings">Settings</option>
                     </select>
 
                     <label>Default Browser View <span class="help-icon" data-tip="Whether the asset browser defaults to grid (thumbnails) or list (table) view.">?</span></label>
                     <select id="prefDefaultView" class="setting-select" onchange="savePref('default_view', this.value)">
-                        <option value="grid">🖼️ Grid</option>
-                        <option value="list">📋 List</option>
+                        <option value="grid">Grid</option>
+                        <option value="list">List</option>
                     </select>
 
                     <label style="display:flex;align-items:center;gap:8px;margin-top:8px;cursor:pointer;">
@@ -455,41 +455,32 @@
                 </div>
 
                 <div class="settings-section">
-                    <h3>� Team <span class="help-icon" data-tip="Manage who can access this CAM instance. Admins see all projects. Regular users see everything by default — admins can hide specific projects via Edit Project. Set a PIN to prevent profile impersonation.">?</span></h3>
+                    <h3>Team <span class="help-icon" data-tip="Manage who can access this CAM instance. Admins see all projects. Regular users see everything by default - admins can hide specific projects via Edit Project. Set a PIN to prevent profile impersonation.">?</span></h3>
                     <div id="teamUserList" class="team-user-list">
                         <!-- Populated by loadTeamSettings() -->
                     </div>
                     <div class="team-add-row" style="margin-top:8px;">
                         <input type="text" id="teamNewUserName" placeholder="New user name..." style="flex:1;">
-                        <select id="teamNewUserAvatar" style="width:50px;text-align:center;">
-                            <option value="👤">👤</option>
-                            <option value="👩">👩</option>
-                            <option value="👨">👨</option>
-                            <option value="🧑‍🎨">🧑‍🎨</option>
-                            <option value="🧑‍💻">🧑‍💻</option>
-                            <option value="🎬">🎬</option>
-                            <option value="🎨">🎨</option>
-                            <option value="📷">📷</option>
-                        </select>
+                        
                         <input type="color" id="teamNewUserColor" value="#888888" style="width:36px;height:30px;padding:0;border:none;cursor:pointer;" title="User color">
                         <button class="btn-sm" onclick="addTeamUser()">+ Add User</button>
                     </div>
-                    <p class="hint">Users see all projects by default. Use Edit Project → Hide from Users to restrict visibility. Set a PIN on accounts to prevent impersonation.</p>
+                    <p class="hint">Users see all projects by default. Use Edit Project -> Hide from Users to restrict visibility. Set a PIN on accounts to prevent impersonation.</p>
                 </div>
 
                 <div class="settings-section">
-                    <h3>�🗄️ Vault</h3>
+                    <h3>Vault</h3>
                     <label>Vault Root Path <span class="help-icon" data-tip="The root folder where all imported media is stored. Changing this will offer to migrate existing files to the new location.">?</span></label>
                     <div class="input-row">
                         <input type="text" id="settingVaultRoot" placeholder="C:\MediaVault">
-                        <button class="btn-browse" onclick="openFolderPicker('settingVaultRoot')" title="Browse...">📁</button>
+                        <button class="btn-browse" onclick="openFolderPicker('settingVaultRoot')" title="Browse...">Browse</button>
                         <button onclick="saveSettings()">Save</button>
                     </div>
 
                     <div id="migrateSection" style="display:none; margin-top:10px;">
                         <div class="migrate-banner">
                             <span id="migrateMessage">Files are at a different location than the vault root.</span>
-                            <button id="migrateBtn" onclick="migrateVault()">📦 Move Files to New Location</button>
+                            <button id="migrateBtn" onclick="migrateVault()">Move Files to New Location</button>
                         </div>
                         <div id="migrateProgress" style="display:none;">
                             <div class="progress-bar"><div class="progress-fill" id="migrateFill"></div></div>
@@ -503,19 +494,19 @@
                 </div>
 
                 <div class="settings-section">
-                    <h3>🌐 Shared Database <span class="help-icon" data-tip="Point the database to a shared network folder so multiple machines (PC + Mac) share the same projects, assets, and roles. Each machine sees all entries — files that don't exist locally just show as unavailable.">?</span></h3>
+                    <h3>Shared Database <span class="help-icon" data-tip="Point the database to a shared network folder so multiple machines (PC + Mac) share the same projects, assets, and roles. Each machine sees all entries - files that don't exist locally just show as unavailable.">?</span></h3>
                     <label>Shared Database Folder <span class="help-icon" data-tip="A folder on a network/NAS drive accessible by all machines. The database file (mediavault.db) will be stored here. Leave empty to use local database only.">?</span></label>
                     <div class="input-row">
                         <input type="text" id="settingSharedDbPath" placeholder="Z:\Shared\MediaVault  or  /Volumes/NAS/MediaVault" title="Network folder for shared database">
-                        <button class="btn-browse" onclick="openFolderPicker('settingSharedDbPath')" title="Browse...">📁</button>
+                        <button class="btn-browse" onclick="openFolderPicker('settingSharedDbPath')" title="Browse...">Browse</button>
                         <button onclick="saveSharedDbPath()">Save</button>
                     </div>
                     <div id="sharedDbStatus" style="margin-top:6px;font-size:0.82rem;"></div>
-                    <p class="hint">Both PC and Mac point here. Assets imported on one machine show on the other. Files that don't exist locally appear as unavailable — that's normal.</p>
+                    <p class="hint">Both PC and Mac point here. Assets imported on one machine show on the other. Files that don't exist locally appear as unavailable - that's normal.</p>
                 </div>
 
                 <div class="settings-section">
-                    <h3>🎬 External Player</h3>
+                    <h3>External Player</h3>
                     <label>Default Player <span class="help-icon" data-tip="Choose how media files open when clicked. 'Browser' uses the built-in player. RV supports EXR, ProRes, HDR, and professional formats.">?</span></label>
                     <select id="settingDefaultPlayer" class="setting-select" title="Player used when clicking an asset">
                         <option value="browser">Browser (built-in)</option>
@@ -526,16 +517,16 @@
                         <input type="text" id="settingCustomPlayerPath" placeholder="C:\\path\\to\\player.exe">
                         <button onclick="saveSettings()">Save</button>
                     </div>
-                    <label>RV / OpenRV Path <span class="help-icon" data-tip="If RV isn't auto-detected, set the full path here. Windows: C:\OpenRV\_build\stage\app\bin\rv.exe — macOS: /Applications/RV.app/Contents/MacOS/RV. Leave blank for auto-discovery.">?</span></label>
+                    <label>RV / OpenRV Path <span class="help-icon" data-tip="If RV isn't auto-detected, set the full path here. Windows: C:\OpenRV\_build\stage\app\bin\rv.exe - macOS: /Applications/RV.app/Contents/MacOS/RV. Leave blank for auto-discovery.">?</span></label>
                     <div class="input-row" style="margin-top:4px;">
                         <input type="text" id="settingRvPath" placeholder="Leave blank to auto-detect" title="Full path to RV executable (leave blank to auto-detect)">
                         <button onclick="saveSettings()">Save</button>
                     </div>
-                    <p class="hint">Files will open in this player when clicked. RV supports EXR, ProRes, and professional formats. RV also opens from right-click → "🎬 RV".</p>
+                    <p class="hint">Files will open in this player when clicked. RV supports EXR, ProRes, and professional formats. RV also opens from right-click -> "RV".</p>
                 </div>
 
                 <div class="settings-section">
-                    <h3>🖼️ Thumbnails</h3>
+                    <h3>Thumbnails</h3>
                     <label>Thumbnail Size (px)</label>
                     <input type="number" id="settingThumbSize" value="320" min="100" max="800">
                     <label><input type="checkbox" id="settingAutoThumb" checked> Auto-generate thumbnails on import</label>
@@ -548,7 +539,7 @@
                 <div id="plugin-settings-flow"></div>
 
                 <div class="settings-section">
-                    <h3>🎭 Roles <span class="help-icon" data-tip="Roles are pipeline steps (Comp, Light, Anim, FX, etc.) — they drive the '{step}' token in ShotGrid naming and help categorize assets within shots.">?</span></h3>
+                    <h3>Roles <span class="help-icon" data-tip="Roles are pipeline steps (Comp, Light, Anim, FX, etc.) - they drive the '{step}' token in ShotGrid naming and help categorize assets within shots.">?</span></h3>
                     <p class="hint">Roles categorize assets under shots (e.g., Comp, Light, Anim, FX). Assign roles during import or in the browser.</p>
                     <div id="rolesList" class="roles-list"></div>
                     <div class="input-row" style="margin-top:8px;">
@@ -560,11 +551,11 @@
                 </div>
 
                 <div class="settings-section">
-                    <h3>� Watch Folders <span class="help-icon" data-tip="Set up inbox folders for content ingestion. Link a folder to a project, then use the Import tab to ingest files with proper naming conventions. Great for Grok/AI-generated content or render outputs.">?</span></h3>
+                    <h3> Watch Folders <span class="help-icon" data-tip="Set up inbox folders for content ingestion. Link a folder to a project, then use the Import tab to ingest files with proper naming conventions. Great for Grok/AI-generated content or render outputs.">?</span></h3>
                     <div id="watchFolderList" class="watch-list"></div>
                     <div class="input-row" style="flex-wrap:wrap;gap:6px;">
                         <input type="text" id="newWatchPath" placeholder="Folder path to watch..." style="flex:1;min-width:200px;">
-                        <button class="btn-browse" onclick="openFolderPicker('newWatchPath')" title="Browse...">📁</button>
+                        <button class="btn-browse" onclick="openFolderPicker('newWatchPath')" title="Browse...">Browse</button>
                         <select id="newWatchProject" style="flex:0.5;min-width:140px;">
                             <option value="">-- Project --</option>
                         </select>
@@ -573,18 +564,18 @@
                 </div>
 
                 <div class="settings-section">
-                    <h3>📊 System Info</h3>
+                    <h3>System Info</h3>
                     <div id="systemInfo"></div>
 
                     <!-- GitHub Token for private repo updates -->
                     <div style="margin-top:12px;margin-bottom:12px;">
                         <label style="display:block;font-size:0.82rem;color:var(--text-dim);margin-bottom:6px;">
-                            🔑 GitHub Token <span class="help-icon" data-tip="A fine-grained Personal Access Token (PAT) with read-only access to the repo. Required if the repository is private. Generate one at: GitHub → Settings → Developer Settings → Fine-grained Personal Access Tokens → Select repo → Contents: Read-only.">?</span>
+                            GitHub Token <span class="help-icon" data-tip="A fine-grained Personal Access Token (PAT) with read-only access to the repo. Required if the repository is private. Generate one at: GitHub -> Settings -> Developer Settings -> Fine-grained Personal Access Tokens -> Select repo -> Contents: Read-only.">?</span>
                         </label>
                         <div style="display:flex;gap:6px;align-items:center;">
                             <input type="password" id="githubPatInput" placeholder="github_pat_..." style="flex:1;font-size:0.82rem;font-family:monospace;">
-                            <button onclick="saveGithubToken()" style="font-size:0.8rem;white-space:nowrap;">💾 Save</button>
-                            <button onclick="clearGithubToken()" style="font-size:0.8rem;white-space:nowrap;background:var(--bg-dark);">✕ Clear</button>
+                            <button onclick="saveGithubToken()" style="font-size:0.8rem;white-space:nowrap;">Save</button>
+                            <button onclick="clearGithubToken()" style="font-size:0.8rem;white-space:nowrap;background:var(--bg-dark);">Clear</button>
                         </div>
                         <div id="githubTokenStatus" style="font-size:0.75rem;color:var(--text-dim);margin-top:4px;"></div>
                     </div>
@@ -592,20 +583,20 @@
                     <div id="updateSection" style="margin-top:12px;">
                         <div id="updateStatus" style="display:none;margin-bottom:8px;padding:10px 14px;border-radius:6px;font-size:0.85rem;line-height:1.5;"></div>
                         <div style="display:flex;gap:8px;flex-wrap:wrap;">
-                            <button id="btnCheckUpdate" onclick="checkForUpdates()" style="font-size:0.8rem;">🔄 Check for Updates</button>
-                            <button id="btnApplyUpdate" onclick="applyUpdate()" style="display:none;font-size:0.8rem;background:var(--success);color:#000;">⬇️ Update Now</button>
+                            <button id="btnCheckUpdate" onclick="checkForUpdates()" style="font-size:0.8rem;">Check for Updates</button>
+                            <button id="btnApplyUpdate" onclick="applyUpdate()" style="display:none;font-size:0.8rem;background:var(--success);color:#000;">Update Now</button>
                         </div>
                         <div id="updateChangelog" style="display:none;margin-top:10px;padding:10px 14px;background:var(--bg-dark);border-radius:6px;font-size:0.78rem;max-height:200px;overflow-y:auto;white-space:pre-wrap;color:var(--text-dim);"></div>
                     </div>
                 </div>
 
                 <div class="settings-section">
-                    <h3>� Database Transfer <span class="help-icon" data-tip="Export your database to a file, import one from another machine, or pull directly from a remote MediaVault instance on your network.">?</span></h3>
+                    <h3> Database Transfer <span class="help-icon" data-tip="Export your database to a file, import one from another machine, or pull directly from a remote MediaVault instance on your network.">?</span></h3>
                     <div id="dbInfo" style="font-size:0.82rem;color:var(--text-dim);line-height:1.8;margin-bottom:10px;">Loading...</div>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
-                        <button onclick="exportDatabase()" style="font-size:0.82rem;">📤 Export Database</button>
+                        <button onclick="exportDatabase()" style="font-size:0.82rem;"> Export Database</button>
                         <label class="btn-file-upload" style="font-size:0.82rem;padding:6px 14px;background:var(--primary);color:#fff;border-radius:6px;cursor:pointer;display:inline-flex;align-items:center;gap:4px;">
-                            📥 Import Database
+                             Import Database
                             <input type="file" id="dbImportFile" accept=".db,.sqlite,.sqlite3" onchange="importDatabase(this)" style="display:none;">
                         </label>
                     </div>
@@ -614,14 +605,14 @@
                         <p class="hint">Enter the URL of another MediaVault instance (e.g., http://192.168.1.50:7700) to pull its database directly.</p>
                         <div class="input-row" style="margin-top:4px;">
                             <input type="text" id="pullDbUrl" placeholder="http://192.168.1.50:7700" style="flex:1;">
-                            <button onclick="pullRemoteDatabase()">⬇️ Pull</button>
+                            <button onclick="pullRemoteDatabase()"> Pull</button>
                         </div>
                         <div id="discoveredServersForPull" style="margin-top:8px;"></div>
                     </div>
                 </div>
 
                 <div class="settings-section">
-                    <h3>�🖧 Network &amp; Multi-Machine <span class="help-icon" data-tip="Access your MediaVault database from other machines on your network. Give this server a friendly name and configure path mappings for cross-platform file access.">?</span></h3>
+                    <h3> Network &amp; Multi-Machine <span class="help-icon" data-tip="Access your MediaVault database from other machines on your network. Give this server a friendly name and configure path mappings for cross-platform file access.">?</span></h3>
                     <div class="setting-row">
                         <label>Server Name</label>
                         <div class="input-row">
@@ -640,7 +631,7 @@
                         <div id="pathMappingList" class="path-mapping-list"></div>
                         <div class="input-row" style="margin-top:6px;">
                             <input type="text" id="pathMapFrom" placeholder="Remote path (e.g., Z:\Media)" style="flex:1;">
-                            <span style="color:var(--text-muted);padding:0 4px;">→</span>
+                            <span style="color:var(--text-muted);padding:0 4px;">-></span>
                             <input type="text" id="pathMapTo" placeholder="Local path (e.g., /Volumes/Media)" style="flex:1;">
                             <button onclick="addPathMapping()">+ Add</button>
                         </div>
@@ -651,21 +642,21 @@
         </section>
     </main>
 
-    <!-- ═══ MEDIA PLAYER MODAL ═══ -->
+    <!-- === MEDIA PLAYER MODAL === -->
     <div id="playerModal" class="modal" style="display:none" onclick="if(event.target===this)closePlayer()">
         <div class="player-container">
             <div class="player-header">
                 <span id="playerTitle" class="player-title"></span>
                 <div class="player-nav">
-                    <button onclick="playerPrev()" title="Previous">◀</button>
+                    <button onclick="playerPrev()" title="Previous"></button>
                     <span id="playerIndex"></span>
-                    <button onclick="playerNext()" title="Next">▶</button>
+                    <button onclick="playerNext()" title="Next">></button>
                 </div>
                 <div class="player-actions">
-                    <button onclick="popoutPlayer()" title="Pop out to separate window (for second monitor)">⧉ Pop Out</button>
-                    <button onclick="togglePresentationMode()" title="Presentation mode — fullscreen with minimal overlays (F)">⛶ Present</button>
+                    <button onclick="popoutPlayer()" title="Pop out to separate window (for second monitor)"> Pop Out</button>
+                    <button onclick="togglePresentationMode()" title="Presentation mode - fullscreen with minimal overlays (F)"> Present</button>
                 </div>
-                <button class="player-close" onclick="closePlayer()">✕</button>
+                <button class="player-close" onclick="closePlayer()">x</button>
             </div>
             <div class="player-body">
                 <div id="playerContent" class="player-content">
@@ -675,7 +666,7 @@
                 <div id="playerMetaPanel" class="player-meta-panel" style="display:none">
                     <div class="meta-panel-header">
                         <span>Generation Info</span>
-                        <button onclick="toggleMetaPanel()" title="Close (Tab)">✕</button>
+                        <button onclick="toggleMetaPanel()" title="Close (Tab)">x</button>
                     </div>
                     <div id="metaPanelContent" class="meta-panel-body">
                         <div class="meta-empty">No generation metadata for this asset.</div>
@@ -689,15 +680,15 @@
         </div>
     </div>
 
-    <!-- ═══ FOLDER PICKER MODAL ═══ -->
+    <!-- === FOLDER PICKER MODAL === -->
     <div id="folderPickerModal" class="modal" style="display:none" onclick="if(event.target===this)closeFolderPicker()">
         <div class="modal-card folder-picker-card">
             <div class="fp-header">
-                <h3>📂 Select Folder</h3>
-                <button class="player-close" onclick="closeFolderPicker()">✕</button>
+                <h3> Select Folder</h3>
+                <button class="player-close" onclick="closeFolderPicker()">x</button>
             </div>
             <div class="fp-path-bar">
-                <button class="btn-sm" onclick="fpNavigate('')" title="Drives">💾</button>
+                <button class="btn-sm" onclick="fpNavigate('')" title="Drives"></button>
                 <span id="fpCurrentPath" class="fp-current-path">Drives</span>
             </div>
             <div id="fpEntries" class="fp-entries"></div>
@@ -714,23 +705,23 @@
         </div>
     </div>
 
-    <!-- ═══ UPDATE BANNER (persistent, any tab) ═══ -->
+    <!-- === UPDATE BANNER (persistent, any tab) === -->
     <div id="updateBanner" class="update-banner" style="display:none">
-        <div class="update-banner-icon">🎉</div>
+        <div class="update-banner-icon"></div>
         <div class="update-banner-text">
             <strong>Update available!</strong>
             <span id="updateBannerVersion"></span>
         </div>
         <button class="update-banner-btn" onclick="showUpdateModal()">View Details</button>
-        <button class="update-banner-close" onclick="dismissUpdateBanner()" title="Dismiss">✕</button>
+        <button class="update-banner-close" onclick="dismissUpdateBanner()" title="Dismiss">x</button>
     </div>
 
-    <!-- ═══ UPDATE MODAL ═══ -->
+    <!-- === UPDATE MODAL === -->
     <div id="updateModal" class="modal" style="display:none" onclick="if(event.target===this)closeUpdateModal()">
         <div class="modal-card update-modal-card">
             <div class="update-modal-header">
-                <h2>📦 Update Available</h2>
-                <button class="modal-close" onclick="closeUpdateModal()">✕</button>
+                <h2> Update Available</h2>
+                <button class="modal-close" onclick="closeUpdateModal()">x</button>
             </div>
             <div class="update-modal-body">
                 <div class="update-version-row">
@@ -738,14 +729,14 @@
                         <span class="update-version-label">Current</span>
                         <span class="update-version-num" id="updateModalCurrent">v1.0.0</span>
                     </div>
-                    <div class="update-version-arrow">→</div>
+                    <div class="update-version-arrow">-></div>
                     <div class="update-version-box update-version-new">
                         <span class="update-version-label">New</span>
                         <span class="update-version-num" id="updateModalNew">v1.1.0</span>
                     </div>
                 </div>
                 <div class="update-changelog-section">
-                    <h4>📋 What's New</h4>
+                    <h4> What's New</h4>
                     <pre class="update-changelog-content" id="updateModalChangelog">No changelog available.</pre>
                 </div>
             </div>
@@ -753,13 +744,13 @@
                 <div id="updateModalStatus" style="display:none;font-size:0.85rem;"></div>
                 <div class="update-modal-actions">
                     <button class="btn-cancel" onclick="dismissUpdateLater()">Later</button>
-                    <button class="btn-confirm update-now-btn" id="btnUpdateModalApply" onclick="applyUpdateFromModal()">⬇️ Update Now</button>
+                    <button class="btn-confirm update-now-btn" id="btnUpdateModalApply" onclick="applyUpdateFromModal()">Update Now</button>
                 </div>
             </div>
         </div>
     </div>
 
-    <!-- ═══ GENERIC MODAL ═══ -->
+    <!-- === GENERIC MODAL === -->
     <div id="modal" class="modal" style="display:none" onclick="if(event.target===this)closeModal()">
         <div class="modal-card" id="modalContent"></div>
     </div>
@@ -768,7 +759,7 @@
     <script src="/js/lib/mp4box.all.js"></script>
     <script type="module" src="/js/main.js?v=1.4.1"></script>
     <script>
-        // Sequences panel toggle — collapsed by default
+        // Sequences panel toggle - collapsed by default
         function toggleSeqPanel(forceOpen) {
             const list = document.getElementById('sequenceList');
             const toggle = document.getElementById('seqPanelToggle');
@@ -794,3 +785,10 @@
     </script>
 </body>
 </html>
+
+
+
+
+
+
+

@@ -5,7 +5,7 @@
  * See LICENSE file for details.
  */
 /**
- * CAM — Context Menus Module
+ * CAM - Context Menus Module
  * Right-click menus for assets, shots, sequences, projects.
  * Includes CRUD modals (add sequence/shot), bulk ops (move, role-assign,
  * delete), Send to Resolve, Load in ComfyUI, Show File Path.
@@ -23,9 +23,9 @@ import { openPlayer } from './player.js';
 // playSelectedAssets, toggleStar, renameSequence, renameShot
 // openInRV, openPlayerBuiltIn
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  ASSET CONTEXT MENU
-// ═══════════════════════════════════════════
+// ===========================================
 
 async function showContextMenu(event, assetIdx) {
     event.preventDefault();
@@ -86,11 +86,11 @@ async function showContextMenu(event, assetIdx) {
     if (isSingle) {
         if (formats.length <= 1) {
             const ext = (asset.file_ext || '').toLowerCase();
-            html += `<div class="ctx-item" data-action="play">▶️ Play ${ext}</div>`;
-            html += `<div class="ctx-item" data-action="rv">🎬 RV ${ext}</div>`;
-            html += `<div class="ctx-item" data-action="send-rv">📤 Send to RV ${ext}</div>`;
+            html += `<div class="ctx-item" data-action="play"> Play ${ext}</div>`;
+            html += `<div class="ctx-item" data-action="rv"> RV ${ext}</div>`;
+            html += `<div class="ctx-item" data-action="send-rv"> Send to RV ${ext}</div>`;
         } else {
-            html += `<div class="ctx-item ctx-item-parent">▶️ Play`;
+            html += `<div class="ctx-item ctx-item-parent"> Play`;
             html += `<div class="ctx-submenu">`;
             for (const f of formats) {
                 const ext = (f.file_ext || '').toLowerCase();
@@ -98,7 +98,7 @@ async function showContextMenu(event, assetIdx) {
             }
             html += `</div></div>`;
 
-            html += `<div class="ctx-item ctx-item-parent">🎬 RV`;
+            html += `<div class="ctx-item ctx-item-parent"> RV`;
             html += `<div class="ctx-submenu">`;
             for (const f of formats) {
                 const ext = (f.file_ext || '').toLowerCase();
@@ -106,51 +106,51 @@ async function showContextMenu(event, assetIdx) {
             }
             html += `</div></div>`;
         }
-        html += `<div class="ctx-item" data-action="send-rv">📤 Send to RV</div>`;
+        html += `<div class="ctx-item" data-action="send-rv"> Send to RV</div>`;
 
-        html += `<div class="ctx-item" data-action="star">${asset.starred ? '☆' : '⭐'} ${asset.starred ? 'Unstar' : 'Star'}</div>`;
+        html += `<div class="ctx-item" data-action="star">${asset.starred ? '*' : '*'} ${asset.starred ? 'Unstar' : 'Star'}</div>`;
         html += `<div class="ctx-separator"></div>`;
     }
 
     // Multi-asset actions (always available)
-    html += `<div class="ctx-item" data-action="move">📋 Move to Sequence${!isSingle ? ` (${count})` : ''}</div>`;
-    html += `<div class="ctx-item" data-action="role">🎭 Set Role${!isSingle ? ` (${count})` : ''}</div>`;
-    html += `<div class="ctx-item" data-action="export">📤 Export${!isSingle ? ` (${count})` : ''}</div>`;
-    html += `<div class="ctx-item" data-action="addToCrate">📦 Add to Crate${!isSingle ? ` (${count})` : ''}</div>`;
-    html += `<div class="ctx-item" data-action="sendResolve">🎬 Send to Resolve${!isSingle ? ` (${count})` : ''}</div>`;
+    html += `<div class="ctx-item" data-action="move"> Move to Sequence${!isSingle ? ` (${count})` : ''}</div>`;
+    html += `<div class="ctx-item" data-action="role"> Set Role${!isSingle ? ` (${count})` : ''}</div>`;
+    html += `<div class="ctx-item" data-action="export"> Export${!isSingle ? ` (${count})` : ''}</div>`;
+    html += `<div class="ctx-item" data-action="addToCrate"> Add to Crate${!isSingle ? ` (${count})` : ''}</div>`;
+    html += `<div class="ctx-item" data-action="sendResolve"> Send to Resolve${!isSingle ? ` (${count})` : ''}</div>`;
 
     // If viewing a crate, offer remove-from-crate
     if (window.getActiveCrateId?.()) {
-        html += `<div class="ctx-item" data-action="removeFromCrate">📦❌ Remove from Crate${!isSingle ? ` (${count})` : ''}</div>`;
+        html += `<div class="ctx-item" data-action="removeFromCrate"> Remove from Crate${!isSingle ? ` (${count})` : ''}</div>`;
     }
 
     if (count >= 2) {
-        html += `<div class="ctx-item" data-action="play-all">▶️ Play All (${count})</div>`;
-        html += `<div class="ctx-item" data-action="send-rv-set">📤 Send to RV (${count})</div>`;
-        html += `<div class="ctx-item" data-action="send-rv-merge">➕ Add to RV (${count})</div>`;
+        html += `<div class="ctx-item" data-action="play-all"> Play All (${count})</div>`;
+        html += `<div class="ctx-item" data-action="send-rv-set"> Send to RV (${count})</div>`;
+        html += `<div class="ctx-item" data-action="send-rv-merge">+ Add to RV (${count})</div>`;
     }
 
     html += `<div class="ctx-separator"></div>`;
-    html += `<div class="ctx-item" data-action="selectAll">☑ Select All</div>`;
+    html += `<div class="ctx-item" data-action="selectAll">[x] Select All</div>`;
     if (count > 0) {
-        html += `<div class="ctx-item" data-action="deselectAll">☐ Deselect All</div>`;
+        html += `<div class="ctx-item" data-action="deselectAll">[ ] Deselect All</div>`;
     }
 
     if (isSingle && asset.file_path) {
         html += `<div class="ctx-separator"></div>`;
-        html += `<div class="ctx-item" data-action="showPath">📂 Show File Path</div>`;
+        html += `<div class="ctx-item" data-action="showPath"> Show File Path</div>`;
         const comfyExts = ['png', 'mp4', 'webm', 'mkv', 'mov', 'avi'];
         const assetExt = (asset.file_ext || '').replace('.', '').toLowerCase();
         if (comfyExts.includes(assetExt)) {
-            html += `<div class="ctx-item" data-action="loadComfy">🎨 Load in ComfyUI</div>`;
+            html += `<div class="ctx-item" data-action="loadComfy"> Load in ComfyUI</div>`;
         }
     }
 
     // Hide destructive actions when inside a crate (user wants Remove, not Delete)
     if (!window.getActiveCrateId?.()) {
         html += `<div class="ctx-separator"></div>`;
-        html += `<div class="ctx-item ctx-danger" data-action="delete">🗑 Delete${!isSingle ? ` (${count})` : ''}</div>`;
-        html += `<div class="ctx-item ctx-muted" data-action="removeDb">🗑 Remove from DB only${!isSingle ? ` (${count})` : ''}</div>`;
+        html += `<div class="ctx-item ctx-danger" data-action="delete"> Delete${!isSingle ? ` (${count})` : ''}</div>`;
+        html += `<div class="ctx-item ctx-muted" data-action="removeDb"> Remove from DB only${!isSingle ? ` (${count})` : ''}</div>`;
     }
 
     menu.innerHTML = html;
@@ -241,9 +241,9 @@ function onCtxKeydown(e) {
     if (e.key === 'Escape') dismissContextMenu();
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  HIERARCHY CONTEXT MENUS
-// ═══════════════════════════════════════════
+// ===========================================
 
 function dismissHierarchyMenu() {
     const menu = document.getElementById('hierarchyContextMenu');
@@ -287,12 +287,12 @@ function showShotContextMenu(event, seqId, shotId, shotName) {
     menu.className = 'context-menu';
 
     menu.innerHTML = `
-        <div class="ctx-header">🎬 ${esc(shotName)}</div>
+        <div class="ctx-header"> ${esc(shotName)}</div>
         <div class="ctx-separator"></div>
-        <div class="ctx-item" data-action="select">👆 Select Shot</div>
-        <div class="ctx-item" data-action="rename">✏️ Rename</div>
+        <div class="ctx-item" data-action="select"> Select Shot</div>
+        <div class="ctx-item" data-action="rename">Edit Rename</div>
         <div class="ctx-separator"></div>
-        <div class="ctx-item ctx-danger" data-action="delete">🗑 Delete Shot</div>
+        <div class="ctx-item ctx-danger" data-action="delete"> Delete Shot</div>
     `;
 
     menu.addEventListener('click', (e) => {
@@ -324,13 +324,13 @@ function showSeqContextMenu(event, seqId, seqName) {
     const shotCount = seq?.shots?.length || 0;
 
     menu.innerHTML = `
-        <div class="ctx-header">📋 ${esc(seqName)}</div>
+        <div class="ctx-header"> ${esc(seqName)}</div>
         <div class="ctx-separator"></div>
-        <div class="ctx-item" data-action="select">👆 Select Sequence</div>
-        <div class="ctx-item" data-action="rename">✏️ Rename</div>
-        <div class="ctx-item" data-action="addShot">➕ Add Shot</div>
+        <div class="ctx-item" data-action="select"> Select Sequence</div>
+        <div class="ctx-item" data-action="rename">Edit Rename</div>
+        <div class="ctx-item" data-action="addShot">+ Add Shot</div>
         <div class="ctx-separator"></div>
-        <div class="ctx-item ctx-danger" data-action="delete">🗑 Delete Sequence${shotCount > 0 ? ` (${shotCount} shots)` : ''}</div>
+        <div class="ctx-item ctx-danger" data-action="delete"> Delete Sequence${shotCount > 0 ? ` (${shotCount} shots)` : ''}</div>
     `;
 
     menu.addEventListener('click', (e) => {
@@ -365,13 +365,13 @@ function showProjectContextMenu(event) {
     const seqCount = project.sequences?.length || 0;
 
     menu.innerHTML = `
-        <div class="ctx-header">${project.type === 'shot_based' ? '🎬' : '📁'} ${esc(project.name)}</div>
+        <div class="ctx-header">${project.type === 'shot_based' ? '' : ''} ${esc(project.name)}</div>
         <div class="ctx-separator"></div>
-        <div class="ctx-item" data-action="addSeq">➕ Add Sequence</div>
-        <div class="ctx-item" data-action="editNaming">🏗️ Naming Convention</div>
+        <div class="ctx-item" data-action="addSeq">+ Add Sequence</div>
+        <div class="ctx-item" data-action="editNaming"> Naming Convention</div>
         <div class="ctx-separator"></div>
-        <div class="ctx-item" data-action="archive">${project.archived ? '📂 Unarchive Project' : '📦 Archive Project'}</div>
-        <div class="ctx-item ctx-danger" data-action="delete">🗑 Delete Project${seqCount > 0 ? ` (${seqCount} sequences)` : ''}</div>
+        <div class="ctx-item" data-action="archive">${project.archived ? ' Unarchive Project' : ' Archive Project'}</div>
+        <div class="ctx-item ctx-danger" data-action="delete"> Delete Project${seqCount > 0 ? ` (${seqCount} sequences)` : ''}</div>
     `;
 
     menu.addEventListener('click', (e) => {
@@ -390,9 +390,9 @@ function showProjectContextMenu(event) {
     positionContextMenu(menu, event);
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  DELETE OPERATIONS
-// ═══════════════════════════════════════════
+// ===========================================
 
 async function deleteShot(seqId, shotId, shotName) {
     if (!state.currentProject) return;
@@ -407,7 +407,7 @@ async function deleteShot(seqId, shotId, shotName) {
         window.loadProjectAssets?.(projectId);
         await window.loadTree?.();
     } catch (err) {
-        alert('❌ Delete shot failed: ' + err.message);
+        alert(' Delete shot failed: ' + err.message);
     }
 }
 
@@ -425,13 +425,13 @@ async function deleteSequence(seqId, seqName) {
         window.loadProjectAssets?.(projectId);
         await window.loadTree?.();
     } catch (err) {
-        alert('❌ Delete sequence failed: ' + err.message);
+        alert(' Delete sequence failed: ' + err.message);
     }
 }
 
 async function deleteCurrentProject() {
     if (!state.currentProject) return;
-    if (!confirmDelete(`⚠️ DELETE ENTIRE PROJECT "${state.currentProject.name}"?\n\nThis will delete ALL sequences, shots, and assets!\n\nThis cannot be undone!`)) return;
+    if (!confirmDelete(` DELETE ENTIRE PROJECT "${state.currentProject.name}"?\n\nThis will delete ALL sequences, shots, and assets!\n\nThis cannot be undone!`)) return;
 
     try {
         await api(`/api/projects/${state.currentProject.id}`, { method: 'DELETE' });
@@ -442,9 +442,9 @@ async function deleteCurrentProject() {
     }
 }
 
-// ═══════════════════════════════════════════
-//  BULK OPS — Move to Sequence, Assign Role
-// ═══════════════════════════════════════════
+// ===========================================
+//  BULK OPS - Move to Sequence, Assign Role
+// ===========================================
 
 async function showMoveToSequenceModal() {
     if (state.selectedAssets.length === 0) return;
@@ -463,7 +463,7 @@ async function showMoveToSequenceModal() {
         </select>
         <div class="form-actions" style="margin-top:20px">
             <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-            <button class="btn-primary" onclick="executeMoveToSequence()">📋 Move</button>
+            <button class="btn-primary" onclick="executeMoveToSequence()"> Move</button>
         </div>
     `;
     document.getElementById('modal').style.display = 'flex';
@@ -483,8 +483,8 @@ async function executeMoveToSequence() {
         });
 
         closeModal();
-        alert(`✅ Moved ${result.moved} asset(s).` +
-            (result.errors > 0 ? `\n⚠️ ${result.errors} error(s)` : ''));
+        alert(` Moved ${result.moved} asset(s).` +
+            (result.errors > 0 ? `\n ${result.errors} error(s)` : ''));
 
         state.selectedAssets = [];
         state.lastClickedAsset = -1;
@@ -496,7 +496,7 @@ async function executeMoveToSequence() {
             window.loadProjectAssets?.(state.currentProject.id);
         }
     } catch (err) {
-        alert('❌ Move failed: ' + err.message);
+        alert(' Move failed: ' + err.message);
     }
 }
 
@@ -507,12 +507,12 @@ async function showAssignRoleModal() {
     try { roles = await api('/api/roles'); } catch { /* no roles */ }
 
     if (roles.length === 0) {
-        alert('No roles defined. Go to Settings → Roles to create some.');
+        alert('No roles defined. Go to Settings -> Roles to create some.');
         return;
     }
 
     document.getElementById('modalContent').innerHTML = `
-        <h3>🎭 Assign Role to ${state.selectedAssets.length} Asset(s)</h3>
+        <h3> Assign Role to ${state.selectedAssets.length} Asset(s)</h3>
         <p style="color:var(--text-dim);margin-bottom:16px">Categorize assets by department/role.</p>
         <label>Role</label>
         <select id="assignRoleSelect">
@@ -521,7 +521,7 @@ async function showAssignRoleModal() {
         </select>
         <div class="form-actions" style="margin-top:20px">
             <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-            <button class="btn-primary" onclick="executeAssignRole()">🎭 Assign</button>
+            <button class="btn-primary" onclick="executeAssignRole()"> Assign</button>
         </div>
     `;
     document.getElementById('modal').style.display = 'flex';
@@ -541,7 +541,7 @@ async function executeAssignRole() {
 
         closeModal();
         const action = roleId ? 'assigned role to' : 'cleared role from';
-        showToast(`✅ ${action} ${state.selectedAssets.length} asset(s)`);
+        showToast(` ${action} ${state.selectedAssets.length} asset(s)`);
 
         state.selectedAssets = [];
         state.lastClickedAsset = -1;
@@ -551,7 +551,7 @@ async function executeAssignRole() {
             window.loadProjectAssets?.(state.currentProject.id);
         }
     } catch (err) {
-        alert('❌ Role assignment failed: ' + err.message);
+        alert(' Role assignment failed: ' + err.message);
     }
 }
 
@@ -561,7 +561,7 @@ async function bulkDeleteAssets(dbOnly = false) {
 
     const msg = dbOnly
         ? `Remove ${count} asset(s) from the database?\n\nFiles will be KEPT on disk.`
-        : `DELETE ${count} asset(s)?\n\n⚠️ This will permanently delete the files from disk!\n\nThis cannot be undone.`;
+        : `DELETE ${count} asset(s)?\n\n This will permanently delete the files from disk!\n\nThis cannot be undone.`;
 
     if (!confirmDelete(msg)) return;
 
@@ -574,8 +574,8 @@ async function bulkDeleteAssets(dbOnly = false) {
             },
         });
 
-        alert(`✅ Deleted ${result.deleted} asset(s).` +
-            (result.errors > 0 ? `\n⚠️ ${result.errors} error(s)` : ''));
+        alert(` Deleted ${result.deleted} asset(s).` +
+            (result.errors > 0 ? `\n ${result.errors} error(s)` : ''));
 
         state.selectedAssets = [];
         state.lastClickedAsset = -1;
@@ -585,13 +585,13 @@ async function bulkDeleteAssets(dbOnly = false) {
         }
         window.checkSetup?.();
     } catch (err) {
-        alert('❌ Delete failed: ' + err.message);
+        alert(' Delete failed: ' + err.message);
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  SEQUENCES & SHOTS CRUD
-// ═══════════════════════════════════════════
+// ===========================================
 
 function showAddSequenceModal() {
     if (!state.currentProject) return;
@@ -663,9 +663,9 @@ async function createShot() {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  SEND TO DAVINCI RESOLVE
-// ═══════════════════════════════════════════
+// ===========================================
 
 async function sendToResolve() {
     const ids = state.selectedAssets;
@@ -682,7 +682,7 @@ async function sendToResolve() {
     box.style.cssText = 'background:#222;border:1px solid #444;border-radius:8px;padding:24px 28px;max-width:500px;width:90%;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
 
     box.innerHTML = `
-        <div style="font-size:15px;font-weight:600;color:#ddd;margin-bottom:16px;">🎬 Send to DaVinci Resolve</div>
+        <div style="font-size:15px;font-weight:600;color:#ddd;margin-bottom:16px;"> Send to DaVinci Resolve</div>
         <div style="font-size:12px;color:#888;margin-bottom:12px;">${ids.length} asset${ids.length > 1 ? 's' : ''} selected</div>
         <label style="display:flex;align-items:center;gap:8px;margin-bottom:12px;cursor:pointer;">
             <input type="checkbox" id="resolveAutoHierarchy" checked
@@ -699,7 +699,7 @@ async function sendToResolve() {
             <button onclick="this.closest('#resolveModal').remove()"
                     style="padding:8px 16px;background:#333;border:1px solid #444;border-radius:4px;color:#aaa;cursor:pointer;font-size:13px;">Cancel</button>
             <button id="resolveSendBtn" onclick="executeSendToResolve()"
-                    style="padding:8px 20px;background:#444;border:1px solid #555;border-radius:4px;color:#ddd;cursor:pointer;font-size:13px;font-weight:500;">Send →</button>
+                    style="padding:8px 20px;background:#444;border:1px solid #555;border-radius:4px;color:#ddd;cursor:pointer;font-size:13px;font-weight:500;">Send -></button>
         </div>
     `;
 
@@ -718,12 +718,12 @@ async function sendToResolve() {
     try {
         const res = await api('/api/resolve/status');
         if (res.running) {
-            statusEl.innerHTML = `<span style="color:#6a6">✓ Connected to Resolve — ${esc(res.currentProject || 'No project open')}</span>`;
+            statusEl.innerHTML = `<span style="color:#6a6">Success: Connected to Resolve - ${esc(res.currentProject || 'No project open')}</span>`;
         } else {
-            statusEl.innerHTML = `<span style="color:#a66">⚠ Resolve not detected. Make sure Resolve is running.</span>`;
+            statusEl.innerHTML = `<span style="color:#a66">Warning: Resolve not detected. Make sure Resolve is running.</span>`;
         }
     } catch (e) {
-        statusEl.innerHTML = `<span style="color:#a66">⚠ Cannot check Resolve status</span>`;
+        statusEl.innerHTML = `<span style="color:#a66">Warning: Cannot check Resolve status</span>`;
     }
 
     const onKey = (e) => { if (e.key === 'Escape') { overlay.remove(); document.removeEventListener('keydown', onKey); } };
@@ -739,8 +739,8 @@ async function executeSendToResolve() {
 
     const statusEl = document.getElementById('resolveStatus');
     const sendBtn = document.getElementById('resolveSendBtn');
-    if (statusEl) statusEl.innerHTML = '<span style="color:#888">⏳ Sending to Resolve…</span>';
-    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending…'; }
+    if (statusEl) statusEl.innerHTML = '<span style="color:#888"> Sending to Resolve...</span>';
+    if (sendBtn) { sendBtn.disabled = true; sendBtn.textContent = 'Sending...'; }
 
     try {
         const body = { assetIds: ids, createBins: true };
@@ -758,12 +758,12 @@ async function executeSendToResolve() {
         });
 
         if (res.success) {
-            const msg = `✅ ${res.imported || ids.length} asset${(res.imported || ids.length) > 1 ? 's' : ''} sent to Resolve → ${res.bin || 'Master'}`;
+            const msg = ` ${res.imported || ids.length} asset${(res.imported || ids.length) > 1 ? 's' : ''} sent to Resolve -> ${res.bin || 'Master'}`;
             if (statusEl) statusEl.innerHTML = `<span style="color:#6a6">${esc(msg)}</span>`;
             showToast(msg, 4000);
 
             if (res.warnings) {
-                if (statusEl) statusEl.innerHTML += `<br><span style="color:#a86">⚠ ${esc(res.warnings.message)}</span>`;
+                if (statusEl) statusEl.innerHTML += `<br><span style="color:#a86">Warning: ${esc(res.warnings.message)}</span>`;
             }
 
             setTimeout(() => {
@@ -771,20 +771,20 @@ async function executeSendToResolve() {
             }, 2000);
         } else {
             const errMsg = res.error || 'Unknown error';
-            if (statusEl) statusEl.innerHTML = `<span style="color:#a66">❌ ${esc(errMsg)}</span>`;
+            if (statusEl) statusEl.innerHTML = `<span style="color:#a66"> ${esc(errMsg)}</span>`;
             showToast('Failed: ' + errMsg, 5000);
         }
     } catch (e) {
-        if (statusEl) statusEl.innerHTML = `<span style="color:#a66">❌ ${e.message}</span>`;
+        if (statusEl) statusEl.innerHTML = `<span style="color:#a66"> ${e.message}</span>`;
         showToast('Resolve error: ' + e.message, 5000);
     } finally {
-        if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send →'; }
+        if (sendBtn) { sendBtn.disabled = false; sendBtn.textContent = 'Send ->'; }
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  SHOW FILE PATH MODAL
-// ═══════════════════════════════════════════
+// ===========================================
 
 function showFilePathModal(filePath, vaultName) {
     document.getElementById('filePathModal')?.remove();
@@ -806,7 +806,7 @@ function showFilePathModal(filePath, vaultName) {
     pathEl.style.cssText = 'font-family:monospace;font-size:13px;color:#ddd;background:#1a1a1a;border:1px solid #333;border-radius:4px;padding:12px 14px;word-break:break-all;user-select:all;cursor:text;line-height:1.5;';
 
     const hint = document.createElement('div');
-    hint.textContent = 'Select text above to copy  •  Click outside or press Esc to close';
+    hint.textContent = 'Select text above to copy  .  Click outside or press Esc to close';
     hint.style.cssText = 'font-size:11px;color:#555;margin-top:10px;text-align:center;';
 
     box.append(title, pathEl, hint);
@@ -817,13 +817,13 @@ function showFilePathModal(filePath, vaultName) {
     document.addEventListener('keydown', onKey);
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  LOAD IN COMFYUI
-// ═══════════════════════════════════════════
+// ===========================================
 
 async function loadInComfyUI(assetId, assetName) {
     try {
-        showToast('Extracting workflow…');
+        showToast('Extracting workflow...');
 
         const res = await fetch(`/api/comfyui/load-in-comfy/${assetId}`, { method: 'POST' });
         const data = await res.json();
@@ -835,7 +835,7 @@ async function loadInComfyUI(assetId, assetName) {
 
         const comfyTab = window.open(data.comfyUrl + '?cam_load=1', 'comfyui');
         if (!comfyTab) {
-            showToast('Pop-up blocked — allow pop-ups for this site', 5000);
+            showToast('Pop-up blocked - allow pop-ups for this site', 5000);
             return;
         }
 
@@ -845,9 +845,9 @@ async function loadInComfyUI(assetId, assetName) {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  RENAME SHOT / SEQUENCE (called from hierarchy context menus)
-// ═══════════════════════════════════════════
+// ===========================================
 
 async function renameShot(seqId, shotId, currentName) {
     const newName = prompt('Rename shot:', currentName);
@@ -865,7 +865,7 @@ async function renameShot(seqId, shotId, currentName) {
         window.renderProjectDetail?.(proj);
         await window.loadTree?.();
     } catch (err) {
-        alert('❌ Rename failed: ' + err.message);
+        alert(' Rename failed: ' + err.message);
     }
 }
 
@@ -887,16 +887,16 @@ async function renameSequence(seqId, currentName) {
         window.renderProjectDetail?.(proj);
         await window.loadTree?.();
     } catch (err) {
-        alert('❌ Rename failed: ' + err.message);
+        alert(' Rename failed: ' + err.message);
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  IMPORT FROM DAVINCI RESOLVE (Phase 2)
-// ═══════════════════════════════════════════
+// ===========================================
 
 /**
- * "Import from Resolve" modal — pulls all clips from Resolve's media pool,
+ * "Import from Resolve" modal - pulls all clips from Resolve's media pool,
  * lets user select which ones to register in CAM, and creates a project
  * with the bin hierarchy mapped to sequences/shots.
  */
@@ -912,9 +912,9 @@ async function importFromResolve() {
     box.style.cssText = 'background:#222;border:1px solid #444;border-radius:8px;padding:24px 28px;max-width:700px;width:92%;max-height:85vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
 
     box.innerHTML = `
-        <div style="font-size:15px;font-weight:600;color:#ddd;margin-bottom:4px;">🎬 Import from DaVinci Resolve</div>
+        <div style="font-size:15px;font-weight:600;color:#ddd;margin-bottom:4px;"> Import from DaVinci Resolve</div>
         <div style="font-size:12px;color:#888;margin-bottom:16px;">Pull your Resolve media pool into CAM. Files stay in place (register-in-place).</div>
-        <div id="resolveImportStatus" style="font-size:12px;color:#888;margin-bottom:12px;min-height:18px;">Connecting to Resolve…</div>
+        <div id="resolveImportStatus" style="font-size:12px;color:#888;margin-bottom:12px;min-height:18px;">Connecting to Resolve...</div>
 
         <!-- Project name row -->
         <div id="resolveImportForm" style="display:none;">
@@ -949,14 +949,14 @@ async function importFromResolve() {
                 <button onclick="document.getElementById('resolveImportModal')?.remove()"
                         style="padding:8px 16px;background:#333;border:1px solid #444;border-radius:4px;color:#aaa;cursor:pointer;font-size:13px;">Cancel</button>
                 <button id="resolveImportBtn" onclick="executeImportFromResolve()"
-                        style="padding:8px 20px;background:#444;border:1px solid #555;border-radius:4px;color:#ddd;cursor:pointer;font-size:13px;font-weight:500;">📥 Import Selected</button>
+                        style="padding:8px 20px;background:#444;border:1px solid #555;border-radius:4px;color:#ddd;cursor:pointer;font-size:13px;font-weight:500;"> Import Selected</button>
             </div>
         </div>
 
         <!-- Loading / error state -->
         <div id="resolveImportLoading" style="text-align:center;padding:30px 0;">
-            <div style="font-size:24px;margin-bottom:8px;">⏳</div>
-            <div style="font-size:13px;color:#888;">Scanning Resolve media pool…</div>
+            <div style="font-size:24px;margin-bottom:8px;"></div>
+            <div style="font-size:13px;color:#888;">Scanning Resolve media pool...</div>
         </div>
     `;
 
@@ -974,20 +974,20 @@ async function importFromResolve() {
     try {
         const data = await api('/api/resolve/media-pool');
         if (!data.success) {
-            loadingEl.innerHTML = `<div style="color:#a66;font-size:13px;">❌ ${esc(data.error || 'Could not connect to Resolve')}</div>
+            loadingEl.innerHTML = `<div style="color:#a66;font-size:13px;"> ${esc(data.error || 'Could not connect to Resolve')}</div>
                 <div style="margin-top:12px;"><button onclick="document.getElementById('resolveImportModal')?.remove()" style="padding:6px 14px;background:#333;border:1px solid #444;border-radius:4px;color:#aaa;cursor:pointer;font-size:13px;">Close</button></div>`;
             return;
         }
 
         if (!data.clips || data.clips.length === 0) {
-            loadingEl.innerHTML = `<div style="color:#a86;font-size:13px;">⚠ No media clips found in Resolve's media pool.</div>
+            loadingEl.innerHTML = `<div style="color:#a86;font-size:13px;">Warning: No media clips found in Resolve's media pool.</div>
                 <div style="font-size:12px;color:#666;margin-top:6px;">Make sure your Resolve project has media imported.</div>
                 <div style="margin-top:12px;"><button onclick="document.getElementById('resolveImportModal')?.remove()" style="padding:6px 14px;background:#333;border:1px solid #444;border-radius:4px;color:#aaa;cursor:pointer;font-size:13px;">Close</button></div>`;
             return;
         }
 
         // Populate form
-        statusEl.innerHTML = `<span style="color:#6a6;">✓ Connected to Resolve — ${esc(data.project)}</span>  ·  <span style="color:#aaa;">${data.mediaClips} clips found</span>`;
+        statusEl.innerHTML = `<span style="color:#6a6;">Success: Connected to Resolve - ${esc(data.project)}</span>  .  <span style="color:#aaa;">${data.mediaClips} clips found</span>`;
         document.getElementById('resolveImportProjectName').value = data.project || '';
         loadingEl.style.display = 'none';
         formEl.style.display = 'block';
@@ -1006,7 +1006,7 @@ async function importFromResolve() {
         });
 
     } catch (e) {
-        loadingEl.innerHTML = `<div style="color:#a66;font-size:13px;">❌ ${esc(e.message)}</div>
+        loadingEl.innerHTML = `<div style="color:#a66;font-size:13px;"> ${esc(e.message)}</div>
             <div style="font-size:12px;color:#666;margin-top:6px;">Make sure DaVinci Resolve is running and scripting is enabled.</div>
             <div style="margin-top:12px;"><button onclick="document.getElementById('resolveImportModal')?.remove()" style="padding:6px 14px;background:#333;border:1px solid #444;border-radius:4px;color:#aaa;cursor:pointer;font-size:13px;">Close</button></div>`;
     }
@@ -1030,11 +1030,11 @@ function renderResolveClipList(clips) {
     for (const bin of bins) {
         // Bin header
         const shortBin = bin.split('/').slice(1).join(' / ') || bin; // skip root "Master"
-        html += `<div style="padding:6px 10px;background:#252525;font-size:11px;color:#888;border-bottom:1px solid #2a2a2a;font-weight:600;">📁 ${esc(shortBin || 'Media Pool Root')}</div>`;
+        html += `<div style="padding:6px 10px;background:#252525;font-size:11px;color:#888;border-bottom:1px solid #2a2a2a;font-weight:600;"> ${esc(shortBin || 'Media Pool Root')}</div>`;
 
         for (const clip of byBin[bin]) {
             const ext = (clip.filePath || '').split('.').pop().toUpperCase();
-            const meta = [clip.resolution, clip.fps ? clip.fps + ' fps' : '', clip.codec].filter(Boolean).join('  ·  ');
+            const meta = [clip.resolution, clip.fps ? clip.fps + ' fps' : '', clip.codec].filter(Boolean).join('  .  ');
             html += `
                 <label style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid #222;cursor:pointer;transition:background 0.15s;"
                        onmouseenter="this.style.background='#2a2a2a'" onmouseleave="this.style.background='transparent'">
@@ -1063,7 +1063,7 @@ function updateResolveImportCount() {
     const btn = document.getElementById('resolveImportBtn');
     if (btn) {
         btn.disabled = checked === 0;
-        btn.textContent = checked > 0 ? `📥 Import ${checked} Clip${checked > 1 ? 's' : ''}` : '📥 Import Selected';
+        btn.textContent = checked > 0 ? ` Import ${checked} Clip${checked > 1 ? 's' : ''}` : ' Import Selected';
     }
 }
 
@@ -1095,8 +1095,8 @@ async function executeImportFromResolve() {
 
     const statusEl = document.getElementById('resolveImportStatus');
     const btn = document.getElementById('resolveImportBtn');
-    if (statusEl) statusEl.innerHTML = `<span style="color:#888;">⏳ Importing ${selectedClips.length} clips into CAM…</span>`;
-    if (btn) { btn.disabled = true; btn.textContent = 'Importing…'; }
+    if (statusEl) statusEl.innerHTML = `<span style="color:#888;"> Importing ${selectedClips.length} clips into CAM...</span>`;
+    if (btn) { btn.disabled = true; btn.textContent = 'Importing...'; }
 
     try {
         const res = await api('/api/resolve/import-pool', {
@@ -1110,11 +1110,11 @@ async function executeImportFromResolve() {
         });
 
         if (res.success) {
-            const msg = `✅ Imported ${res.imported} clip${res.imported !== 1 ? 's' : ''} into project "${esc(projectName)}"`;
+            const msg = ` Imported ${res.imported} clip${res.imported !== 1 ? 's' : ''} into project "${esc(projectName)}"`;
             if (statusEl) {
                 statusEl.innerHTML = `<span style="color:#6a6;">${msg}</span>`;
                 if (res.errors > 0) {
-                    statusEl.innerHTML += `<br><span style="color:#a86;">⚠ ${res.errors} clip${res.errors !== 1 ? 's' : ''} had errors</span>`;
+                    statusEl.innerHTML += `<br><span style="color:#a86;">Warning: ${res.errors} clip${res.errors !== 1 ? 's' : ''} had errors</span>`;
                 }
             }
             showToast(msg, 5000);
@@ -1127,24 +1127,24 @@ async function executeImportFromResolve() {
             }, 2500);
         } else {
             const errMsg = res.error || 'Unknown error';
-            if (statusEl) statusEl.innerHTML = `<span style="color:#a66;">❌ ${esc(errMsg)}</span>`;
-            if (btn) { btn.disabled = false; btn.textContent = '📥 Import Selected'; }
+            if (statusEl) statusEl.innerHTML = `<span style="color:#a66;"> ${esc(errMsg)}</span>`;
+            if (btn) { btn.disabled = false; btn.textContent = ' Import Selected'; }
             showToast('Import failed: ' + errMsg, 5000);
         }
     } catch (e) {
-        if (statusEl) statusEl.innerHTML = `<span style="color:#a66;">❌ ${esc(e.message)}</span>`;
-        if (btn) { btn.disabled = false; btn.textContent = '📥 Import Selected'; }
+        if (statusEl) statusEl.innerHTML = `<span style="color:#a66;"> ${esc(e.message)}</span>`;
+        if (btn) { btn.disabled = false; btn.textContent = ' Import Selected'; }
         showToast('Import error: ' + e.message, 5000);
     }
 }
 
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  REORGANIZE & RELINK TO RESOLVE
-// ═══════════════════════════════════════════
+// ===========================================
 
 /**
- * "Reorganize & Relink" — after user has organized assets in CAM
+ * "Reorganize & Relink" - after user has organized assets in CAM
  * (renamed, assigned to sequences/shots, set naming convention),
  * this renames/moves files per the naming convention and sends a
  * relink map to Resolve so the timeline still works.
@@ -1170,11 +1170,11 @@ async function reorganizeAndRelink() {
     box.style.cssText = 'background:#222;border:1px solid #444;border-radius:8px;padding:24px 28px;max-width:600px;width:92%;max-height:80vh;display:flex;flex-direction:column;box-shadow:0 8px 32px rgba(0,0,0,0.5);';
 
     box.innerHTML = `
-        <div style="font-size:15px;font-weight:600;color:#ddd;margin-bottom:4px;">🔄 Reorganize & Relink to Resolve</div>
+        <div style="font-size:15px;font-weight:600;color:#ddd;margin-bottom:4px;"> Reorganize & Relink to Resolve</div>
         <div style="font-size:12px;color:#888;margin-bottom:16px;">
             Copy linked files into the vault folder structure, rename using naming convention, then update Resolve's media pool so the timeline still works. Originals are not touched.
         </div>
-        <div id="relinkStatus" style="font-size:12px;color:#888;margin-bottom:12px;min-height:18px;">Scanning project assets…</div>
+        <div id="relinkStatus" style="font-size:12px;color:#888;margin-bottom:12px;min-height:18px;">Scanning project assets...</div>
         <div id="relinkContent" style="flex:1;overflow-y:auto;max-height:45vh;margin-bottom:14px;"></div>
         <div id="relinkActions" style="display:flex;gap:8px;justify-content:flex-end;">
             <button onclick="document.getElementById('relinkModal')?.remove()"
@@ -1199,7 +1199,7 @@ async function reorganizeAndRelink() {
         const linkedAssets = allAssets.filter(a => a.is_linked == 1);
 
         if (!linkedAssets.length) {
-            statusEl.innerHTML = `<span style="color:#a86;">⚠ No linked (register-in-place) assets found in this project.</span>`;
+            statusEl.innerHTML = `<span style="color:#a86;">Warning: No linked (register-in-place) assets found in this project.</span>`;
             contentEl.innerHTML = `<div style="padding:16px;font-size:12px;color:#666;">This feature works with assets imported from Resolve via "Import from Resolve". Copied/moved assets are already managed by CAM.</div>`;
             return;
         }
@@ -1213,8 +1213,8 @@ async function reorganizeAndRelink() {
 
         statusEl.innerHTML = `<span style="color:#aaa;">Found ${linkedAssets.length} linked asset${linkedAssets.length !== 1 ? 's' : ''}.</span>` +
             (resolveConnected
-                ? `  <span style="color:#6a6;">✓ Resolve connected</span>`
-                : `  <span style="color:#a86;">⚠ Resolve not detected — relink will be skipped</span>`);
+                ? `  <span style="color:#6a6;">Success: Resolve connected</span>`
+                : `  <span style="color:#a86;">Warning: Resolve not detected - relink will be skipped</span>`);
 
         // Show preview of what will happen
         let previewHtml = `<div style="font-size:12px;color:#888;padding:8px 0 4px;">This will:</div>
@@ -1227,7 +1227,7 @@ async function reorganizeAndRelink() {
             <div style="border:1px solid #333;border-radius:4px;background:#1a1a1a;max-height:30vh;overflow-y:auto;">`;
 
         for (const asset of linkedAssets) {
-            const shortPath = asset.file_path ? '…' + asset.file_path.split(/[/\\]/).slice(-3).join('/') : '(no path)';
+            const shortPath = asset.file_path ? '...' + asset.file_path.split(/[/\\]/).slice(-3).join('/') : '(no path)';
             previewHtml += `
                 <div style="display:flex;align-items:center;gap:8px;padding:5px 10px;border-bottom:1px solid #222;">
                     <span style="font-size:12px;color:#ccc;flex:1;overflow:hidden;text-overflow:ellipsis;white-space:nowrap;" title="${esc(asset.file_path || '')}">${esc(asset.original_name || asset.vault_name)}</span>
@@ -1242,19 +1242,19 @@ async function reorganizeAndRelink() {
             <button onclick="document.getElementById('relinkModal')?.remove()"
                     style="padding:8px 16px;background:#333;border:1px solid #444;border-radius:4px;color:#aaa;cursor:pointer;font-size:13px;">Cancel</button>
             <button id="relinkExecBtn" onclick="executeReorganizeAndRelink(${projectId}, ${resolveConnected})"
-                    style="padding:8px 20px;background:#444;border:1px solid #555;border-radius:4px;color:#ddd;cursor:pointer;font-size:13px;font-weight:500;">🔄 Reorganize ${linkedAssets.length} Files</button>
+                    style="padding:8px 20px;background:#444;border:1px solid #555;border-radius:4px;color:#ddd;cursor:pointer;font-size:13px;font-weight:500;"> Reorganize ${linkedAssets.length} Files</button>
         `;
 
     } catch (e) {
-        statusEl.innerHTML = `<span style="color:#a66;">❌ ${esc(e.message)}</span>`;
+        statusEl.innerHTML = `<span style="color:#a66;"> ${esc(e.message)}</span>`;
     }
 }
 
 async function executeReorganizeAndRelink(projectId, resolveConnected) {
     const statusEl = document.getElementById('relinkStatus');
     const btn = document.getElementById('relinkExecBtn');
-    if (statusEl) statusEl.innerHTML = '<span style="color:#888;">⏳ Reorganizing files…</span>';
-    if (btn) { btn.disabled = true; btn.textContent = 'Working…'; }
+    if (statusEl) statusEl.innerHTML = '<span style="color:#888;"> Reorganizing files...</span>';
+    if (btn) { btn.disabled = true; btn.textContent = 'Working...'; }
 
     try {
         // Step 1: Call backend to reorganize linked assets
@@ -1265,16 +1265,16 @@ async function executeReorganizeAndRelink(projectId, resolveConnected) {
         });
 
         if (!result.success) {
-            if (statusEl) statusEl.innerHTML = `<span style="color:#a66;">❌ ${esc(result.error)}</span>`;
-            if (btn) { btn.disabled = false; btn.textContent = '🔄 Retry'; }
+            if (statusEl) statusEl.innerHTML = `<span style="color:#a66;"> ${esc(result.error)}</span>`;
+            if (btn) { btn.disabled = false; btn.textContent = ' Retry'; }
             return;
         }
 
-        let msg = `✅ ${result.moved} file${result.moved !== 1 ? 's' : ''} reorganized into vault`;
+        let msg = ` ${result.moved} file${result.moved !== 1 ? 's' : ''} reorganized into vault`;
 
         // Step 2: If Resolve is connected and we have relink mappings, relink
         if (resolveConnected && result.relinkMap && Object.keys(result.relinkMap).length > 0) {
-            if (statusEl) statusEl.innerHTML = '<span style="color:#888;">⏳ Relinking in Resolve…</span>';
+            if (statusEl) statusEl.innerHTML = '<span style="color:#888;"> Relinking in Resolve...</span>';
 
             try {
                 const relinkResult = await api('/api/resolve/relink', {
@@ -1284,15 +1284,15 @@ async function executeReorganizeAndRelink(projectId, resolveConnected) {
                 });
 
                 if (relinkResult.success) {
-                    msg += ` · ${relinkResult.relinked} clip${relinkResult.relinked !== 1 ? 's' : ''} relinked in Resolve`;
+                    msg += ` . ${relinkResult.relinked} clip${relinkResult.relinked !== 1 ? 's' : ''} relinked in Resolve`;
                     if (relinkResult.not_found > 0) {
-                        msg += ` · ${relinkResult.not_found} not found in Resolve`;
+                        msg += ` . ${relinkResult.not_found} not found in Resolve`;
                     }
                 } else {
-                    msg += ' · ⚠ Resolve relink failed: ' + (relinkResult.error || 'unknown error');
+                    msg += ' . Warning: Resolve relink failed: ' + (relinkResult.error || 'unknown error');
                 }
             } catch (e) {
-                msg += ' · ⚠ Resolve relink error: ' + e.message;
+                msg += ' . Warning: Resolve relink error: ' + e.message;
             }
         }
 
@@ -1307,16 +1307,16 @@ async function executeReorganizeAndRelink(projectId, resolveConnected) {
         }, 3000);
 
     } catch (e) {
-        if (statusEl) statusEl.innerHTML = `<span style="color:#a66;">❌ ${esc(e.message)}</span>`;
-        if (btn) { btn.disabled = false; btn.textContent = '🔄 Retry'; }
+        if (statusEl) statusEl.innerHTML = `<span style="color:#a66;"> ${esc(e.message)}</span>`;
+        if (btn) { btn.disabled = false; btn.textContent = ' Retry'; }
         showToast('Reorganize error: ' + e.message, 5000);
     }
 }
 
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EXPOSE ON WINDOW
-// ═══════════════════════════════════════════
+// ===========================================
 
 window.showContextMenu = showContextMenu;
 window.showShotContextMenu = showShotContextMenu;
@@ -1345,3 +1345,5 @@ window.showFilePathModal = showFilePathModal;
 window.loadInComfyUI = loadInComfyUI;
 window.renameShot = renameShot;
 window.renameSequence = renameSequence;
+
+

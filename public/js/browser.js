@@ -5,13 +5,13 @@
  * See LICENSE file for details.
  */
 /**
- * CAM — Browser Orchestrator
+ * CAM - Browser Orchestrator
  *
  * Thin module that wires together the focused browser sub-modules:
- *   projectView.js  — Project grid, create/edit/archive modals
- *   treeNav.js      — Left-side hierarchy tree navigation
- *   assetGrid.js    — Asset browsing, selection, drag/drop, polling
- *   contextMenus.js — Right-click menus, bulk ops, CRUD modals, Resolve/ComfyUI
+ *   projectView.js  - Project grid, create/edit/archive modals
+ *   treeNav.js      - Left-side hierarchy tree navigation
+ *   assetGrid.js    - Asset browsing, selection, drag/drop, polling
+ *   contextMenus.js - Right-click menus, bulk ops, CRUD modals, Resolve/ComfyUI
  *
  * This file exists so that main.js can keep its single import line:
  *   import { loadProjects, loadTree, initFileDropZone, loadCrates } from './browser.js';

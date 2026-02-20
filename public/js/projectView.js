@@ -5,7 +5,7 @@
  * See LICENSE file for details.
  */
 /**
- * CAM — Project View Module
+ * CAM - Project View Module
  * Project grid, create/edit modals, archive operations.
  * Handles the "Projects" tab content.
  */
@@ -15,18 +15,18 @@ import { api } from './api.js';
 import { esc, escAttr, showToast, closeModal } from './utils.js';
 import { renderShotBuilder, getConvention } from './shotBuilder.js';
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  MODULE STATE
-// ═══════════════════════════════════════════
+// ===========================================
 
 let showArchived = false;
 
 /** Expose showArchived for other modules (treeNav uses it) */
 export function isShowArchived() { return showArchived; }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  LOAD & RENDER PROJECTS
-// ═══════════════════════════════════════════
+// ===========================================
 
 export async function loadProjects() {
     try {
@@ -45,7 +45,7 @@ function renderProjectGrid(projects) {
     if (!projects || projects.length === 0) {
         container.innerHTML = `
             <div class="empty-state" style="grid-column: 1/-1;">
-                <div class="empty-icon">📂</div>
+                <div class="empty-icon"></div>
                 <p>No projects yet.</p>
                 <button class="btn-primary" onclick="showCreateProjectModal()">+ Create Project</button>
             </div>
@@ -57,7 +57,7 @@ function renderProjectGrid(projects) {
 }
 
 function renderProjectCard(p) {
-    const icon = p.type === 'shot_based' ? '🎬' : '📁';
+    const icon = p.type === 'shot_based' ? '' : '';
     const archived = p.archived ? ' style="opacity:0.5;"' : '';
     return `
     <div class="project-card fade-in"${archived} onclick="openProject(${p.id})" oncontextmenu="event.preventDefault()">
@@ -69,15 +69,15 @@ function renderProjectCard(p) {
             ${p.archived ? '<span class="badge badge-dim">Archived</span>' : ''}
         </div>
         <div class="project-actions" onclick="event.stopPropagation()">
-            <button class="btn-sm" onclick="showEditProjectModal(${p.id})" title="Edit project">✏️</button>
-            <button class="btn-sm" onclick="toggleArchiveProject(${JSON.stringify({ id: p.id, name: p.name, archived: p.archived }).replace(/"/g, '&quot;')})" title="${p.archived ? 'Unarchive' : 'Archive'}">${p.archived ? '📂' : '📦'}</button>
+            <button class="btn-sm" onclick="showEditProjectModal(${p.id})" title="Edit project">Edit</button>
+            <button class="btn-sm" onclick="toggleArchiveProject(${JSON.stringify({ id: p.id, name: p.name, archived: p.archived }).replace(/"/g, '&quot;')})" title="${p.archived ? 'Unarchive' : 'Archive'}">${p.archived ? '' : ''}</button>
         </div>
     </div>`;
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  CREATE PROJECT MODAL
-// ═══════════════════════════════════════════
+// ===========================================
 
 function showCreateProjectModal() {
     const modal = document.getElementById('modal');
@@ -89,8 +89,8 @@ function showCreateProjectModal() {
         <input type="text" id="newProjectCode" oninput="this.value=this.value.toUpperCase()">
         <label>Type</label>
         <select id="newProjectType">
-            <option value="shot_based">🎬 Shot-Based (sequences & shots)</option>
-            <option value="simple">📁 Simple (flat file list)</option>
+            <option value="shot_based"> Shot-Based (sequences & shots)</option>
+            <option value="simple"> Simple (flat file list)</option>
         </select>
         <label>Description <span style="color:var(--text-muted);font-size:0.75rem">(optional)</span></label>
         <textarea id="newProjectDesc" rows="2"></textarea>
@@ -132,14 +132,14 @@ async function createProject() {
     }
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EDIT NAMING CONVENTION MODAL
-// ═══════════════════════════════════════════
+// ===========================================
 
 function showEditNamingModal(proj) {
     const modal = document.getElementById('modal');
     document.getElementById('modalContent').innerHTML = `
-        <h3>🏗️ Naming Convention — ${esc(proj.name)}</h3>
+        <h3> Naming Convention - ${esc(proj.name)}</h3>
         <p style="color:var(--text-dim);font-size:0.8rem;margin-bottom:8px;">
             Define how imported files are named for this project.
             Leave empty to use the default ShotGrid-style naming.
@@ -147,7 +147,7 @@ function showEditNamingModal(proj) {
         <div id="editShotBuilderContainer"></div>
         <div class="form-actions">
             <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-            <button class="btn-primary" id="saveNamingBtn">💾 Save Convention</button>
+            <button class="btn-primary" id="saveNamingBtn"> Save Convention</button>
         </div>
     `;
     modal.style.display = 'flex';
@@ -173,9 +173,9 @@ function showEditNamingModal(proj) {
     });
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EDIT PROJECT MODAL (from Projects tab)
-// ═══════════════════════════════════════════
+// ===========================================
 
 async function showEditProjectModal(projectId) {
     let proj;
@@ -212,17 +212,17 @@ async function showEditProjectModal(projectId) {
                 <div class="ep-seq-main">
                     <span class="badge badge-dim" style="font-size:0.7rem">${esc(s.code)}</span>
                     <span>${esc(s.name)}</span>
-                    <span class="ep-seq-count">${s.asset_count || 0} assets · ${shots.length} shot${shots.length !== 1 ? 's' : ''}</span>
+                    <span class="ep-seq-count">${s.asset_count || 0} assets - ${shots.length} shot${shots.length !== 1 ? 's' : ''}</span>
                     <button class="btn-xs ep-add-shot-btn" data-seq-id="${s.id}" data-proj-id="${proj.id}" data-default-code="${defaultShotCode}" title="Add shot to ${esc(s.code)}">+ Shot</button>
                 </div>
                 ${shotRow}
             </div>`;
         }).join('')
-        : '<div style="color:var(--text-muted);font-size:0.8rem;padding:4px 0;">No sequences yet — add one below.</div>';
+        : '<div style="color:var(--text-muted);font-size:0.8rem;padding:4px 0;">No sequences yet - add one below.</div>';
 
     const modal = document.getElementById('modal');
     document.getElementById('modalContent').innerHTML = `
-        <h3>✏️ Edit Project — ${esc(proj.name)}</h3>
+        <h3>Edit Project - ${esc(proj.name)}</h3>
 
         <label>Project Name</label>
         <input type="text" id="editProjectName" value="${esc(proj.name)}" autofocus>
@@ -232,7 +232,7 @@ async function showEditProjectModal(projectId) {
             readonly style="opacity:0.6; cursor:not-allowed"
             title="Code cannot be changed (used in folder structure)">
 
-        <label>Episode <span style="color:var(--text-muted);font-size:0.75rem">(used in naming convention — e.g. 301)</span></label>
+        <label>Episode <span style="color:var(--text-muted);font-size:0.75rem">(used in naming convention - e.g. 301)</span></label>
         <input type="text" id="editProjectEpisode" value="${esc(proj.episode || '')}" placeholder="e.g. 301">
 
         <label>Description</label>
@@ -240,7 +240,7 @@ async function showEditProjectModal(projectId) {
 
         <div class="ep-section">
             <div class="ep-section-hdr">
-                <span>📋 Sequences & Shots</span>
+                <span> Sequences & Shots</span>
                 <button class="btn-sm" id="epAddSeqBtn">+ Sequence</button>
             </div>
             <div class="ep-seq-list">${seqItems}</div>
@@ -250,7 +250,7 @@ async function showEditProjectModal(projectId) {
 
         <div class="ep-section" id="epTeamAccessSection" style="display:none;">
             <div class="ep-section-hdr">
-                <span>🚫 Hide from Users</span>
+                <span> Hide from Users</span>
                 <span style="font-size:0.75rem;color:var(--text-muted);">Checked users will NOT see this project</span>
             </div>
             <div id="epTeamCheckboxes" class="ep-team-checkboxes">
@@ -260,7 +260,7 @@ async function showEditProjectModal(projectId) {
 
         <div class="form-actions">
             <button class="btn-cancel" onclick="closeModal()">Cancel</button>
-            <button class="btn-primary" id="saveEditProjectBtn">💾 Save</button>
+            <button class="btn-primary" id="saveEditProjectBtn"> Save</button>
         </div>
     `;
     modal.style.display = 'flex';
@@ -301,20 +301,20 @@ async function showEditProjectModal(projectId) {
                 const nonAdmins = allUsers.filter(u => !u.is_admin);
 
                 if (nonAdmins.length === 0) {
-                    teamContainer.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;">No non-admin users. Create users in Settings → Team first.</div>';
+                    teamContainer.innerHTML = '<div style="color:var(--text-muted);font-size:0.82rem;">No non-admin users. Create users in Settings -> Team first.</div>';
                 } else {
                     teamContainer.innerHTML = nonAdmins.map(u => `
                         <label class="ep-team-check" style="border-left: 3px solid ${u.color || '#888'}">
                             <input type="checkbox" data-user-id="${u.id}" ${hiddenIds.has(u.id) ? 'checked' : ''}>
-                            <span>${u.avatar || '👤'}</span>
+                            <span>${u.avatar || ''}</span>
                             <span>${esc(u.name)}</span>
-                            <span style="font-size:0.72rem;color:var(--text-muted);margin-left:auto;">${hiddenIds.has(u.id) ? '🚫 hidden' : '✓ visible'}</span>
+                            <span style="font-size:0.72rem;color:var(--text-muted);margin-left:auto;">${hiddenIds.has(u.id) ? ' hidden' : ' visible'}</span>
                         </label>
                     `).join('');
                     teamContainer.querySelectorAll('input[type="checkbox"]').forEach(cb => {
                         cb.addEventListener('change', () => {
                             const hint = cb.closest('.ep-team-check').querySelector('span:last-child');
-                            if (hint) hint.textContent = cb.checked ? '🚫 hidden' : '✓ visible';
+                            if (hint) hint.textContent = cb.checked ? ' hidden' : ' visible';
                         });
                     });
                 }
@@ -409,9 +409,9 @@ async function showEditProjectModal(projectId) {
     });
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  ARCHIVE OPERATIONS
-// ═══════════════════════════════════════════
+// ===========================================
 
 async function toggleArchiveProject(project) {
     const action = project.archived ? 'unarchive' : 'archive';
@@ -441,9 +441,9 @@ async function archiveCurrentProject() {
     toggleArchiveProject(state.currentProject);
 }
 
-// ═══════════════════════════════════════════
+// ===========================================
 //  EXPOSE ON WINDOW
-// ═══════════════════════════════════════════
+// ===========================================
 
 window.loadProjects = loadProjects;
 window.showCreateProjectModal = showCreateProjectModal;
@@ -453,3 +453,7 @@ window.showEditNamingModal = showEditNamingModal;
 window.toggleArchiveProject = toggleArchiveProject;
 window.toggleShowArchived = toggleShowArchived;
 window.archiveCurrentProject = archiveCurrentProject;
+
+
+
+

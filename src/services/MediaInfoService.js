@@ -65,7 +65,7 @@ class MediaInfoService {
                         fps,
                         codec: videoStream?.codec_name || audioStream?.codec_name || null,
                         bitrate: info.format?.bit_rate ? parseInt(info.format.bit_rate) : null,
-                        fileSize: info.format?.size ? parseInt(info.format.size) : fs.statSync(filePath).size,
+                        fileSize: fs.statSync(filePath).size,
                         audioCodec: audioStream?.codec_name || null,
                         sampleRate: audioStream?.sample_rate ? parseInt(audioStream.sample_rate) : null,
                     });
