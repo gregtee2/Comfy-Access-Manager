@@ -13,6 +13,7 @@ import { state } from './state.js';
 import { api } from './api.js';
 import { esc, ensureReadableColor } from './utils.js';
 import { isShowArchived } from './projectView.js';
+import { clearCrateState } from './crate.js';
 
 // ═══════════════════════════════════════════
 //  MODULE STATE
@@ -73,15 +74,32 @@ function renderTree() {
                 const sActive = state.currentSequence?.id === seq.id && !state.currentShot;
                 const sHasChildren = seq.shots.length > 0;
 
+                const sHasRoles = !sHasChildren && seq.roles && seq.roles.length > 0;
+                const sExpandable = sHasChildren || sHasRoles;
+
                 html += `<div class="tree-node tree-indent-1 ${sActive ? 'tree-active' : ''}" onclick="treeSelectSequence(${project.id}, ${seq.id})"
                     oncontextmenu="showSeqContextMenu(event, ${seq.id}, '${esc(seq.name).replace(/'/g, "\\'")}')"
                     ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                     ondrop="onSeqDrop(event, ${seq.id}, ${project.id})">
-                    <span class="tree-toggle" onclick="event.stopPropagation();treeToggle('${sKey}')">${sHasChildren ? (sOpen ? '▼' : '▶') : '  '}</span>
+                    <span class="tree-toggle" onclick="event.stopPropagation();treeToggle('${sKey}')">${sExpandable ? (sOpen ? '▼' : '▶') : '  '}</span>
                     <span class="tree-icon">📋</span>
                     <span class="tree-label">${esc(seq.name)}</span>
                     <span class="tree-count">${seq.asset_count}</span>
                 </div>`;
+
+                // Sequence-level roles (when no shots exist)
+                if (sOpen && sHasRoles) {
+                    for (const role of seq.roles) {
+                        const rActive = state.currentRole?.id === role.role_id && state.currentSequence?.id === seq.id && !state.currentShot;
+                        const roleColor = ensureReadableColor(role.role_color);
+                        html += `<div class="tree-node tree-indent-2 ${rActive ? 'tree-active' : ''}" onclick="treeSelectSeqRole(${project.id}, ${seq.id}, ${role.role_id})">
+                            <span class="tree-toggle">  </span>
+                            <span class="tree-icon">${role.role_icon || '🎭'}</span>
+                            <span class="tree-label" style="color:${roleColor}">${esc(role.role_name)}</span>
+                            <span class="tree-count">${role.asset_count}</span>
+                        </div>`;
+                    }
+                }
 
                 if (sOpen && sHasChildren) {
                     for (const shot of seq.shots) {
@@ -130,6 +148,7 @@ function treeToggle(key) {
 }
 
 async function treeSelectProject(projectId) {
+    clearCrateState();  // Exit crate view if active
     treeExpanded[`p_${projectId}`] = true;
 
     try {
@@ -150,6 +169,7 @@ async function treeSelectProject(projectId) {
 }
 
 async function treeSelectSequence(projectId, seqId) {
+    clearCrateState();  // Exit crate view if active
     if (!state.currentProject || state.currentProject.id !== projectId) {
         const project = await api(`/api/projects/${projectId}`);
         state.currentProject = project;
@@ -170,6 +190,7 @@ async function treeSelectSequence(projectId, seqId) {
 }
 
 async function treeSelectShot(projectId, seqId, shotId) {
+    clearCrateState();  // Exit crate view if active
     if (!state.currentProject || state.currentProject.id !== projectId) {
         const project = await api(`/api/projects/${projectId}`);
         state.currentProject = project;
@@ -197,6 +218,7 @@ async function treeSelectShot(projectId, seqId, shotId) {
 }
 
 async function treeSelectRole(projectId, seqId, shotId, roleId) {
+    clearCrateState();  // Exit crate view if active
     if (!state.currentProject || state.currentProject.id !== projectId) {
         const project = await api(`/api/projects/${projectId}`);
         state.currentProject = project;
@@ -230,6 +252,34 @@ async function treeSelectRole(projectId, seqId, shotId, roleId) {
     renderTree();
 }
 
+async function treeSelectSeqRole(projectId, seqId, roleId) {
+    clearCrateState();  // Exit crate view if active
+    if (!state.currentProject || state.currentProject.id !== projectId) {
+        const project = await api(`/api/projects/${projectId}`);
+        state.currentProject = project;
+    }
+
+    const seq = state.currentProject.sequences?.find(s => s.id === seqId);
+    state.currentSequence = seq || { id: seqId };
+    state.currentShot = null;
+
+    try {
+        const roles = await api('/api/roles');
+        state.currentRole = roles.find(r => r.id === roleId) || { id: roleId };
+    } catch {
+        state.currentRole = { id: roleId };
+    }
+
+    state.selectedAssets = [];
+
+    treeExpanded[`p_${projectId}`] = true;
+    treeExpanded[`seq_${seqId}`] = true;
+
+    window.renderProjectDetail?.(state.currentProject);
+    window.loadProjectAssets?.(state.currentProject.id);
+    renderTree();
+}
+
 // ═══════════════════════════════════════════
 //  EXPOSE ON WINDOW
 // ═══════════════════════════════════════════
@@ -240,4 +290,5 @@ window.treeSelectProject = treeSelectProject;
 window.treeSelectSequence = treeSelectSequence;
 window.treeSelectShot = treeSelectShot;
 window.treeSelectRole = treeSelectRole;
+window.treeSelectSeqRole = treeSelectSeqRole;
 window.treeToggle = treeToggle;

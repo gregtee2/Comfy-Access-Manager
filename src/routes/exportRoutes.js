@@ -38,10 +38,20 @@ const RESOLUTION_PRESETS = {
     '480p':    { label: '480p (854×480)',    scale: '854:-2' },
 };
 
+// ─── Platform-aware GPU encoder selection ───
+const IS_MAC = process.platform === 'darwin';
+const GPU_H264  = IS_MAC ? 'h264_videotoolbox'  : 'h264_nvenc';
+const GPU_H265  = IS_MAC ? 'hevc_videotoolbox'  : 'hevc_nvenc';
+const GPU_LABEL = IS_MAC ? 'VideoToolbox GPU'   : 'NVENC GPU';
+
 // ─── Codec presets ───
 const CODEC_PRESETS = {
-    h264_nvenc:   { label: 'H.264 (NVENC GPU)',       ext: '.mp4',  args: ['-c:v', 'h264_nvenc', '-preset', 'p4', '-cq', '20', '-c:a', 'aac', '-b:a', '192k'] },
-    hevc_nvenc:   { label: 'H.265/HEVC (NVENC GPU)',   ext: '.mp4',  args: ['-c:v', 'hevc_nvenc', '-preset', 'p4', '-cq', '22', '-c:a', 'aac', '-b:a', '192k'] },
+    [GPU_H264]:   { label: `H.264 (${GPU_LABEL})`,       ext: '.mp4',  args: IS_MAC
+        ? ['-c:v', 'h264_videotoolbox', '-q:v', '65', '-c:a', 'aac', '-b:a', '192k']
+        : ['-c:v', 'h264_nvenc', '-preset', 'p4', '-cq', '20', '-c:a', 'aac', '-b:a', '192k'] },
+    [GPU_H265]:   { label: `H.265/HEVC (${GPU_LABEL})`,   ext: '.mp4',  args: IS_MAC
+        ? ['-c:v', 'hevc_videotoolbox', '-q:v', '65', '-c:a', 'aac', '-b:a', '192k']
+        : ['-c:v', 'hevc_nvenc', '-preset', 'p4', '-cq', '22', '-c:a', 'aac', '-b:a', '192k'] },
     libx264:      { label: 'H.264 (CPU)',              ext: '.mp4',  args: ['-c:v', 'libx264', '-preset', 'medium', '-crf', '18', '-c:a', 'aac', '-b:a', '192k'] },
     libx265:      { label: 'H.265/HEVC (CPU)',         ext: '.mp4',  args: ['-c:v', 'libx265', '-preset', 'medium', '-crf', '22', '-c:a', 'aac', '-b:a', '192k'] },
     prores_ks:    { label: 'ProRes 422 HQ',            ext: '.mov',  args: ['-c:v', 'prores_ks', '-profile:v', '3', '-c:a', 'pcm_s16le'] },
@@ -52,13 +62,13 @@ const CODEC_PRESETS = {
 
 // Map common FFmpeg codec names → our preset keys for "match source" detection
 const CODEC_NAME_MAP = {
-    h264: 'h264_nvenc',
-    hevc: 'hevc_nvenc',
-    h265: 'hevc_nvenc',
+    h264: GPU_H264,
+    hevc: GPU_H265,
+    h265: GPU_H265,
     prores: 'prores_ks',
-    vp9: 'libx264',    // Fallback — no VP9 NVENC
+    vp9: 'libx264',    // Fallback — no GPU VP9 encoder
     av1: 'libx264',    // Fallback
-    mpeg4: 'h264_nvenc',
+    mpeg4: GPU_H264,
 };
 
 // ═══════════════════════════════════════════
@@ -109,7 +119,7 @@ router.get('/probe/:id', (req, res) => {
 
             // Suggest a matching codec preset
             const sourceCodec = (videoStream.codec_name || '').toLowerCase();
-            const suggestedCodec = CODEC_NAME_MAP[sourceCodec] || 'h264_nvenc';
+            const suggestedCodec = CODEC_NAME_MAP[sourceCodec] || GPU_H264;
 
             res.json({
                 width: videoStream.width,
@@ -309,9 +319,9 @@ function exportSingleAsset(asset, opts) {
                 const probeInfo = JSON.parse(probeOut);
                 const vs = (probeInfo.streams || []).find(s => s.codec_type === 'video');
                 const srcCodec = (vs?.codec_name || '').toLowerCase();
-                codecKey = CODEC_NAME_MAP[srcCodec] || 'h264_nvenc';
+                codecKey = CODEC_NAME_MAP[srcCodec] || GPU_H264;
             } catch {
-                codecKey = 'h264_nvenc'; // Safe fallback
+                codecKey = GPU_H264; // Safe fallback
             }
         }
 
@@ -407,10 +417,40 @@ function exportSingleAsset(asset, opts) {
 
                 resolve({ outputPath: safePath, outputName: path.basename(safePath), newAssetId });
             } else {
-                // Extract the last useful error line from FFmpeg stderr
-                const lines = stderr.split('\n').filter(l => l.trim());
-                const errMsg = lines.slice(-3).join(' ').substring(0, 200);
-                reject(new Error(`FFmpeg exited with code ${code}: ${errMsg}`));
+                // GPU encoder failed — retry with CPU fallback if applicable
+                const isGpuCodec = [GPU_H264, GPU_H265].includes(codecKey);
+                if (isGpuCodec) {
+                    const cpuCodec = codecKey.includes('hevc') || codecKey.includes('h265') ? 'libx265' : 'libx264';
+                    const cpuPreset = CODEC_PRESETS[cpuCodec];
+                    console.log(`[Export] GPU encoder (${codecKey}) failed, retrying with CPU (${cpuCodec})...`);
+
+                    const cpuArgs = ['-y', '-i', asset.file_path];
+                    if (resPreset.scale) cpuArgs.push('-vf', `scale=${resPreset.scale}`);
+                    cpuArgs.push(...cpuPreset.args);
+                    if (ext === '.mp4') cpuArgs.push('-movflags', '+faststart');
+                    cpuArgs.push(safePath);
+
+                    const cpuFfmpeg = spawn(resolvedFFmpeg, cpuArgs, { stdio: ['ignore', 'pipe', 'pipe'], windowsHide: true });
+                    let cpuStderr = '';
+                    cpuFfmpeg.stderr.on('data', (d) => { cpuStderr += d.toString(); });
+                    cpuFfmpeg.on('close', async (cpuCode) => {
+                        if (cpuCode === 0) {
+                            logActivity('export', 'asset', asset.id, { outputPath: safePath, resolution, codec: cpuCodec, hierarchy: asset.hierarchy || {} });
+                            let newAssetId = null;
+                            try { newAssetId = await registerExportedAsset(asset, safePath, cpuCodec, resolution); }
+                            catch (regErr) { console.error(`[Export] Failed to register exported asset:`, regErr.message); }
+                            resolve({ outputPath: safePath, outputName: path.basename(safePath), newAssetId });
+                        } else {
+                            const lines = cpuStderr.split('\n').filter(l => l.trim());
+                            reject(new Error(`FFmpeg CPU fallback exited with code ${cpuCode}: ${lines.slice(-3).join(' ').substring(0, 200)}`));
+                        }
+                    });
+                    cpuFfmpeg.on('error', (err) => reject(new Error(`Failed to start FFmpeg (CPU fallback): ${err.message}`)));
+                } else {
+                    const lines = stderr.split('\n').filter(l => l.trim());
+                    const errMsg = lines.slice(-3).join(' ').substring(0, 200);
+                    reject(new Error(`FFmpeg exited with code ${code}: ${errMsg}`));
+                }
             }
         });
 

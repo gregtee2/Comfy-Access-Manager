@@ -1,0 +1,31 @@
+<h3>🔀 Flow Production Tracking <span class="help-icon" data-tip="Sync your project structure from Autodesk Flow (ShotGrid). Projects, sequences, shots, and pipeline steps are imported and kept in sync.">?</span></h3>
+<p class="hint">Connect to Autodesk Flow (formerly ShotGrid) to sync projects, sequences, shots, and pipeline steps.</p>
+<label>Site URL</label>
+<input type="text" id="settingFlowSite" placeholder="https://mysite.shotgrid.autodesk.com">
+<label>Script Name</label>
+<input type="text" id="settingFlowScriptName" placeholder="mediavault_sync">
+<label>API Key</label>
+<div class="input-row">
+    <input type="password" id="settingFlowApiKey" placeholder="••••••••••••••••••••">
+    <button id="flowSaveBtn">Save</button>
+</div>
+<div class="input-row" style="margin-top:8px; gap:6px;">
+    <button id="flowTestBtn">🔌 Test Connection</button>
+    <button id="flowSyncBtn" disabled>🔄 Sync from Flow</button>
+</div>
+<div id="flowStatus" style="margin-top:6px;font-size:0.82rem;"></div>
+<div id="flowSyncPanel" style="display:none; margin-top:10px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px;">
+    <h4 style="margin:0 0 8px 0;font-size:0.9rem;">Sync Options</h4>
+    <div style="display:flex;flex-direction:column;gap:6px;">
+        <button id="flowSyncProjectsBtn">📁 Sync Projects</button>
+        <button id="flowSyncStepsBtn">🎭 Sync Pipeline Steps → Roles</button>
+        <div id="flowProjectSyncRow" style="display:none;">
+            <label style="font-size:0.82rem;">Select project for full sync:</label>
+            <div class="input-row" style="margin-top:4px;">
+                <select id="flowProjectSelect" class="setting-select"></select>
+                <button id="flowFullSyncBtn">🔄 Full Sync</button>
+            </div>
+        </div>
+    </div>
+    <div id="flowSyncLog" style="margin-top:8px;font-size:0.82rem;color:var(--text-dim);max-height:150px;overflow-y:auto;"></div>
+</div>

@@ -1,0 +1,16 @@
+{
+    "id": "flow",
+    "name": "Flow Production Tracking",
+    "version": "1.0.0",
+    "description": "Sync projects, sequences, shots, and pipeline steps from Autodesk Flow (ShotGrid)",
+    "icon": "🔀",
+    "author": "Greg Tee",
+    "backend": {
+        "routes": "routes.js",
+        "mountPath": "/api/flow"
+    },
+    "frontend": {
+        "settingsSection": "frontend/settings.html",
+        "settingsScript": "frontend/settings.js"
+    }
+}

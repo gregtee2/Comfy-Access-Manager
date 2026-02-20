@@ -19,7 +19,7 @@ const FileService = require('../services/FileService');
 const ThumbnailService = require('../services/ThumbnailService');
 const MediaInfoService = require('../services/MediaInfoService');
 const { detectMediaType, isMediaFile } = require('../utils/mediaTypes');
-const { generateVaultName, getVaultDirectory, generateFromConvention } = require('../utils/naming');
+const { generateVaultName, getVaultDirectory, generateFromConvention, getNextVersion } = require('../utils/naming');
 const { resolveFilePath, getAllPathVariants } = require('../utils/pathResolver');
 
 // Multer for file uploads (temp storage)
@@ -368,6 +368,60 @@ router.get('/compare-targets-by-path', (req, res) => {
 });
 
 
+// GET /api/assets/overlay-info — Lightweight metadata for RV overlay burn-in
+// Used by RV plugin to show filename, version, role, project/shot info on screen
+router.get('/overlay-info', (req, res) => {
+    const db = getDb();
+    const filePath = req.query.path;
+    if (!filePath) return res.status(400).json({ found: false, error: 'Provide ?path= parameter' });
+
+    const variants = getAllPathVariants(filePath);
+    const stmt = db.prepare(`
+        SELECT a.id, a.vault_name, a.original_name, a.version, a.file_ext,
+               a.media_type, a.resolution, a.created_at,
+               r.name AS role_name, r.code AS role_code,
+               p.name AS project_name, p.code AS project_code,
+               seq.name AS sequence_name, seq.code AS sequence_code,
+               sh.name AS shot_name, sh.code AS shot_code
+        FROM assets a
+        LEFT JOIN roles r ON a.role_id = r.id
+        LEFT JOIN projects p ON a.project_id = p.id
+        LEFT JOIN sequences seq ON a.sequence_id = seq.id
+        LEFT JOIN shots sh ON a.shot_id = sh.id
+        WHERE replace(a.file_path, '\\', '/') = ?
+        LIMIT 1
+    `);
+
+    let asset = null;
+    for (const variant of variants) {
+        asset = stmt.get(variant);
+        if (asset) break;
+    }
+
+    if (!asset) {
+        return res.json({ found: false, vault_name: require('path').basename(filePath) });
+    }
+
+    res.json({
+        found: true,
+        vault_name: asset.vault_name,
+        original_name: asset.original_name,
+        version: asset.version,
+        file_ext: asset.file_ext,
+        media_type: asset.media_type,
+        resolution: asset.resolution || null,
+        created_at: asset.created_at || null,
+        role_name: asset.role_name || null,
+        role_code: asset.role_code || null,
+        project_name: asset.project_name || null,
+        project_code: asset.project_code || null,
+        sequence_name: asset.sequence_name || null,
+        shot_name: asset.shot_name || null,
+        status: 'WIP'  // TODO: Add status column to assets table in future
+    });
+});
+
+
 // GET /api/assets/:id — Single asset with full details
 router.get('/:id', (req, res) => {
     const db = getDb();
@@ -483,7 +537,7 @@ router.post('/import', async (req, res) => {
                     sequence: sequence?.name || sequence?.code,
                     shot: shot?.name || shot?.code,
                     role: role?.code,
-                    version: 1,
+                    version: seqCounter,
                     take: take_number || 1,
                     counter: seqCounter,
                     wildcards: wildcardValues,
@@ -673,6 +727,8 @@ router.post('/import', async (req, res) => {
     }
 
     // ── Step 3: Import remaining single files normally ──
+    // Track version numbers per (sequence, role) so batch imports get v001, v002, v003…
+    let _versionTracker = {};
     for (let i = 0; i < singles.length; i++) {
         const filePath = singles[i];
 
@@ -700,12 +756,18 @@ router.post('/import', async (req, res) => {
                 if (keepOriginalNames) {
                     vaultName = originalName;
                 } else if (namingConvention && namingConvention.length > 0) {
+                    // Auto-increment version per (sequence, role) combo
+                    if (!_versionTracker) _versionTracker = {};
+                    const _vk = `${sequence?.id || ''}_${role?.id || ''}`;
+                    if (!(_vk in _versionTracker)) _versionTracker[_vk] = 1;
+                    const _autoVer = _versionTracker[_vk]++;
+
                     const convResult = generateFromConvention(namingConvention, {
                         project: project.code,
                         sequence: sequence?.name || sequence?.code,
                         shot: shot?.name || shot?.code,
                         role: role?.code,
-                        version: 1,
+                        version: _autoVer,
                         take: take_number || (i + 1),
                         counter: i + 1,
                         wildcards: wildcardValues,
@@ -729,12 +791,18 @@ router.post('/import', async (req, res) => {
                 // Pre-compute convention name if project has one
                 let overrideVaultName = null;
                 if (!keepOriginalNames && namingConvention && namingConvention.length > 0) {
+                    // Auto-increment version per (sequence, role) combo
+                    if (!_versionTracker) _versionTracker = {};
+                    const _vk = `${sequence?.id || ''}_${role?.id || ''}`;
+                    if (!(_vk in _versionTracker)) _versionTracker[_vk] = 1;
+                    const _autoVer = _versionTracker[_vk]++;
+
                     const convResult = generateFromConvention(namingConvention, {
                         project: project.code,
                         sequence: sequence?.name || sequence?.code,
                         shot: shot?.name || shot?.code,
                         role: role?.code,
-                        version: 1,
+                        version: _autoVer,
                         take: take_number || (i + 1),
                         counter: i + 1,
                         wildcards: wildcardValues,
@@ -2021,5 +2089,299 @@ router.get('/:id/formats', (req, res) => {
 
     res.json({ formats, baseName });
 });
+
+
+// ═══════════════════════════════════════════
+//  PUBLISH FRAME (RV → Vault)
+// ═══════════════════════════════════════════
+
+/**
+ * POST /api/assets/publish-frame
+ * Called by the RV plugin to extract a single frame from the currently-loaded
+ * source and import it as a "Ref" asset in the vault.
+ *
+ * Body: { sourcePath: string, frameNumber: number, renderedFramePath?: string }
+ *
+ * If renderedFramePath is provided (exported by RV with annotations/paint-overs
+ * composited), that file is imported directly instead of extracting from source.
+ *
+ * For image sequences (EXR/DPX/TIFF): copies the specific frame file AND
+ * generates a PNG preview via FFmpeg.
+ * For video files (MP4/MOV/etc.): extracts frame as PNG via FFmpeg.
+ *
+ * Naming: {convention}_ref_F{frame}_v{ver}.{ext}
+ */
+router.post('/publish-frame', async (req, res) => {
+    const { sourcePath, frameNumber, renderedFramePath } = req.body;
+    const { execFile } = require('child_process');
+    const os = require('os');
+
+    if (!sourcePath) return res.status(400).json({ success: false, error: 'sourcePath is required' });
+    if (frameNumber == null) return res.status(400).json({ success: false, error: 'frameNumber is required' });
+
+    const db = getDb();
+
+    // ── 1. Find source asset in DB by path ──
+    const variants = getAllPathVariants(sourcePath);
+    const stmt = db.prepare(`
+        SELECT a.*, p.name AS project_name, p.code AS project_code,
+               p.naming_convention, p.episode,
+               seq.name AS sequence_name, seq.code AS sequence_code,
+               sh.name AS shot_name, sh.code AS shot_code
+        FROM assets a
+        LEFT JOIN projects p ON a.project_id = p.id
+        LEFT JOIN sequences seq ON a.sequence_id = seq.id
+        LEFT JOIN shots sh ON a.shot_id = sh.id
+        WHERE replace(a.file_path, '\\', '/') = ?
+        LIMIT 1
+    `);
+
+    let asset = null;
+    for (const variant of variants) {
+        asset = stmt.get(variant);
+        if (asset) break;
+    }
+
+    if (!asset) {
+        return res.status(404).json({ success: false, error: 'Source asset not found in vault' });
+    }
+
+    // ── 2. Find or create "Ref" role ──
+    let refRole = db.prepare("SELECT * FROM roles WHERE LOWER(name) = 'ref' OR LOWER(code) = 'ref'").get();
+    if (!refRole) {
+        db.prepare("INSERT INTO roles (name, code, color, icon) VALUES ('Ref', 'ref', '#888888', '📌')").run();
+        refRole = db.prepare("SELECT * FROM roles WHERE code = 'ref'").get();
+    }
+
+    // ── 3. Determine source type and build frame file path ──
+    const sourceExt = path.extname(sourcePath).toLowerCase();
+    const sequenceExts = new Set(['.exr', '.dpx', '.tiff', '.tif', '.png', '.jpg', '.jpeg', '.tga']);
+    const isSequence = asset.is_sequence || sequenceExts.has(sourceExt);
+
+    const tempDir = path.join(os.tmpdir(), `cam_publish_${Date.now()}`);
+    fs.mkdirSync(tempDir, { recursive: true });
+
+    const publishedAssets = [];
+    const frameStr = String(frameNumber).padStart(4, '0');
+
+    // Build base name for the ref asset
+    const project = { code: asset.project_code, naming_convention: asset.naming_convention, episode: asset.episode };
+    const vaultRoot = FileService.getVaultRoot();
+    const refMediaType = 'image';
+    const vaultDir = getVaultDirectory(vaultRoot, project.code, refMediaType, asset.sequence_code, asset.shot_code);
+    FileService.ensureDir(vaultDir);
+
+    // Build ref base pattern for version auto-increment
+    let refBasePattern;
+    if (asset.shot_code) {
+        refBasePattern = `${asset.shot_code}_ref_F${frameStr}_v`;
+    } else if (asset.sequence_code) {
+        refBasePattern = `${asset.sequence_code}_ref_F${frameStr}_v`;
+    } else {
+        refBasePattern = `${project.code}_ref_F${frameStr}_v`;
+    }
+    const version = getNextVersion(vaultDir, refBasePattern);
+    const versionStr = String(version).padStart(3, '0');
+
+    // Helper to build vault name
+    function buildVaultName(ext) {
+        // Try naming convention first
+        let namingConvention = null;
+        if (project.naming_convention) {
+            try { namingConvention = JSON.parse(project.naming_convention); } catch (_) {}
+        }
+        if (namingConvention && namingConvention.length > 0) {
+            const convResult = generateFromConvention(namingConvention, {
+                project: project.code,
+                episode: project.episode,
+                sequence: asset.sequence_name || asset.sequence_code,
+                shot: asset.shot_name || asset.shot_code,
+                role: 'ref',
+                version: version,
+            }, ext);
+            if (convResult) {
+                // Insert frame number before version: shoot_ref_v001 → shoot_ref_F0142_v001
+                const vName = convResult.vaultName;
+                const vMatch = vName.match(/_v(\d+)(\.[^.]+)$/);
+                if (vMatch) {
+                    return vName.replace(/_v(\d+)(\.[^.]+)$/, `_F${frameStr}_v${vMatch[1]}$2`);
+                }
+                // No version token — just append frame number before extension
+                const extIdx = vName.lastIndexOf('.');
+                return extIdx > 0 ? `${vName.slice(0, extIdx)}_F${frameStr}${vName.slice(extIdx)}` : vName;
+            }
+        }
+        // Fallback: manual construction
+        const parts = [asset.shot_code || asset.sequence_code || project.code, 'ref', `F${frameStr}`, `v${versionStr}`];
+        return parts.join('_') + ext;
+    }
+
+    // Helper to register an imported file in DB
+    function registerAsset(filePath, vaultName, ext) {
+        const relativePath = path.relative(vaultRoot, filePath);
+        const stats = fs.statSync(filePath);
+        const result = db.prepare(`
+            INSERT INTO assets (
+                project_id, sequence_id, shot_id, role_id,
+                original_name, vault_name, file_path, relative_path,
+                media_type, file_ext, file_size, version, is_linked
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 0)
+        `).run(
+            asset.project_id, asset.sequence_id || null, asset.shot_id || null, refRole.id,
+            vaultName, vaultName, filePath, relativePath,
+            'image', ext, stats.size, version
+        );
+        const assetId = result.lastInsertRowid;
+        logActivity('publish_frame', 'asset', assetId,
+            `Published frame ${frameNumber} from ${asset.vault_name}`);
+        return assetId;
+    }
+
+    try {
+        // ── Rendered frame path (RV exported composited frame with annotations) ──
+        if (renderedFramePath && fs.existsSync(renderedFramePath) && fs.statSync(renderedFramePath).size > 100) {
+            // RV already exported the displayed frame (with annotations/paint-overs/
+            // color corrections baked in). Import that file directly.
+            const renderedExt = path.extname(renderedFramePath).toLowerCase() || '.png';
+            const pngVaultName = buildVaultName(renderedExt);
+            const destPath = path.join(vaultDir, pngVaultName);
+            fs.copyFileSync(renderedFramePath, destPath);
+            const assetId = registerAsset(destPath, pngVaultName, renderedExt);
+
+            // Generate thumbnail
+            try {
+                const thumbPath = await ThumbnailService.generate(destPath, assetId);
+                if (thumbPath) db.prepare('UPDATE assets SET thumbnail_path = ? WHERE id = ?').run(thumbPath, assetId);
+            } catch (_) {}
+
+            publishedAssets.push({ id: assetId, vault_name: pngVaultName });
+
+        } else if (isSequence) {
+            // ── Sequence source: find the actual frame file ──
+            const resolvedSourcePath = resolveFilePath(asset.file_path);
+            let sourceFramePath;
+
+            if (asset.frame_pattern) {
+                // Use frame_pattern (e.g. "render.%04d.exr") to construct exact frame path
+                const dir = path.dirname(resolvedSourcePath);
+                const padMatch = asset.frame_pattern.match(/%0(\d+)d/);
+                const digits = padMatch ? parseInt(padMatch[1], 10) : 4;
+                const frameName = asset.frame_pattern.replace(/%0\d+d/, String(frameNumber).padStart(digits, '0'));
+                sourceFramePath = path.join(dir, frameName);
+            } else {
+                // Try to derive from the source path filename
+                sourceFramePath = resolvedSourcePath;
+            }
+
+            if (!sourceFramePath || !fs.existsSync(sourceFramePath)) {
+                // Clean up
+                try { fs.rmSync(tempDir, { recursive: true }); } catch (_) {}
+                return res.status(404).json({
+                    success: false,
+                    error: `Frame file not found: ${sourceFramePath || 'unknown'}`
+                });
+            }
+
+            // Copy the native frame file (EXR/DPX) into vault
+            const nativeExt = path.extname(sourceFramePath).toLowerCase();
+            const nativeVaultName = buildVaultName(nativeExt);
+            const nativeDestPath = path.join(vaultDir, nativeVaultName);
+            fs.copyFileSync(sourceFramePath, nativeDestPath);
+            const nativeId = registerAsset(nativeDestPath, nativeVaultName, nativeExt);
+
+            // Generate thumbnail
+            try {
+                const thumbPath = await ThumbnailService.generate(nativeDestPath, nativeId);
+                if (thumbPath) db.prepare('UPDATE assets SET thumbnail_path = ? WHERE id = ?').run(thumbPath, nativeId);
+            } catch (_) {}
+
+            publishedAssets.push({ id: nativeId, vault_name: nativeVaultName });
+
+            // Also generate a PNG preview via FFmpeg
+            const pngVaultName = buildVaultName('.png');
+            const pngTempPath = path.join(tempDir, 'preview.png');
+
+            await new Promise((resolve, reject) => {
+                const ffmpegPath = ThumbnailService.findFFmpeg();
+                if (!ffmpegPath) return reject(new Error('FFmpeg not found'));
+                execFile(ffmpegPath, [
+                    '-i', sourceFramePath,
+                    '-frames:v', '1',
+                    '-y', pngTempPath
+                ], { timeout: 30000, windowsHide: true }, (err) => {
+                    if (err) reject(err); else resolve();
+                });
+            });
+
+            if (fs.existsSync(pngTempPath) && fs.statSync(pngTempPath).size > 100) {
+                const pngDestPath = path.join(vaultDir, pngVaultName);
+                fs.copyFileSync(pngTempPath, pngDestPath);
+                const pngId = registerAsset(pngDestPath, pngVaultName, '.png');
+
+                try {
+                    const thumbPath = await ThumbnailService.generate(pngDestPath, pngId);
+                    if (thumbPath) db.prepare('UPDATE assets SET thumbnail_path = ? WHERE id = ?').run(thumbPath, pngId);
+                } catch (_) {}
+
+                publishedAssets.push({ id: pngId, vault_name: pngVaultName });
+            }
+
+        } else {
+            // ── Video source: extract frame via FFmpeg ──
+            const resolvedSourcePath = resolveFilePath(asset.file_path);
+            if (!fs.existsSync(resolvedSourcePath)) {
+                try { fs.rmSync(tempDir, { recursive: true }); } catch (_) {}
+                return res.status(404).json({ success: false, error: 'Source video not found on disk' });
+            }
+
+            const pngVaultName = buildVaultName('.png');
+            const pngTempPath = path.join(tempDir, 'frame.png');
+
+            // Use frame number to calculate timestamp (need fps)
+            const fps = asset.fps || 24;
+            const timestamp = frameNumber / fps;
+
+            await new Promise((resolve, reject) => {
+                const ffmpegPath = ThumbnailService.findFFmpeg();
+                if (!ffmpegPath) return reject(new Error('FFmpeg not found'));
+                execFile(ffmpegPath, [
+                    '-ss', String(timestamp),
+                    '-i', resolvedSourcePath,
+                    '-frames:v', '1',
+                    '-y', pngTempPath
+                ], { timeout: 30000, windowsHide: true }, (err) => {
+                    if (err) reject(err); else resolve();
+                });
+            });
+
+            if (!fs.existsSync(pngTempPath) || fs.statSync(pngTempPath).size < 100) {
+                try { fs.rmSync(tempDir, { recursive: true }); } catch (_) {}
+                return res.status(500).json({ success: false, error: 'FFmpeg frame extraction produced no output' });
+            }
+
+            const pngDestPath = path.join(vaultDir, pngVaultName);
+            fs.copyFileSync(pngTempPath, pngDestPath);
+            const pngId = registerAsset(pngDestPath, pngVaultName, '.png');
+
+            try {
+                const thumbPath = await ThumbnailService.generate(pngDestPath, pngId);
+                if (thumbPath) db.prepare('UPDATE assets SET thumbnail_path = ? WHERE id = ?').run(thumbPath, pngId);
+            } catch (_) {}
+
+            publishedAssets.push({ id: pngId, vault_name: pngVaultName });
+        }
+
+        // Clean up temp dir
+        try { fs.rmSync(tempDir, { recursive: true }); } catch (_) {}
+
+        res.json({ success: true, assets: publishedAssets });
+
+    } catch (err) {
+        console.error('[publish-frame] Error:', err.message);
+        try { fs.rmSync(tempDir, { recursive: true }); } catch (_) {}
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 
 module.exports = router;

@@ -14,13 +14,14 @@
  *   contextMenus.js — Right-click menus, bulk ops, CRUD modals, Resolve/ComfyUI
  *
  * This file exists so that main.js can keep its single import line:
- *   import { loadProjects, loadTree, initFileDropZone } from './browser.js';
+ *   import { loadProjects, loadTree, initFileDropZone, loadCrates } from './browser.js';
  */
 
 // Sub-module imports
 import { loadProjects }          from './projectView.js';
 import { loadTree, expandNode }  from './treeNav.js';
 import { initFileDropZone }      from './assetGrid.js';
+import { loadCrates, getActiveCrateId } from './crate.js';
 
 // Side-effect import: registers all window.* context-menu functions
 import './contextMenus.js';
@@ -30,5 +31,8 @@ import './contextMenus.js';
 // It calls window._treeExpandNode(key) which we wire here to treeNav.expandNode.
 window._treeExpandNode = expandNode;
 
+// Expose active crate ID for context menu to check
+window._activeCrateId = getActiveCrateId;
+
 // Re-exports for main.js
-export { loadProjects, loadTree, initFileDropZone };
+export { loadProjects, loadTree, initFileDropZone, loadCrates };

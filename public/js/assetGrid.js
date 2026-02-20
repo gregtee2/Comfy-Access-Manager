@@ -14,6 +14,7 @@ import { state } from './state.js';
 import { api } from './api.js';
 import { esc, formatSize, formatDuration, formatDateTime, typeIcon, showToast } from './utils.js';
 import { openPlayer } from './player.js';
+import { getActiveCrateId } from './crate.js';
 
 // ═══════════════════════════════════════════
 //  PROJECT DETAIL / BROWSER
@@ -63,6 +64,16 @@ export function renderProjectDetail(project) {
     const seqList = document.getElementById('sequenceList');
     const filterSeq = document.getElementById('filterSequence');
 
+    // Restore collapse state helper
+    const _syncSeqToggle = () => {
+        const open = localStorage.getItem('cam_seqPanelOpen') === '1';
+        seqList.style.display = open ? 'flex' : 'none';
+        const tog = document.getElementById('seqPanelToggle');
+        const arr = document.getElementById('seqPanelArrow');
+        if (tog) tog.classList.toggle('open', open);
+        if (arr) arr.textContent = open ? '\u25bc' : '\u25b6';
+    };
+
     if (project.type !== 'simple' && project.sequences?.length > 0) {
         seqPanel.style.display = 'block';
         filterSeq.style.display = 'block';
@@ -73,13 +84,18 @@ export function renderProjectDetail(project) {
             if (isActive && s.shots?.length > 0) {
                 shotHtml = `<div class="shot-chips">${s.shots.map(sh => {
                     const isShActive = state.currentShot?.id === sh.id;
+                    const rolePills = (sh.roles || []).map(r => {
+                        const c = r.role_color || '#888';
+                        return `<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:${c}33;color:${c};border:1px solid ${c}55;margin:1px 2px 0 0;line-height:1.3;">${r.role_icon || ''} ${r.role_code || r.role_name}</span>`;
+                    }).join('');
                     return `
                     <span class="shot-chip ${isShActive ? 'active' : ''}" 
                           onclick="event.stopPropagation();selectShot(${s.id}, ${sh.id})"
                           oncontextmenu="event.stopPropagation();showShotContextMenu(event, ${s.id}, ${sh.id}, '${esc(sh.name).replace(/'/g, "\\'")}')"
                           ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                           ondrop="event.stopPropagation();onShotDrop(event, ${s.id}, ${sh.id})"
-                          >🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span></span>`;
+                          style="display:inline-flex;flex-direction:column;align-items:flex-start;"
+                          ><span>🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span></span>${rolePills ? `<span style="margin-top:2px;">${rolePills}</span>` : ''}</span>`;
                 }).join('')}
                     <span class="shot-chip shot-add" onclick="event.stopPropagation();showAddShotModal(${s.id})">+ Shot</span>
                 </div>`;
@@ -87,6 +103,14 @@ export function renderProjectDetail(project) {
                 shotHtml = `<div class="shot-chips">
                     <span class="shot-chip shot-add" onclick="event.stopPropagation();showAddShotModal(${s.id})">+ Shot</span>
                 </div>`;
+            }
+            // Role pills for this sequence (always visible, not just when active)
+            let seqRolePills = '';
+            if (s.roles?.length > 0) {
+                seqRolePills = `<div style="margin:2px 0 4px 24px;display:flex;flex-wrap:wrap;gap:2px;">${s.roles.map(r => {
+                    const c = r.role_color || '#888';
+                    return `<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:${c}33;color:${c};border:1px solid ${c}55;line-height:1.3;">${r.role_icon || ''} ${r.role_code || r.role_name} <span style="opacity:.6">${r.asset_count}</span></span>`;
+                }).join('')}</div>`;
             }
             return `
             <div class="sequence-chip ${isActive ? 'active' : ''}" 
@@ -96,18 +120,35 @@ export function renderProjectDetail(project) {
                  ondrop="onSeqDrop(event, ${s.id})">
                 📋 ${esc(s.name)} <span style="opacity:.5;font-size:.8em">${esc(s.code)}</span>
                 <span class="chip-count">${s.asset_count || 0}</span>
-            </div>${shotHtml}`;
+            </div>${seqRolePills}${shotHtml}`;
         }).join('');
 
         // Populate dropdown
         filterSeq.innerHTML = '<option value="">All Sequences</option>' +
             project.sequences.map(s => `<option value="${s.id}">${s.name} (${s.code})</option>`).join('');
+    } else if (project.orphanShots?.length > 0) {
+        // Fallback: shots without sequences — show directly with role pills
+        seqPanel.style.display = 'block';
+        filterSeq.style.display = 'none';
+        seqList.innerHTML = project.orphanShots.map(sh => {
+            const isShActive = state.currentShot?.id === sh.id;
+            const rolePills = (sh.roles || []).map(r => {
+                const c = r.role_color || '#888';
+                return `<span style="display:inline-block;font-size:9px;padding:1px 5px;border-radius:3px;background:${c}33;color:${c};border:1px solid ${c}55;margin:1px 2px 0 0;line-height:1.3;">${r.role_icon || ''} ${r.role_code || r.role_name} <span style="opacity:.6">${r.asset_count}</span></span>`;
+            }).join('');
+            return `
+            <span class="shot-chip ${isShActive ? 'active' : ''}" 
+                  onclick="event.stopPropagation();selectShot(null, ${sh.id})"
+                  style="display:inline-flex;flex-direction:column;align-items:flex-start;margin:2px;"
+                  >🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span>${rolePills ? `<span style="margin-top:2px;">${rolePills}</span>` : ''}</span>`;
+        }).join('');
     } else {
         seqPanel.style.display = project.type === 'simple' ? 'none' : 'block';
         seqList.innerHTML = project.type === 'simple' ? '' :
             '<div style="color:var(--text-muted);font-size:0.82rem;padding:8px;">No sequences yet. Click "+ Sequence" to add one.</div>';
         filterSeq.style.display = 'none';
     }
+    _syncSeqToggle();
 }
 
 export async function selectSequence(seqId) {
@@ -138,6 +179,9 @@ export function selectShot(seqId, shotId) {
 // ═══════════════════════════════════════════
 
 export async function loadProjectAssets(projectId) {
+    // Don't overwrite the asset grid when viewing a crate
+    if (getActiveCrateId()) return;
+
     const params = new URLSearchParams({ project_id: projectId });
 
     const mediaType = document.getElementById('filterMediaType')?.value;
@@ -278,15 +322,165 @@ function renderAssets() {
 }
 
 // Click on empty space in the grid → deselect all
+// (suppressed briefly after a marquee drag so the click doesn't undo the selection)
+let _suppressNextClick = false;
 document.addEventListener('click', (e) => {
+    if (_suppressNextClick) { _suppressNextClick = false; return; }
     const container = document.getElementById('assetContainer');
     if (!container) return;
-    if (e.target === container && state.selectedAssets.length > 0) {
+    // Only deselect when clicking directly on the grid background, not on a card
+    const wrap = document.getElementById('assetContainerWrap');
+    const onBackground = e.target === container || e.target === wrap;
+    if (onBackground && state.selectedAssets.length > 0) {
         state.selectedAssets = [];
         state.lastClickedAsset = -1;
         updateSelectionClasses();
     }
 });
+
+// ═══════════════════════════════════════════
+//  MARQUEE (rubber-band) DRAG SELECTION
+// ═══════════════════════════════════════════
+
+(function initMarqueeSelection() {
+    let active = false;
+    let startX = 0, startY = 0;
+    let marqueeEl = null;
+    const THRESHOLD = 5; // px of movement before marquee activates
+    let thresholdMet = false;
+    let priorSelected = []; // selection before drag (for shift-additive)
+
+    function getScrollParent() {
+        return document.querySelector('.browser-main') || document.documentElement;
+    }
+
+    function createMarquee() {
+        const el = document.createElement('div');
+        el.className = 'marquee-selection';
+        const wrap = document.getElementById('assetContainerWrap');
+        (wrap || document.body).appendChild(el);
+        return el;
+    }
+
+    function updateRect(e) {
+        const wrap = document.getElementById('assetContainerWrap');
+        if (!wrap || !marqueeEl) return;
+        const wr = wrap.getBoundingClientRect();
+        const curX = e.clientX - wr.left;
+        const curY = e.clientY - wr.top;
+        const x = Math.min(startX, curX);
+        const y = Math.min(startY, curY);
+        const w = Math.abs(curX - startX);
+        const h = Math.abs(curY - startY);
+        marqueeEl.style.left = x + 'px';
+        marqueeEl.style.top = y + 'px';
+        marqueeEl.style.width = w + 'px';
+        marqueeEl.style.height = h + 'px';
+    }
+
+    function rectsIntersect(a, b) {
+        return !(a.right < b.left || a.left > b.right ||
+                 a.bottom < b.top || a.top > b.bottom);
+    }
+
+    function selectIntersecting(additive) {
+        const wrap = document.getElementById('assetContainerWrap');
+        const container = document.getElementById('assetContainer');
+        if (!wrap || !container || !marqueeEl) return;
+        const mRect = marqueeEl.getBoundingClientRect();
+        const hits = [];
+        container.querySelectorAll('[data-aidx]').forEach(el => {
+            const elRect = el.getBoundingClientRect();
+            if (rectsIntersect(mRect, elRect)) {
+                const idx = parseInt(el.dataset.aidx, 10);
+                const asset = state.assets[idx];
+                if (asset) hits.push(asset.id);
+            }
+        });
+        if (additive) {
+            const merged = new Set([...priorSelected, ...hits]);
+            state.selectedAssets = [...merged];
+        } else {
+            state.selectedAssets = hits;
+        }
+        updateSelectionClasses();
+    }
+
+    // ── Auto-scroll while dragging near edges ──
+    let scrollRAF = null;
+    function autoScroll(e) {
+        const sp = getScrollParent();
+        const rect = sp.getBoundingClientRect ? sp.getBoundingClientRect()
+            : { top: 0, bottom: window.innerHeight, left: 0, right: window.innerWidth };
+        const margin = 40; // px from edge to start scrolling
+        const speed = 8;   // px per frame
+        let dx = 0, dy = 0;
+        if (e.clientY < rect.top + margin) dy = -speed;
+        else if (e.clientY > rect.bottom - margin) dy = speed;
+        if (dx !== 0 || dy !== 0) {
+            sp.scrollTop += dy;
+            sp.scrollLeft += dx;
+        }
+    }
+
+    document.addEventListener('mousedown', (e) => {
+        // Only start on the container or its wrapper background
+        const container = document.getElementById('assetContainer');
+        if (!container) return;
+        if (e.button !== 0) return;               // left-click only
+        if (e.target.closest('[data-aidx]')) return; // started on a card
+        if (e.target.closest('.asset-star')) return;  // star button
+        if (e.target.closest('.selection-toolbar')) return;
+        if (e.target.closest('.project-sticky-header')) return;
+        if (e.target.closest('.sequence-chip')) return;
+        if (e.target.closest('.shot-chip')) return;
+        // Must be inside the asset container area
+        const wrap = document.getElementById('assetContainerWrap');
+        if (!wrap || !wrap.contains(e.target)) return;
+
+        const wr = wrap.getBoundingClientRect();
+        startX = e.clientX - wr.left;
+        startY = e.clientY - wr.top;
+        active = true;
+        thresholdMet = false;
+        priorSelected = e.shiftKey ? [...state.selectedAssets] : [];
+    });
+
+    document.addEventListener('mousemove', (e) => {
+        if (!active) return;
+        const wrap = document.getElementById('assetContainerWrap');
+        if (!wrap) { active = false; return; }
+        const wr = wrap.getBoundingClientRect();
+        const dx = (e.clientX - wr.left) - startX;
+        const dy = (e.clientY - wr.top) - startY;
+        if (!thresholdMet) {
+            if (Math.abs(dx) < THRESHOLD && Math.abs(dy) < THRESHOLD) return;
+            thresholdMet = true;
+            marqueeEl = createMarquee();
+            document.body.classList.add('marquee-active');
+        }
+        updateRect(e);
+        selectIntersecting(e.shiftKey || priorSelected.length > 0);
+        autoScroll(e);
+    });
+
+    document.addEventListener('mouseup', (e) => {
+        if (!active) return;
+        const didMarquee = thresholdMet;
+        active = false;
+        if (marqueeEl) {
+            selectIntersecting(e.shiftKey || priorSelected.length > 0);
+            marqueeEl.remove();
+            marqueeEl = null;
+        }
+        document.body.classList.remove('marquee-active');
+        priorSelected = [];
+        // Suppress the click event that fires right after mouseup
+        // so it doesn't clear the selection we just made
+        if (didMarquee) _suppressNextClick = true;
+        if (scrollRAF) { cancelAnimationFrame(scrollRAF); scrollRAF = null; }
+    });
+})();
 
 // ═══════════════════════════════════════════
 //  ASSET SELECTION (click, shift-click, bulk)
@@ -653,6 +847,7 @@ function startAssetPoll() {
     _pollTimer = setInterval(async () => {
         if (document.hidden) return;
         if (!state.currentProject) return;
+        if (getActiveCrateId()) return;  // Don't poll while viewing a crate
 
         try {
             const info = await api(`/api/assets/poll?project_id=${state.currentProject.id}`);

@@ -20,6 +20,9 @@ public/js-dist/
 tmp_count.txt
 *.tmp
 
+# Test export output (generated during testing)
+test_export/
+
 # Python cache
 __pycache__/
 

@@ -1,6 +1,6 @@
 # Comfy Asset Manager (CAM)
 
-![Version](https://img.shields.io/badge/version-1.3.0-blue)
+![Version](https://img.shields.io/badge/version-1.4.1-blue)
 ![Node](https://img.shields.io/badge/node-%3E%3D18.0.0-brightgreen)
 ![License](https://img.shields.io/badge/license-Proprietary-red)
 
@@ -35,6 +35,12 @@ A local media asset manager for creative production — organize, browse, import
 - **Filter** by media type (video, image, EXR, audio, 3D, document), sequence, or search text
 - **Breadcrumb navigation**: Project → Sequence → Shot → Role
 - **Tree panel** on the left for quick hierarchy navigation
+- **Marquee (rubber-band) selection** — click and drag on empty space in the grid to draw a selection rectangle; all intersecting cards are selected
+  - **Shift+drag** adds to existing selection (additive mode)
+  - Auto-scrolls when dragging near viewport edges
+  - Works in both grid and list views
+- **Shift+click range select** — select all assets between last-clicked and current
+- **Cmd/Ctrl+click** — toggle individual assets in/out of selection
 - **Selection toolbar**: Select All, Move to Sequence, Set Role, Export, Compare in RV, Delete
 - **Right-click context menus** on assets, shots, sequences, and projects for quick actions
 
@@ -51,12 +57,14 @@ A local media asset manager for creative production — organize, browse, import
 
 ### Export & Transcode
 - Export assets to different codecs and resolutions via FFmpeg
-- **GPU-accelerated encoding**: H.264 NVENC, H.265/HEVC NVENC (NVIDIA GPUs)
-- **CPU fallbacks**: H.264 (libx264), H.265 (libx265)
+- **GPU-accelerated encoding**:
+  - **Windows**: H.264 NVENC, H.265/HEVC NVENC (NVIDIA GPUs)
+  - **macOS**: H.264 VideoToolbox, H.265/HEVC VideoToolbox (Apple Silicon hardware encoder)
+- **Auto-retry with CPU fallback** — if GPU encoder fails, automatically falls back to libx264/libx265
 - **ProRes**: 422 HQ, 422 LT, 422 Proxy
 - **Resolution presets**: Original, 4K, 1440p, 1080p, 720p, 540p, 480p
 - **Copy mode** (no re-encode) for fast container changes
-- ~~Exports~~ Exported files are organized in hierarchical folders and auto-registered back into the vault
+- Exported files are organized in hierarchical folders and auto-registered back into the vault
 
 ### External Player Support (RV / OpenRV)
 - **RV (OpenRV / ShotGrid)** integration for professional playback (EXR, ProRes, HDR, etc.)
@@ -65,9 +73,34 @@ A local media asset manager for creative production — organize, browse, import
 - **CAM RV plugin** — right-click menu inside RV with:
   - Compare To / Switch To — browse assets by role with Qt tree/table picker dialog
   - Prev/Next Version — step through version history of the current asset
+  - Add to Crate — send the currently viewed clip to any crate
+  - Publish Frame — export current frame with metadata
   - Hierarchical fallback: searches shot → sequence → project for related assets
-- **Bundled OpenRV** — auto-downloaded by install.bat (no manual build required)
+- **In-window menu bar on macOS** — RV menu bar renders inside the window (not the native macOS system bar) for consistency with Windows/Linux
+- **RV overlay system** — heads-up metadata rendered directly in the viewport:
+  - **Metadata burn-in** (bottom-right) — shot name + 4-digit frame counter
+  - **Status stamp** (top-right) — colored badge: WIP (orange), Review (blue), Approved (green), Final (gold)
+  - **Watermark** (center) — faint "CONFIDENTIAL" / "INTERNAL USE ONLY" text
+  - **Shift+O** hotkey + checkbox menu items to toggle each layer
+- **Auto-update RV binary** — when a code update includes a new `rv_build` stamp, the server automatically downloads the updated RV binary from GitHub Releases using the existing PAT
+- **Bundled OpenRV** — auto-downloaded by install.bat / install.sh (no manual build required)
 - Also supports any custom external player (set the path in Settings)
+
+### Crate System
+- **Crates** — collect assets from any project, sequence, or shot into named crates for review, export, or sharing
+- Create, rename, and delete crates from the sidebar or context menu
+- **Add to Crate** from right-click context menu on any asset (submenu with crate picker)
+- **Add to Crate from RV** — send the currently viewed clip to a crate directly from inside OpenRV
+- **Remove from Crate** — context menu option when viewing a crate
+- Tree nav sidebar shows all crates with live asset count badges
+- Export an entire crate as a batch
+
+### Plugin Architecture
+- Resolve, Flow/ShotGrid, and ComfyUI are now **self-contained plugins** under `plugins/`
+- Each plugin has a `plugin.json` manifest, routes, optional frontend assets, and scripts
+- `pluginLoader.js` auto-discovers plugins, mounts routes, and serves frontend assets
+- `pluginRegistry.js` handles frontend plugin registration and settings injection
+- Easy to add new integrations without modifying core code
 
 ### ComfyUI Integration
 - **3 custom ComfyUI nodes** for direct vault integration:
@@ -75,6 +108,14 @@ A local media asset manager for creative production — organize, browse, import
   - **LoadVideoFrameFromMediaVault** — Load a specific video frame by frame number
   - **SaveToMediaVault** — Save ComfyUI output back into the vault with proper naming
 - **Auto-populate Save from Load** — When you add a SaveToMediaVault node, it automatically copies the Project/Sequence/Shot from an existing Load node in your workflow so you don't have to set them twice
+
+### DaVinci Resolve Integration
+- Right-click assets → **"Send to Resolve"** to push media into Resolve's Media Pool
+- **Auto-bin-by-hierarchy** creates Project/Sequence/Shot folder structure in Resolve Media Pool
+- Python bridge (`resolve_bridge.py`) with status, list_bins, send_to_bin, get_projects commands
+- REST API: `GET /status`, `POST /send`, `GET /bins`, `GET /projects`
+- Cross-platform: Windows (fusionscript.dll) + macOS (fusionscript.so)
+- Resolve must be running; status check shows connection state
 - **📂 Copy from Load Node** button — Manually re-sync Save node fields from the Load node at any time
 - **Dynamic cascading dropdowns**: Project → Sequence → Shot → Role → Asset
 - **🔄 Refresh button** on each node re-queries the vault — including new **projects and roles** — without restarting ComfyUI
@@ -289,36 +330,61 @@ Comfy-Access-Manager/
 ├── src/
 │   ├── server.js              # Express server (port 7700)
 │   ├── database.js            # sql.js SQLite wrapper
+│   ├── pluginLoader.js        # Auto-discovers & mounts plugins from plugins/
 │   ├── routes/
 │   │   ├── projectRoutes.js   # Project + Sequence + Shot CRUD
 │   │   ├── assetRoutes.js     # Asset import, browse, streaming, delete
-│   │   ├── exportRoutes.js    # FFmpeg transcode/export
+│   │   ├── crateRoutes.js     # Crate CRUD, add/remove assets, export
+│   │   ├── exportRoutes.js    # FFmpeg transcode/export (GPU-aware)
 │   │   ├── roleRoutes.js      # Role CRUD
 │   │   ├── settingsRoutes.js  # Settings API + vault setup
-│   │   ├── comfyuiRoutes.js   # ComfyUI integration endpoints
-│   │   └── flowRoutes.js      # Flow/ShotGrid sync (planned)
+│   │   ├── userRoutes.js      # User profiles, PIN auth, project visibility
+│   │   └── updateRoutes.js    # Auto-update, git pull, RV binary update
 │   ├── services/
 │   │   ├── ThumbnailService.js  # Thumbnail generation (Sharp + FFmpeg)
 │   │   ├── MediaInfoService.js  # Metadata extraction (FFprobe)
 │   │   ├── FileService.js       # File operations
-│   │   ├── WatcherService.js    # Folder watching (Chokidar)
-│   │   └── FlowService.js       # Flow/ShotGrid API client (planned)
+│   │   ├── TranscodeService.js  # Platform-aware GPU encoder selection
+│   │   └── WatcherService.js    # Folder watching (Chokidar)
 │   └── utils/
 │       ├── naming.js          # ShotGrid naming engine
-│       └── mediaTypes.js      # File extension → media type mapping
+│       ├── mediaTypes.js      # File extension → media type mapping
+│       └── pathResolver.js    # Cross-platform path mapping (Mac ↔ Windows)
+├── plugins/                   # Self-contained integrations
+│   ├── comfyui/               # ComfyUI nodes + settings
+│   │   ├── plugin.json
+│   │   ├── routes.js
+│   │   └── frontend/
+│   ├── flow/                  # Flow/ShotGrid sync
+│   │   ├── plugin.json
+│   │   ├── routes.js
+│   │   ├── services/FlowService.js
+│   │   ├── scripts/flow_bridge.py
+│   │   └── frontend/
+│   └── resolve/               # DaVinci Resolve integration
+│       ├── plugin.json
+│       ├── routes.js
+│       └── scripts/resolve_bridge.py
 ├── public/
 │   ├── index.html             # Single-page app shell
 │   ├── css/styles.css         # Neutral gray theme for VFX work
 │   └── js/                    # Frontend ES6 modules
 │       ├── main.js            # Entry point, tab switching
-│       ├── browser.js         # Asset browser, grid/list views, tree nav
+│       ├── browser.js         # Asset browser orchestrator
+│       ├── assetGrid.js       # Grid/list rendering, selection, marquee drag
+│       ├── treeNav.js         # Sidebar tree hierarchy
+│       ├── contextMenus.js    # Right-click context menus
+│       ├── crate.js           # Crate UI: create, rename, delete, view
+│       ├── pluginRegistry.js  # Frontend plugin registration
 │       ├── import.js          # File browser, import flow, rename preview
 │       ├── export.js          # Export modal
 │       ├── player.js          # Media player modal
-│       ├── settings.js        # Settings tab, roles
+│       ├── settings.js        # Settings tab, roles, users
 │       ├── api.js             # API client
 │       ├── state.js           # Global state
 │       └── utils.js           # Shared utilities
+├── rv-package/
+│   └── mediavault_mode.py     # RV plugin (Compare, Crate, Overlay)
 ├── comfyui/
 │   ├── mediavault_node.py     # 3 custom ComfyUI nodes
 │   ├── __init__.py
@@ -327,12 +393,13 @@ Comfy-Access-Manager/
 ├── data/
 │   └── mediavault.db          # SQLite database (auto-created)
 ├── thumbnails/                # Generated thumbnails
+├── tools/
+│   ├── rv/                    # Bundled OpenRV binary (auto-downloaded)
+│   └── ffmpeg/                # Portable FFmpeg (Windows, auto-downloaded)
 ├── install.bat                # Windows installer (1-click)
 ├── install.sh                 # macOS/Linux installer
-├── install.command            # macOS double-click installer wrapper
 ├── start.bat                  # Windows launcher
 ├── start.sh                   # macOS/Linux launcher
-├── start.command              # macOS double-click launcher wrapper
 └── package.json
 ```
 

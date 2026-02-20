@@ -288,6 +288,14 @@ router.post('/apply', async (req, res) => {
         // 5. Install any new dependencies
         execSync('npm install --omit=dev', { cwd: ROOT, stdio: 'pipe', timeout: 120000 });
 
+        // 6. Rebuild obfuscated frontend bundle for production users
+        try {
+            execSync('npm run build', { cwd: ROOT, stdio: 'pipe', timeout: 60000 });
+            console.log('[Update] ✅ Frontend build complete');
+        } catch (buildErr) {
+            console.warn('[Update] ⚠️ Frontend build skipped:', buildErr.message);
+        }
+
         // Clear version cache
         delete require.cache[require.resolve('../../package.json')];
         lastCheck = null;

@@ -21,6 +21,7 @@ const { generateVaultName, getVaultDirectory, resolveCollision } = require('../u
 const { detectMediaType } = require('../utils/mediaTypes');
 
 const resolvedFFmpeg = ThumbnailService.findFFmpeg() || 'ffmpeg';
+const IS_MAC = process.platform === 'darwin';
 
 // ═══════════════════════════════════════════
 //  DERIVATIVE FORMAT PRESETS
@@ -33,15 +34,22 @@ const DERIVATIVE_FORMATS = {
         targetMediaType: 'video',
         outputIsSequence: false,
         buildArgs: (inputInfo) => {
-            // Try NVENC first, CPU fallback handled at runtime
-            const args = [
+            // Platform-aware GPU encoder: VideoToolbox on Mac, NVENC on Windows/Linux
+            if (IS_MAC) {
+                return [
+                    '-c:v', 'h264_videotoolbox',
+                    '-q:v', '65',
+                    '-pix_fmt', 'yuv420p',
+                    '-movflags', '+faststart',
+                ];
+            }
+            return [
                 '-c:v', 'h264_nvenc',
                 '-preset', 'p4',
                 '-cq', '18',
                 '-pix_fmt', 'yuv420p',
                 '-movflags', '+faststart',
             ];
-            return args;
         },
         buildCpuFallbackArgs: () => [
             '-c:v', 'libx264',
@@ -268,10 +276,11 @@ class TranscodeService {
         try {
             await this._runFFmpeg(args, job);
         } catch (err) {
-            // If NVENC failed, try CPU fallback
+            // If GPU encoder failed (NVENC or VideoToolbox), try CPU fallback
             if (err.message.includes('nvenc') || err.message.includes('No NVENC') ||
+                err.message.includes('videotoolbox') || err.message.includes('VideoToolbox') ||
                 err.message.includes('not found') || err.message.includes('Unknown encoder')) {
-                console.log(`[Transcode] NVENC failed, falling back to CPU encoder...`);
+                console.log(`[Transcode] GPU encoder failed, falling back to CPU encoder...`);
                 job.progressText = 'NVENC unavailable, using CPU encoder...';
 
                 // Rebuild with CPU fallback args

@@ -1,0 +1,20 @@
+{
+  "id": "resolve",
+  "name": "DaVinci Resolve",
+  "description": "Two-way bridge between CAM and DaVinci Resolve for shot ingestion, reorganization, and relinking.",
+  "version": "1.0.0",
+  "icon": "🎬",
+  "backend": {
+    "routes": "routes.js",
+    "mountPath": "/api/resolve"
+  },
+  "frontend": {
+    "contextMenu": [
+      {
+        "action": "sendResolve",
+        "label": "🎬 Send to Resolve",
+        "scope": "asset"
+      }
+    ]
+  }
+}

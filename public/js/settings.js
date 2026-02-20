@@ -12,6 +12,7 @@
 import { state } from './state.js';
 import { api } from './api.js';
 import { esc, escAttr, showToast } from './utils.js';
+import pluginRegistry from './pluginRegistry.js';
 
 // ═══════════════════════════════════════════
 //  SETTINGS
@@ -26,9 +27,7 @@ export async function loadSettings() {
         document.getElementById('settingNamingTemplate').value = state.settings.naming_template || '';
         document.getElementById('settingThumbSize').value = state.settings.thumbnail_size || '320';
         document.getElementById('settingAutoThumb').checked = state.settings.auto_thumbnail !== 'false';
-        document.getElementById('settingComfyPath').value = state.settings.comfyui_output_path || '';
-        document.getElementById('settingComfyWatch').checked = state.settings.comfyui_watch_enabled === 'true';
-        document.getElementById('settingComfyUrl').value = state.settings.comfyui_url || 'http://127.0.0.1:8188';
+
 
         // External player
         const playerSel = document.getElementById('settingDefaultPlayer');
@@ -91,6 +90,10 @@ export async function loadSettings() {
 
         // Load GitHub token status
         loadGithubTokenStatus();
+
+        // Inject plugin settings HTML and populate their values
+        pluginRegistry.injectSettingsSections();
+        await pluginRegistry.loadPluginSettings(state.settings);
     } catch (err) {
         console.error('Settings load failed:', err);
     }
@@ -102,12 +105,12 @@ async function saveSettings() {
         naming_template: document.getElementById('settingNamingTemplate').value.trim(),
         thumbnail_size: document.getElementById('settingThumbSize').value,
         auto_thumbnail: document.getElementById('settingAutoThumb').checked ? 'true' : 'false',
-        comfyui_output_path: document.getElementById('settingComfyPath').value.trim(),
-        comfyui_watch_enabled: document.getElementById('settingComfyWatch').checked ? 'true' : 'false',
-        comfyui_url: document.getElementById('settingComfyUrl').value.trim() || 'http://127.0.0.1:8188',
+
         default_player: document.getElementById('settingDefaultPlayer').value,
         custom_player_path: document.getElementById('settingCustomPlayerPath').value.trim(),
         rv_path: document.getElementById('settingRvPath').value.trim(),
+        // Merge plugin settings values
+        ...pluginRegistry.getPluginSettingsValues(),
     };
 
     try {

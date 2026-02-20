@@ -79,8 +79,25 @@ else
     echo "         ✓ Git installed."
 fi
 
-# ─── [4/6] FFmpeg ───
-echo "  [4/6] Checking FFmpeg..."
+# ─── [4/6] Python3 (needed for Resolve bridge, Flow sync) ───
+echo "  [4/6] Checking Python3..."
+if command -v python3 &>/dev/null; then
+    echo "         ✓ Python3 $(python3 --version 2>&1 | cut -d' ' -f2)"
+else
+    echo "         Installing Python3..."
+    if [[ "$OSTYPE" == "darwin"* ]]; then
+        # Xcode CLT includes Python3; prompt install if missing
+        echo "         Python3 comes with Xcode Command Line Tools."
+        echo "         If prompted, click Install and wait for download."
+        xcode-select --install 2>/dev/null || true
+    else
+        sudo apt install -y python3
+    fi
+    echo "         ✓ Python3 ready."
+fi
+
+# ─── [5/7] FFmpeg ───
+echo "  [5/7] Checking FFmpeg..."
 if command -v ffmpeg &>/dev/null; then
     echo "         ✓ FFmpeg ready."
 else
@@ -93,14 +110,14 @@ else
     echo "         ✓ FFmpeg installed."
 fi
 
-# ─── [5/6] App dependencies ───
-echo "  [5/6] Installing app dependencies..."
+# ─── [6/7] App dependencies ───
+echo "  [6/7] Installing app dependencies..."
 echo "         This may take a minute on first install..."
 npm install --no-audit --no-fund --loglevel=error 2>&1 | tail -1 || true
 echo "         ✓ Dependencies ready."
 
-# ─── [6/6] RV / OpenRV (optional) ───
-echo "  [6/6] Checking RV / OpenRV..."
+# ─── [7/7] RV / OpenRV (optional) ───
+echo "  [7/7] Checking RV / OpenRV..."
 RV_BUNDLED=false
 RV_SYSTEM=false
 if [[ "$OSTYPE" == "darwin"* ]]; then
@@ -200,7 +217,7 @@ echo "    ✅ Installation Complete!"
 echo "  ============================================"
 echo ""
 
-# ─── [7/7] Create macOS .app in /Applications ───
+# ─── Create macOS .app in /Applications ───
 if [[ "$OSTYPE" == "darwin"* ]]; then
     if command -v cc &>/dev/null; then
         read -p "  Install to /Applications for Dock + Spotlight access? [Y/n]: " INSTALL_APP

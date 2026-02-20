@@ -353,6 +353,53 @@ async function prefillFromLoadNode(saveNode) {
     }
 }
 
+// ── Refresh button (persistent) ─────────────────────────
+const REFRESH_BTN_NAME = "🔄 Refresh Assets";
+
+/**
+ * Add (or re-add) the Refresh Assets button to a MediaVault node.
+ * ComfyUI can strip dynamically-added widgets during configure/
+ * serialization cycles, so we guard against duplicates and re-add
+ * if the button goes missing.
+ */
+function addRefreshButton(node) {
+    // Don't add a duplicate
+    if (findWidget(node, REFRESH_BTN_NAME)) return;
+
+    const btn = node.addWidget("button", REFRESH_BTN_NAME, null, async () => {
+        // Refresh projects
+        const projW = findWidget(node, "project");
+        if (projW) {
+            const projects = await mvFetch("/mediavault/projects");
+            const projNames = projects.map(p => `${p.name} (${p.code})`);
+            if (projNames.length > 0) {
+                updateComboWidget(projW, projNames, true);
+            }
+        }
+        // Refresh roles (picks up newly added roles without restart)
+        const roleW = findWidget(node, "role");
+        if (roleW) {
+            const roles = await mvFetch("/mediavault/roles");
+            const roleNames = roles.map(r => `${r.name} (${r.code})`);
+            if (roleNames.length > 0) {
+                updateComboWidget(roleW, roleNames, true);
+            }
+        }
+        await cascadeUpdate(node, "project");
+        // Re-ensure button survives after the cascade
+        ensureRefreshButton(node);
+    });
+    btn.serialize = false;
+}
+
+/**
+ * Called after operations that might strip dynamic widgets.
+ * Uses a micro-delay so LiteGraph finishes its widget rebuild first.
+ */
+function ensureRefreshButton(node) {
+    setTimeout(() => addRefreshButton(node), 50);
+}
+
 // ── Extension registration ──────────────────────────────
 app.registerExtension({
     name: "MediaVault.DynamicDropdowns",
@@ -433,27 +480,14 @@ app.registerExtension({
 
         // Also add a manual Refresh button so the user can force re-query
         // This also refreshes the project list itself (new projects added after ComfyUI started)
-        node.addWidget("button", "🔄 Refresh Assets", null, async () => {
-            // Refresh projects
-            const projW = findWidget(node, "project");
-            if (projW) {
-                const projects = await mvFetch("/mediavault/projects");
-                const projNames = projects.map(p => `${p.name} (${p.code})`);
-                if (projNames.length > 0) {
-                    updateComboWidget(projW, projNames, true);
-                }
-            }
-            // Refresh roles (picks up newly added roles without restart)
-            const roleW = findWidget(node, "role");
-            if (roleW) {
-                const roles = await mvFetch("/mediavault/roles");
-                const roleNames = roles.map(r => `${r.name} (${r.code})`);
-                if (roleNames.length > 0) {
-                    updateComboWidget(roleW, roleNames, true);
-                }
-            }
-            await cascadeUpdate(node, "project");
-        });
+        addRefreshButton(node);
+
+        // Re-add button after workflow load / node configure (ComfyUI strips dynamic widgets)
+        const origConfigure = node.onConfigure;
+        node.onConfigure = function (info) {
+            if (origConfigure) origConfigure.call(this, info);
+            ensureRefreshButton(this);
+        };
 
         // ── Auto-populate Save node from any Load node in the graph ──
         // On creation, scan for an existing Load node and copy its

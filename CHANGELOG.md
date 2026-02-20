@@ -2,6 +2,66 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.4.1] - 2026-02-19
+
+### Added
+- **Marquee (rubber-band) drag selection** — click and drag on empty space in the asset grid to draw a blue selection rectangle; all intersecting cards are selected
+  - Shift+drag adds to existing selection (additive mode)
+  - 5px movement threshold prevents accidental marquee on normal clicks
+  - Auto-scrolls when dragging near viewport edges
+  - Works in both grid and list views
+  - Cursor switches to crosshair during drag, text selection disabled
+
+### Fixed
+- **Click-to-deselect after marquee** — the `click` event that fires after `mouseup` was clearing the selection made by the marquee; added `_suppressNextClick` flag to prevent this
+- **Deselect on background click** — now correctly detects clicks on both `#assetContainer` and `#assetContainerWrap` as "empty space" clicks
+
+## [1.4.0] - 2026-02-19
+
+### Added
+- **Crate system** — collect assets from any project/sequence/shot into named crates for review, export, or sharing
+  - `public/js/crate.js` — full crate UI: create, rename, delete, view, export
+  - `src/routes/crateRoutes.js` — REST API for crate CRUD, add/remove assets, export
+  - `crates` + `crate_assets` database tables with ordered asset positions
+  - Tree nav sidebar shows crate list with asset count badges
+  - Context menu "Add to Crate" submenu with crate picker
+  - Context menu "Remove from Crate" when viewing a crate
+  - RV plugin: **Add to Crate** from right-click menu inside OpenRV (sends currently viewed clip)
+- **Plugin architecture** — Resolve, Flow/ShotGrid, and ComfyUI refactored into self-contained plugins
+  - `src/pluginLoader.js` — scans `plugins/` directory, auto-mounts routes and serves plugin frontend assets
+  - `public/js/pluginRegistry.js` — frontend plugin registration and settings injection
+  - Each plugin is a folder with `plugin.json` manifest, `routes.js`, optional `frontend/`, `services/`, `scripts/`
+  - Plugins: `plugins/comfyui/`, `plugins/flow/`, `plugins/resolve/`
+  - Old monolithic route files (`comfyuiRoutes.js`, `flowRoutes.js`, `resolveRoutes.js`, `FlowService.js`) removed from core
+- **macOS VideoToolbox GPU encoding** — Mac exports now use hardware-accelerated `h264_videotoolbox` / `hevc_videotoolbox` instead of slow CPU `libx264`
+  - `TranscodeService.js` — platform-aware GPU encoder selection (VideoToolbox on Mac, NVENC on Windows)
+  - `exportRoutes.js` — `CODEC_PRESETS` and `CODEC_NAME_MAP` are now platform-aware; codec dropdown shows correct GPU label per OS
+  - Export execution now auto-retries with CPU fallback (`libx264`/`libx265`) if GPU encoder fails
+- **install.sh Python3 check** — installer now verifies Python3 is available (needed for Resolve bridge, Flow sync)
+
+### Fixed
+- **RV plugin `_QWidgets` undefined** — `QListWidget` and `QListWidgetItem` were never imported; replaced all `_QWidgets.ClassName` references with direct class imports for both PySide2 and PySide6
+- **RV plugin multi-clip source detection** — "Add to Crate" always exported the first clip regardless of which was viewed; now uses `rvc.sourcesAtFrame(rvc.frame())` to detect the currently displayed source
+- **Crate sidebar count badge showing 0** — `addToCrate()` was not calling `loadCrates()` after successful add; sidebar now refreshes immediately
+- **Context menu "Delete" visible in crate view** — hidden when viewing a crate (assets should be removed, not deleted)
+- **Tree nav not clearing crate state** — navigating away from a crate in the tree now properly clears `activeCrateId`
+
+### Changed
+- Updated copilot-instructions platform-branching files table from 8 to 13 entries
+- Cache-bust CSS and JS links updated to `?v=1.4.0`
+
+## [1.3.2] - 2026-02-18
+
+### Added
+- **OpenRV overlay system** — metadata burn-in, status stamp, and watermark rendered directly in the RV viewport
+  - Embedded 5×7 pixel font via pure `glBitmap` — no GLUT/freeglut dependency (works on all platforms)
+  - **Metadata burn-in** (bottom-right, above timeline) — single-line `ShotName  0001` format with 4-digit zero-padded frame number
+  - **Status stamp** (top-right) — colored badge: WIP (orange), Review (blue), Approved (green), Final (gold)
+  - **Watermark** (center) — faint "CONFIDENTIAL" or "INTERNAL USE ONLY" text
+  - **Shift+O** hotkey + MediaVault menu checkboxes to toggle each overlay layer independently
+  - `GET /api/assets/overlay-info` endpoint provides asset metadata (shot name, role, version, status) for overlay display
+  - `_refreshOverlayMeta()` fetches metadata from CAM server when file changes in RV
+
 ## [1.3.1] - 2026-02-17
 
 ### Added
