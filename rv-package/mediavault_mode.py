@@ -706,49 +706,77 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
     # ── source path resolution ───────────────────────────────────
 
     def _getCurrentSourcePath(self):
-        """Return the file path of the currently VIEWED source (not always the first)."""
+        """Return the file path of the currently VIEWED source (not always the first).
+
+        When multiple clips are loaded (sequence or stack), this must return
+        only the clip the user is currently viewing — *not* the first source.
+
+        Strategy order:
+          1. viewNode — if RV is showing a single source group (PageUp/Down
+             sets viewNode to the source group itself), read its media directly.
+          2. sourcesAtFrame — for sequence layouts, returns the one source
+             whose frame range spans the current playhead position.  If
+             multiple sources are returned (stack/overlay), use the last
+             entry (top-of-stack, which is the visible one).
+          3. Fallback — first source (single-clip case).
+        """
         try:
-            # --- Strategy 1: Use sourcesAtFrame to find the source visible NOW ---
+            # --- Strategy 1: viewNode IS a source group (PageUp/Down) ---
+            try:
+                vn = rvc.viewNode()
+                if vn:
+                    vn_type = rvc.nodeType(vn)
+
+                    # Direct source group view (after pressing PageUp/Down)
+                    if vn_type == "RVSourceGroup":
+                        path = self._pathFromSourceGroup(vn)
+                        if path:
+                            return path
+
+                    # If viewNode is an RVSequenceGroup or RVStackGroup,
+                    # walk its inputs to find the active one.
+                    if vn_type in ("RVSequenceGroup", "RVStackGroup"):
+                        # For stacks, RV stores the active input index
+                        try:
+                            for node in rvc.nodesInGroup(vn):
+                                if rvc.nodeType(node) == "RVStack":
+                                    idx = rvc.getIntProperty(
+                                        node + ".output.active")[0]
+                                    sgs = [sg for sg in rvc.nodesOfType(
+                                        "RVSourceGroup")]
+                                    if 0 <= idx < len(sgs):
+                                        path = self._pathFromSourceGroup(
+                                            sgs[idx])
+                                        if path:
+                                            return path
+                        except Exception:
+                            pass
+            except Exception as e:
+                print("[MediaVault] viewNode strategy failed: %s" % e)
+
+            # --- Strategy 2: sourcesAtFrame — best for sequences ---
             try:
                 frame = rvc.frame()
                 srcsAtFrame = rvc.sourcesAtFrame(frame)
                 if srcsAtFrame:
-                    # sourcesAtFrame returns list of (sourceName, ...) tuples
-                    for entry in srcsAtFrame:
-                        source_name = entry if isinstance(entry, str) else entry[0]
-                        path = self._resolveSourcePath(source_name)
-                        if path:
-                            return path
-            except Exception:
-                pass
+                    # For stacks multiple sources share the same frame;
+                    # the LAST entry is typically the top (visible) layer.
+                    # For sequences only one source spans the current frame.
+                    entry = srcsAtFrame[-1]
+                    source_name = (entry if isinstance(entry, str)
+                                   else entry[0])
+                    path = self._resolveSourcePath(source_name)
+                    if path:
+                        return path
+            except Exception as e:
+                print("[MediaVault] sourcesAtFrame failed: %s" % e)
 
-            # --- Strategy 2: Walk viewNode's source group ---
-            try:
-                vn = rvc.viewNode()
-                if vn:
-                    frame = rvc.frame()
-                    # For sequence/stack nodes, find the active source group
-                    for sg in rvc.nodesOfType("RVSourceGroup"):
-                        path = self._pathFromSourceGroup(sg)
-                        if path:
-                            # In single-source view or first match fallback
-                            pass  # Will fall through to strategy 3
-            except Exception:
-                pass
-
-            # --- Strategy 3: Fallback — first source (original behavior) ---
+            # --- Strategy 3: Fallback — first source (single-clip) ---
             srcs = rvc.sources()
-            if not srcs:
-                return None
-
-            source_name = srcs[0][0] if isinstance(srcs[0], (list, tuple)) else srcs[0]
-            path = self._resolveSourcePath(source_name)
-            if path:
-                return path
-
-            # --- Strategy 4: Walk all source groups ---
-            for sg in rvc.nodesOfType("RVSourceGroup"):
-                path = self._pathFromSourceGroup(sg)
+            if srcs:
+                source_name = (srcs[0][0] if isinstance(srcs[0], (list, tuple))
+                               else srcs[0])
+                path = self._resolveSourcePath(source_name)
                 if path:
                     return path
 
@@ -970,6 +998,9 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             rve.displayFeedback("No source loaded", 3.0)
             return
 
+        basename = os.path.basename(filepath)
+        print("[MediaVault] setStatus('%s') on: %s" % (status, basename))
+
         # We need the asset ID to update status. We can get it from overlay-info or compare-targets
         # Let's fetch overlay-info to get the asset ID
         if not urllib:
@@ -1000,7 +1031,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 put_result = json.loads(put_response.read().decode("utf-8"))
                 
             if put_result.get("success"):
-                rve.displayFeedback("Status set to: %s" % status, 3.0)
+                rve.displayFeedback("%s -> %s" % (basename, status), 3.0)
                 # Force overlay refresh
                 self._overlay_meta = None
                 self._overlay_tick = 0
