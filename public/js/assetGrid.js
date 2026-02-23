@@ -290,6 +290,7 @@ function renderAssets() {
                     <span class="asset-type-badge ${a.media_type}">${a.media_type}</span>
                     ${a.is_linked ? '<span class="asset-link-badge" title="Linked - file remains at original location"></span>' : ''}
                     ${a.role_name ? `<span class="asset-role-badge" style="background:${a.role_color || '#666'}">${a.role_icon || ''} ${esc(a.role_code)}</span>` : ''}
+                      ${a.status ? `<span class="asset-status-badge status-${a.status.toLowerCase()}">${esc(a.status)}</span>` : ''}
                     ${a.duration ? `<span class="asset-duration">${formatDuration(a.duration)}</span>` : ''}
                 </div>
                 <button class="asset-star" onclick="event.stopPropagation();toggleStar(${a.id})">${a.starred ? '*' : '*'}</button>
@@ -313,6 +314,7 @@ function renderAssets() {
                 <div class="row-shot">Shot</div>
                 <div class="row-name">Vault Name</div>
                 <div class="row-role">Role</div>
+                  <div class="row-status">Status</div>
                 <div class="row-res">Resolution</div>
                 <div class="row-size">Size</div>
                 <div class="row-date">Created</div>
@@ -334,6 +336,7 @@ function renderAssets() {
                 <div class="row-shot">${esc(a.shot_name || a.shot_code || '-')}</div>
                 <div class="row-name">${a.is_linked ? ' ' : ''}${esc(a.vault_name)}</div>
                 <div class="row-role">${a.role_name ? `<span class="role-tag" style="background:${a.role_color || '#666'}">${a.role_icon || ''} ${esc(a.role_code)}</span>` : ''}</div>
+                  <div class="row-status">${a.status ? `<span class="status-tag status-${a.status.toLowerCase()}">${esc(a.status)}</span>` : '-'}</div>
                 <div class="row-res">${a.width ? `${a.width}x${a.height}` : '-'}</div>
                 <div class="row-size">${formatSize(a.file_size)}</div>
                 <div class="row-date">${formatDateTime(a.created_at)}</div>
@@ -1106,5 +1109,7 @@ window.handleVideoLeave = handleVideoLeave;
 
 // Expose tree expand helper for openProject
 window._treeExpandNode = null; // Set by browser.js orchestrator after treeNav loads
+
+
 
 

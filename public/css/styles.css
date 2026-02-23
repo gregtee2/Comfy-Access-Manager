@@ -872,6 +872,21 @@ label {
     line-height: 1.4;
 }
 
+/* --- Asset Status Badge (grid view) --- */
+.asset-status-badge {
+    position: absolute;
+    top: 4px; right: 4px;
+    padding: 1px 6px;
+    border-radius: 8px;
+    font-size: 0.6rem;
+    color: #fff;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    z-index: 2;
+    line-height: 1.4;
+    text-transform: uppercase;
+}
+
 /* --- Role Tag (list view) --- */
 .row-role { width: 70px; text-align: center; }
 .role-tag {
@@ -880,6 +895,28 @@ label {
     border-radius: 6px;
     font-size: 0.65rem;
     color: #fff;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+}
+
+/* --- Status Tag (list view) --- */
+.row-status { width: 70px; text-align: center; }
+.status-tag {
+    display: inline-block;
+    padding: 1px 6px;
+    border-radius: 6px;
+    font-size: 0.65rem;
+    color: #fff;
+    font-weight: 600;
+    text-shadow: 0 1px 2px rgba(0,0,0,0.5);
+    text-transform: uppercase;
+}
+
+/* --- Status Colors --- */
+.status-wip { background: #ffA600; }
+.status-review { background: #4c99ff; }
+.status-approved { background: #33cc33; }
+.status-final { background: #00bfff; color: #000; text-shadow: none; }
     font-weight: 600;
 }
 
@@ -1103,7 +1140,7 @@ label {
 .asset-list { display: flex; flex-direction: column; gap: 0; }
 .asset-row {
     display: grid;
-    grid-template-columns: 44px 68px 36px 60px 80px 1fr 80px 90px 80px 130px 32px;
+    grid-template-columns: 44px 68px 36px 60px 80px 1fr 80px 70px 90px 80px 130px 32px;
     align-items: center;
     gap: 8px;
     padding: 5px 12px;
@@ -1151,6 +1188,7 @@ label {
 .asset-row .row-shot { color: var(--text-dim); font-size: 0.78rem; }
 .asset-row .row-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 .asset-row .row-role {}
+.asset-row .row-status {}
 .asset-row .row-res { color: var(--text-dim); font-size: 0.72rem; }
 .asset-row .row-size { color: var(--text-dim); }
 .asset-row .row-date { color: var(--text-muted); font-size: 0.72rem; white-space: nowrap; }
