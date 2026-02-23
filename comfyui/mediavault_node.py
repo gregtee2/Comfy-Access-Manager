@@ -180,6 +180,31 @@ try:
             return web.json_response({"hasWorkflow": True, "workflow": data})
         return web.json_response({"hasWorkflow": False})
 
+    # ── Pending Assets (one-shot storage for "Send to ComfyUI") ──
+    _pending_assets = None
+
+    @PromptServer.instance.routes.post("/mediavault/send-assets")
+    async def mv_store_pending_assets(request):
+        """Store asset list sent from CAM. The JS extension picks them up and creates loader nodes."""
+        global _pending_assets
+        try:
+            data = await request.json()
+            _pending_assets = data.get("assets", [])
+            print(f"[MediaVault] ✓ Pending assets stored ({len(_pending_assets)} assets)")
+            return web.json_response({"success": True})
+        except Exception as e:
+            return web.json_response({"success": False, "error": str(e)}, status=400)
+
+    @PromptServer.instance.routes.get("/mediavault/send-assets")
+    async def mv_get_pending_assets(request):
+        """Retrieve and clear pending assets (one-shot)."""
+        global _pending_assets
+        if _pending_assets is not None and len(_pending_assets) > 0:
+            data = _pending_assets
+            _pending_assets = None
+            return web.json_response({"hasAssets": True, "assets": data})
+        return web.json_response({"hasAssets": False})
+
     print("[MediaVault] ✓ Dynamic dropdown routes registered on ComfyUI server")
 
 except ImportError:

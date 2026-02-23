@@ -263,8 +263,8 @@ router.post('/save', async (req, res) => {
                 media_type, file_ext, file_size,
                 width, height, duration, fps, codec,
                 comfyui_node_id, comfyui_workflow,
-                version
-            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                version, status
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, NULL)
         `).run(
             project.id, sequence?.id || null, shot?.id || null, role?.id || null,
             originalName, imported.vaultName, imported.vaultPath, imported.relativePath,
@@ -546,6 +546,90 @@ router.post('/load-in-comfy/:id', async (req, res) => {
 
     } catch (err) {
         console.error('[ComfyUI] load-in-comfy error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST /send-to-comfy — Send selected assets to ComfyUI as LoadFromMediaVault nodes
+router.post('/send-to-comfy', async (req, res) => {
+    try {
+        const comfyUrl = getSetting('comfyui_url') || 'http://127.0.0.1:8188';
+
+        // 1. Check if ComfyUI is running
+        const running = await checkComfyUI(comfyUrl);
+        if (!running) {
+            return res.status(503).json({
+                success: false,
+                error: 'ComfyUI is not running. Start ComfyUI first.',
+            });
+        }
+
+        // 2. Get asset IDs from request
+        const { assetIds } = req.body;
+        if (!assetIds || !Array.isArray(assetIds) || assetIds.length === 0) {
+            return res.status(400).json({ success: false, error: 'assetIds array required' });
+        }
+
+        // 3. Look up each asset with its full hierarchy
+        const db = getDb();
+        const assets = [];
+        for (const id of assetIds) {
+            const asset = db.prepare(`
+                SELECT a.id, a.vault_name, a.file_path, a.media_type,
+                       a.project_id, a.sequence_id, a.shot_id, a.role_id,
+                       p.name as project_name, p.code as project_code,
+                       sq.name as sequence_name, sq.code as sequence_code,
+                       sh.name as shot_name, sh.code as shot_code,
+                       r.name as role_name, r.code as role_code
+                FROM assets a
+                LEFT JOIN projects p ON p.id = a.project_id
+                LEFT JOIN sequences sq ON sq.id = a.sequence_id
+                LEFT JOIN shots sh ON sh.id = a.shot_id
+                LEFT JOIN roles r ON r.id = a.role_id
+                WHERE a.id = ?
+            `).get(id);
+            if (asset) assets.push(asset);
+        }
+
+        if (assets.length === 0) {
+            return res.status(404).json({ success: false, error: 'No valid assets found' });
+        }
+
+        // 4. Build asset metadata for ComfyUI nodes
+        const assetData = assets.map(a => ({
+            id: a.id,
+            vault_name: a.vault_name,
+            project: a.project_name && a.project_code ? `${a.project_name} (${a.project_code})` : '(Load MediaVault...)',
+            sequence: a.sequence_name && a.sequence_code ? `${a.sequence_name} (${a.sequence_code})` : '* (All Sequences)',
+            shot: a.shot_name && a.shot_code ? `${a.shot_name} (${a.shot_code})` : '* (All Shots)',
+            role: a.role_name && a.role_code ? `${a.role_name} (${a.role_code})` : '* (All Roles)',
+        }));
+
+        // 5. POST to ComfyUI's pending-send endpoint
+        const result = await httpPost(comfyUrl + '/mediavault/send-assets', { assets: assetData });
+        if (result.status !== 200 || !result.body?.success) {
+            const hint = result.status === 404
+                ? ' — Restart ComfyUI to load the updated MediaVault plugin.'
+                : '';
+            return res.status(502).json({
+                success: false,
+                error: 'Failed to send assets to ComfyUI (HTTP ' + result.status + ')' + hint,
+            });
+        }
+
+        logActivity('comfyui_send', 'asset', assets[0].id, {
+            count: assets.length,
+            names: assets.map(a => a.vault_name),
+        });
+
+        res.json({
+            success: true,
+            comfyUrl,
+            assetCount: assets.length,
+        });
+
+    } catch (err) {
+        console.error('[ComfyUI] send-to-comfy error:', err);
         res.status(500).json({ success: false, error: err.message });
     }
 });

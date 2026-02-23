@@ -546,11 +546,84 @@ app.registerExtension({
 
     /**
      * setup() runs after the ComfyUI graph is initialized.
-     * If the URL contains ?cam_load=1, fetch the pending workflow
-     * from the Python server and load it into the graph.
+     * If the URL contains ?cam_load=1, fetch the pending workflow.
+     * If the URL contains ?cam_send=1, fetch pending assets and create loader nodes.
      */
     async setup() {
         const params = new URLSearchParams(window.location.search);
+
+        // ── Handle "Send to ComfyUI" (creates loader nodes for selected assets) ──
+        if (params.has("cam_send")) {
+            const cleanUrl = new URL(window.location);
+            cleanUrl.searchParams.delete("cam_send");
+            window.history.replaceState({}, "", cleanUrl);
+
+            try {
+                const res = await fetch("/mediavault/send-assets");
+                if (!res.ok) return;
+                const data = await res.json();
+                if (!data.hasAssets || !data.assets?.length) {
+                    console.warn("[MediaVault] cam_send param present but no pending assets");
+                    return;
+                }
+
+                // Wait for ComfyUI canvas to finish initializing
+                setTimeout(() => {
+                    const COLS = 3;
+                    const NODE_W = 340;
+                    const NODE_H = 500;
+                    const PAD_X = 60;
+                    const PAD_Y = 60;
+                    const startX = 100;
+                    const startY = 100;
+
+                    for (let i = 0; i < data.assets.length; i++) {
+                        const asset = data.assets[i];
+                        const col = i % COLS;
+                        const row = Math.floor(i / COLS);
+                        const x = startX + col * (NODE_W + PAD_X);
+                        const y = startY + row * (NODE_H + PAD_Y);
+
+                        const node = LiteGraph.createNode("LoadFromMediaVault");
+                        if (!node) {
+                            console.error("[MediaVault] Could not create LoadFromMediaVault node");
+                            continue;
+                        }
+                        node.pos = [x, y];
+                        app.graph.add(node);
+
+                        // Populate widgets with the asset's hierarchy values
+                        const widgetMap = {
+                            project: asset.project,
+                            sequence: asset.sequence,
+                            shot: asset.shot,
+                            role: asset.role,
+                            asset: asset.vault_name,
+                        };
+                        for (const [wName, wValue] of Object.entries(widgetMap)) {
+                            const widget = findWidget(node, wName);
+                            if (widget && wValue) {
+                                // Inject value into options so LiteGraph accepts it
+                                if (widget.options?.values && !widget.options.values.includes(wValue)) {
+                                    widget.options.values.push(wValue);
+                                }
+                                widget.value = wValue;
+                            }
+                        }
+
+                        // Fetch live dropdown data while preserving the pre-set values
+                        setTimeout(() => restoreLiveDropdowns(node), 800 + i * 200);
+                    }
+
+                    console.log(`[MediaVault] ✓ Created ${data.assets.length} LoadFromMediaVault node(s)`);
+                }, 600);
+            } catch (e) {
+                console.error("[MediaVault] Failed to create asset nodes:", e);
+            }
+            return;
+        }
+
+        // ── Handle "Load in ComfyUI" (loads entire workflow) ──
         if (!params.has("cam_load")) return;
 
         // Clean the URL immediately so a refresh doesn't re-trigger

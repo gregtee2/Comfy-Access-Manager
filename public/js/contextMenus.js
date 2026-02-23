@@ -146,6 +146,12 @@ async function showContextMenu(event, assetIdx) {
         }
     }
 
+    // Send to ComfyUI — works with single or multi-select (creates loader nodes)
+    {
+        const sendLabel = count > 1 ? ` Send to ComfyUI (${count})` : ' Send to ComfyUI';
+        html += `<div class="ctx-item" data-action="sendComfy">${sendLabel}</div>`;
+    }
+
     // Hide destructive actions when inside a crate (user wants Remove, not Delete)
     if (!window.getActiveCrateId?.()) {
         html += `<div class="ctx-separator"></div>`;
@@ -198,6 +204,11 @@ async function showContextMenu(event, assetIdx) {
             case 'loadComfy':
                 loadInComfyUI(asset.id, asset.vault_name);
                 break;
+            case 'sendComfy': {
+                const ids = state.selectedAssets.length > 0 ? [...state.selectedAssets] : [asset.id];
+                sendToComfyUI(ids);
+                break;
+            }
             case 'delete': bulkDeleteAssets(); break;
             case 'removeDb': bulkDeleteAssets(true); break;
         }
@@ -846,6 +857,39 @@ async function loadInComfyUI(assetId, assetName) {
 }
 
 // ===========================================
+//  SEND TO COMFYUI (create loader nodes)
+// ===========================================
+
+async function sendToComfyUI(assetIds) {
+    try {
+        const n = assetIds.length;
+        showToast(`Sending ${n} asset${n > 1 ? 's' : ''} to ComfyUI...`);
+
+        const res = await fetch('/api/comfyui/send-to-comfy', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ assetIds }),
+        });
+        const data = await res.json();
+
+        if (!res.ok || !data.success) {
+            showToast(data.error || 'Failed to send to ComfyUI', 5000);
+            return;
+        }
+
+        const comfyTab = window.open(data.comfyUrl + '?cam_send=1', 'comfyui');
+        if (!comfyTab) {
+            showToast('Pop-up blocked - allow pop-ups for this site', 5000);
+            return;
+        }
+
+        showToast(`Sent ${data.assetCount} asset${data.assetCount > 1 ? 's' : ''} to ComfyUI`);
+    } catch (e) {
+        showToast('Error: ' + e.message, 5000);
+    }
+}
+
+// ===========================================
 //  RENAME SHOT / SEQUENCE (called from hierarchy context menus)
 // ===========================================
 
@@ -1343,6 +1387,7 @@ window.reorganizeAndRelink = reorganizeAndRelink;
 window.executeReorganizeAndRelink = executeReorganizeAndRelink;
 window.showFilePathModal = showFilePathModal;
 window.loadInComfyUI = loadInComfyUI;
+window.sendToComfyUI = sendToComfyUI;
 window.renameShot = renameShot;
 window.renameSequence = renameSequence;
 
