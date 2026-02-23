@@ -378,7 +378,7 @@ router.get('/overlay-info', (req, res) => {
     const variants = getAllPathVariants(filePath);
     const stmt = db.prepare(`
         SELECT a.id, a.vault_name, a.original_name, a.version, a.file_ext,
-               a.media_type, a.resolution, a.created_at, a.status,
+               a.media_type, a.created_at, a.status,
                r.name AS role_name, r.code AS role_code,
                p.name AS project_name, p.code AS project_code,
                seq.name AS sequence_name, seq.code AS sequence_code,
@@ -410,7 +410,6 @@ router.get('/overlay-info', (req, res) => {
         version: asset.version,
         file_ext: asset.file_ext,
         media_type: asset.media_type,
-        resolution: asset.resolution || null,
         created_at: asset.created_at || null,
         role_name: asset.role_name || null,
         role_code: asset.role_code || null,
