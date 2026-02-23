@@ -17,6 +17,57 @@ import { openPlayer } from './player.js';
 import { getActiveCrateId } from './crate.js';
 
 // ===========================================
+//  LIST VIEW COLUMN SORTING
+// ===========================================
+let _sortColumn = null;   // current sort key or null (default order)
+let _sortDirection = 'asc'; // 'asc' or 'desc'
+
+const SORT_COLUMNS = {
+    id:         { key: 'id',          type: 'number' },
+    show:       { key: 'project_code',type: 'string' },
+    shot:       { key: 'shot_name',   type: 'string', alt: 'shot_code' },
+    name:       { key: 'vault_name',  type: 'string' },
+    role:       { key: 'role_code',   type: 'string' },
+    status:     { key: 'status',      type: 'string' },
+    resolution: { key: 'width',       type: 'number' },
+    size:       { key: 'file_size',   type: 'number' },
+    created:    { key: 'created_at',  type: 'date' }
+};
+
+function handleColumnSort(col) {
+    if (_sortColumn === col) {
+        _sortDirection = _sortDirection === 'asc' ? 'desc' : 'asc';
+    } else {
+        _sortColumn = col;
+        _sortDirection = 'asc';
+    }
+    renderAssets();
+}
+
+function sortAssets(assets) {
+    if (!_sortColumn || !SORT_COLUMNS[_sortColumn]) return assets;
+    const cfg = SORT_COLUMNS[_sortColumn];
+    const dir = _sortDirection === 'asc' ? 1 : -1;
+    return [...assets].sort((a, b) => {
+        let va = a[cfg.key] ?? (cfg.alt ? a[cfg.alt] : null);
+        let vb = b[cfg.key] ?? (cfg.alt ? b[cfg.alt] : null);
+        // Nulls always sort last
+        if (va == null && vb == null) return 0;
+        if (va == null) return 1;
+        if (vb == null) return -1;
+        if (cfg.type === 'string') {
+            return dir * String(va).localeCompare(String(vb), undefined, { sensitivity: 'base' });
+        }
+        if (cfg.type === 'date') {
+            return dir * (new Date(va) - new Date(vb));
+        }
+        return dir * (Number(va) - Number(vb));
+    });
+}
+
+window.handleColumnSort = handleColumnSort;
+
+// ===========================================
 //  PROJECT DETAIL / BROWSER
 // ===========================================
 
@@ -305,27 +356,31 @@ function renderAssets() {
         `).join('');
     } else {
         container.className = 'asset-list';
+        const arrow = (col) => _sortColumn === col ? (_sortDirection === 'asc' ? ' \u25B2' : ' \u25BC') : '';
+        const sc = (col) => _sortColumn === col ? ' sort-active' : '';
         const headerRow = `
             <div class="asset-row asset-row-header">
-                <div class="row-id">ID</div>
+                <div class="row-id sort-col${sc('id')}" onclick="handleColumnSort('id')">ID${arrow('id')}</div>
                 <div class="row-thumb">Media</div>
                 <div class="row-audio">Audio</div>
-                <div class="row-show">Show</div>
-                <div class="row-shot">Shot</div>
-                <div class="row-name">Vault Name</div>
-                <div class="row-role">Role</div>
-                  <div class="row-status">Status</div>
-                <div class="row-res">Resolution</div>
-                <div class="row-size">Size</div>
-                <div class="row-date">Created</div>
+                <div class="row-show sort-col${sc('show')}" onclick="handleColumnSort('show')">Show${arrow('show')}</div>
+                <div class="row-shot sort-col${sc('shot')}" onclick="handleColumnSort('shot')">Shot${arrow('shot')}</div>
+                <div class="row-name sort-col${sc('name')}" onclick="handleColumnSort('name')">Vault Name${arrow('name')}</div>
+                <div class="row-role sort-col${sc('role')}" onclick="handleColumnSort('role')">Role${arrow('role')}</div>
+                <div class="row-status sort-col${sc('status')}" onclick="handleColumnSort('status')">Status${arrow('status')}</div>
+                <div class="row-res sort-col${sc('resolution')}" onclick="handleColumnSort('resolution')">Resolution${arrow('resolution')}</div>
+                <div class="row-size sort-col${sc('size')}" onclick="handleColumnSort('size')">Size${arrow('size')}</div>
+                <div class="row-date sort-col${sc('created')}" onclick="handleColumnSort('created')">Created${arrow('created')}</div>
                 <div class="row-star"></div>
             </div>`;
-        const rows = state.assets.map((a, i) => {
+        const sorted = sortAssets(state.assets);
+        const rows = sorted.map((a, i) => {
+            const origIdx = state.assets.indexOf(a);
             const hasAudio = a.media_type === 'audio' || (a.media_type === 'video' && a.codec && !a.codec.toLowerCase().includes('mjpeg'));
             return `
             <div class="asset-row ${state.selectedAssets.includes(a.id) ? 'asset-selected' : ''}" 
-                data-aidx="${i}" onclick="handleAssetClick(event, ${i})" ondblclick="handleAssetDblClick(event, ${i})" oncontextmenu="showContextMenu(event, ${i})"
-                draggable="true" ondragstart="onAssetDragStart(event, ${i})">
+                data-aidx="${origIdx}" onclick="handleAssetClick(event, ${origIdx})" ondblclick="handleAssetDblClick(event, ${origIdx})" oncontextmenu="showContextMenu(event, ${origIdx})"
+                draggable="true" ondragstart="onAssetDragStart(event, ${origIdx})">
                 <div class="row-id">${a.id}</div>
                 <div class="row-thumb" ${a.media_type === 'video' ? `data-duration="${a.duration || 0}" data-codec="${a.codec || ''}" onmouseenter="handleVideoHover(this, ${a.id})" onmousemove="handleVideoMove(event, this)" onmouseleave="handleVideoLeave(this)"` : ''}>
                     <img data-src="/thumbnails/thumb_${a.id}.jpg" loading="lazy" onerror="this.outerHTML='<span>${typeIcon(a.media_type)}</span>'">

@@ -1164,6 +1164,17 @@ label {
     cursor: default;
     padding: 7px 12px;
 }
+.asset-row-header .sort-col {
+    cursor: pointer;
+    user-select: none;
+    transition: color 0.15s;
+}
+.asset-row-header .sort-col:hover {
+    color: var(--text-light, #ddd);
+}
+.asset-row-header .sort-col.sort-active {
+    color: #4a9eda;
+}
 .asset-row .row-id { color: var(--text-muted); font-size: 0.72rem; text-align: center; }
 .asset-row .row-thumb {
     width: 60px; height: 34px;
