@@ -38,7 +38,7 @@ router.get('/poll', (req, res) => {
     const { project_id } = req.query;
     const db = getDb();
 
-    let query = 'SELECT COUNT(*) as count, MAX(created_at) as latest FROM assets';
+    let query = 'SELECT COUNT(*) as count, MAX(created_at) as latest, MAX(updated_at) as last_updated FROM assets';
     const params = [];
     if (project_id) {
         query += ' WHERE project_id = ?';
@@ -46,7 +46,7 @@ router.get('/poll', (req, res) => {
     }
 
     const row = db.prepare(query).get(...params);
-    res.json({ count: row.count || 0, latest: row.latest || null });
+    res.json({ count: row.count || 0, latest: row.latest || null, last_updated: row.last_updated || null });
 });
 
 // ═══════════════════════════════════════════

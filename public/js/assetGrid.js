@@ -895,6 +895,7 @@ function hideFileDropOverlay() {
 let _pollTimer = null;
 let _lastPollCount = null;
 let _lastPollLatest = null;
+let _lastPollUpdated = null;
 const POLL_INTERVAL = 5000;
 
 export async function refreshAssets() {
@@ -904,6 +905,7 @@ export async function refreshAssets() {
         const info = await api(`/api/assets/poll?project_id=${state.currentProject.id}`);
         _lastPollCount = info.count;
         _lastPollLatest = info.latest;
+        _lastPollUpdated = info.last_updated;
     } catch {}
     showToast('Assets refreshed', 'success');
 }
@@ -918,9 +920,11 @@ function startAssetPoll() {
         try {
             const info = await api(`/api/assets/poll?project_id=${state.currentProject.id}`);
             const changed = (_lastPollCount !== null && info.count !== _lastPollCount)
-                         || (_lastPollLatest !== null && info.latest !== _lastPollLatest);
+                         || (_lastPollLatest !== null && info.latest !== _lastPollLatest)
+                         || (_lastPollUpdated !== null && info.last_updated !== _lastPollUpdated);
             _lastPollCount = info.count;
             _lastPollLatest = info.latest;
+            _lastPollUpdated = info.last_updated;
 
             if (changed) {
                 await loadProjectAssets(state.currentProject.id);
@@ -934,6 +938,7 @@ function stopAssetPoll() {
     if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
     _lastPollCount = null;
     _lastPollLatest = null;
+    _lastPollUpdated = null;
 }
 
 // Start polling when a project is opened, stop when leaving
