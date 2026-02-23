@@ -2,6 +2,22 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.4.6] - 2026-02-22
+
+### Added
+- **Status tagging from OpenRV** — Set asset status (WIP, Review, Approved, Final, Reject) directly from the RV MediaVault menu without leaving the viewer
+- **RV overlay status stamp** — Color-coded status badge rendered in the RV viewport (top-right corner) via OpenGL overlay
+- **Reject status** — New "Reject" option for tagging unwanted content (red badge, Alt+R hotkey in RV)
+- **Status badges in list view** — Color-coded status pills displayed in the browser list view (WIP=orange, Review=blue, Approved=green, Final=cyan, Reject=red)
+- **Status badges in grid view** — Same color-coded badges on asset card thumbnails
+- **List view column sorting** — Click any column header (ID, Show, Shot, Vault Name, Role, Status, Resolution, Size, Created) to sort ascending/descending with arrow indicators
+
+### Fixed
+- **Auto-refresh on status change** — Browser now auto-refreshes within 5 seconds when status is changed from RV (no hard refresh needed)
+- **RV source resolution** — Setting status on one clip no longer tags all loaded clips; correctly identifies the selected source via viewNode
+- **New assets no longer auto-tagged WIP** — Status starts as NULL until manually assigned (previously every import got WIP automatically)
+- **Overlay-info 500 error** — Fixed SQL query referencing non-existent `resolution` column
+
 ## [1.4.5] - 2026-02-20
 
 ### Added
