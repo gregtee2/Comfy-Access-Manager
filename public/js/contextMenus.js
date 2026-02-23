@@ -877,13 +877,9 @@ async function sendToComfyUI(assetIds) {
             return;
         }
 
-        const comfyTab = window.open(data.comfyUrl + '?cam_send=1', 'comfyui');
-        if (!comfyTab) {
-            showToast('Pop-up blocked - allow pop-ups for this site', 5000);
-            return;
-        }
-
-        showToast(`Sent ${data.assetCount} asset${data.assetCount > 1 ? 's' : ''} to ComfyUI`);
+        // Don't window.open — it reloads ComfyUI and wipes the existing graph.
+        // The ComfyUI JS extension polls for pending assets every 3s and adds nodes automatically.
+        showToast(`Sent ${data.assetCount} asset${data.assetCount > 1 ? 's' : ''} to ComfyUI — switch to ComfyUI to see them`);
     } catch (e) {
         showToast('Error: ' + e.message, 5000);
     }
