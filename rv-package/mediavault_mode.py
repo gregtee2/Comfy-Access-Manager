@@ -679,26 +679,26 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 ("Next Version", self.nextVersion, "alt+Right", None),
                 ("_", None),
                 ("Set Status", [
-                    ("WIP", lambda: self.setStatus("WIP"), None, None),
-                    ("Review", lambda: self.setStatus("Review"), None, None),
-                    ("Approved", lambda: self.setStatus("Approved"), "alt+a", None),
-                    ("Final", lambda: self.setStatus("Final"), None, None),
+                    ("WIP", lambda *args, **kwargs: self.setStatus("WIP"), None, None),
+                    ("Review", lambda *args, **kwargs: self.setStatus("Review"), None, None),
+                    ("Approved", lambda *args, **kwargs: self.setStatus("Approved"), "alt+a", None),
+                    ("Final", lambda *args, **kwargs: self.setStatus("Final"), None, None),
                 ]),
                 ("_", None),
                 ("Publish Frame", self.publishFrame, "alt+p", None),
                 ("Add to Crate ...", self.addToCrateMenu, "alt+c", None),
                 ("_", None),
                 ("Toggle Overlay", self._toggleOverlay, "shift+o",
-                 lambda: rvc.CheckedMenuState if self._overlay_enabled
+                 lambda *args, **kwargs: rvc.CheckedMenuState if self._overlay_enabled
                          else rvc.UncheckedMenuState),
                 ("  Metadata Burn-in", self._toggleMetadata, None,
-                 lambda: rvc.CheckedMenuState if self._show_metadata
+                 lambda *args, **kwargs: rvc.CheckedMenuState if self._show_metadata
                          else rvc.UncheckedMenuState),
                 ("  Status Stamp", self._toggleStatus, None,
-                 lambda: rvc.CheckedMenuState if self._show_status
+                 lambda *args, **kwargs: rvc.CheckedMenuState if self._show_status
                          else rvc.UncheckedMenuState),
                 ("  Watermark", self._toggleWatermark, None,
-                 lambda: rvc.CheckedMenuState if self._show_watermark
+                 lambda *args, **kwargs: rvc.CheckedMenuState if self._show_watermark
                          else rvc.UncheckedMenuState),
             ])]
         )
