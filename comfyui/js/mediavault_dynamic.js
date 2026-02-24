@@ -868,6 +868,16 @@ app.registerExtension({
         node.onConfigure = function (info) {
             if (origConfigure) origConfigure.call(this, info);
 
+            // ── Sanitize INT widgets before ComfyUI reads them ──
+            // Old workflows may have None/"" in renamed fields (frame_start→skip_first_frames etc.)
+            for (const w of (this.widgets || [])) {
+                if (w.type === "number" && w.options && typeof w.options.min === "number") {
+                    if (w.value === null || w.value === undefined || w.value === "" || w.value === "None") {
+                        w.value = w.options.default ?? w.options.min ?? 0;
+                    }
+                }
+            }
+
             // ── Restore saved dropdown values ──
             // ComfyUI combo widgets reject values not in INPUT_TYPES options.
             // Our dropdowns are dynamically populated, so saved values like
@@ -898,6 +908,18 @@ app.registerExtension({
             }
 
             ensureRefreshButton(this);
+
+            // ── Sanitize INT widgets ──
+            // Saved workflows with old param names (frame_start, frame_step, etc.)
+            // may inject None / "" into the new INT widgets. ComfyUI's type coercion
+            // fails on these BEFORE our Python code runs. Fix: force valid defaults.
+            for (const w of (this.widgets || [])) {
+                if (w.type === "number" && w.options && typeof w.options.min === "number") {
+                    if (w.value === null || w.value === undefined || w.value === "" || w.value === "None") {
+                        w.value = w.options.default ?? w.options.min ?? 0;
+                    }
+                }
+            }
 
             // Ensure video info widget exists for video nodes
             if (VIDEO_INFO_NODES.includes(this.comfyClass)) {

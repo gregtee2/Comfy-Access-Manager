@@ -1104,7 +1104,24 @@ class LoadVideoFromMediaVault:
     def load_video(self, project, asset,
                    sequence="* (All Sequences)", shot="* (All Shots)", role="* (All Roles)",
                    force_rate=0, custom_width=0, custom_height=0,
-                   frame_load_cap=0, skip_first_frames=0, select_every_nth=1):
+                   frame_load_cap=0, skip_first_frames=0, select_every_nth=1,
+                   **kwargs):
+
+        # Defensive coercion — saved workflows with old param names may send None / ""
+        def _int(v, default):
+            if v is None or v == "":
+                return default
+            try:
+                return int(v)
+            except (ValueError, TypeError):
+                return default
+
+        force_rate = _int(force_rate, 0)
+        custom_width = _int(custom_width, 0)
+        custom_height = _int(custom_height, 0)
+        frame_load_cap = _int(frame_load_cap, 0)
+        skip_first_frames = _int(skip_first_frames, 0)
+        select_every_nth = max(1, _int(select_every_nth, 1))
 
         # Resolve hierarchy IDs
         projects = get_projects()
