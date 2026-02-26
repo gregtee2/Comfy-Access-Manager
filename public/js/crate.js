@@ -23,6 +23,8 @@ let crates = [];
 let activeCrateId = null;  // Currently viewed crate (null = normal project view)
 let crateAssets = [];       // Assets in the active crate
 let cratePanelOpen = true;
+let _crateRefreshInterval = null;  // Auto-refresh timer while viewing a crate
+const CRATE_POLL_MS = 3000;        // Poll every 3 seconds
 
 // ═══════════════════════════════════════════
 //  CRATE LIST (left sidebar panel)
@@ -141,6 +143,7 @@ async function selectCrate(crateId) {
         crateAssets = await api(`/api/crates/${crateId}/items`);
         const crate = crates.find(c => c.id === crateId);
         showCrateView(crate, crateAssets);
+        _startCratePolling(crateId);
     } catch (err) {
         console.error('Failed to load crate items:', err);
         showToast('Failed to load crate items', 'error');
@@ -258,6 +261,7 @@ function showCrateView(crate, items) {
 }
 
 function exitCrateView() {
+    _stopCratePolling();
     activeCrateId = null;
     crateAssets = [];
     renderCrateList();
@@ -594,6 +598,7 @@ function showCrateContextMenu(event, crateId) {
 /** Clear crate state without triggering asset reload (for use by tree navigation) */
 export function clearCrateState() {
     if (!activeCrateId) return;
+    _stopCratePolling();
     activeCrateId = null;
     crateAssets = [];
     renderCrateList();
@@ -610,6 +615,37 @@ export function getActiveCrateId() { return activeCrateId; }
 
 /** Returns loaded crates list */
 export function getCrates() { return crates; }
+
+// ═══════════════════════════════════════════
+//  AUTO-REFRESH (poll for changes from RV)
+// ═══════════════════════════════════════════
+
+function _startCratePolling(crateId) {
+    _stopCratePolling();
+    _crateRefreshInterval = setInterval(async () => {
+        if (activeCrateId !== crateId) { _stopCratePolling(); return; }
+        try {
+            const fresh = await api(`/api/crates/${crateId}/items`);
+            // Only re-render if items changed (added or removed)
+            if (fresh.length !== crateAssets.length) {
+                crateAssets = fresh;
+                const crate = crates.find(c => c.id === crateId);
+                if (crate) {
+                    crate.item_count = fresh.length;
+                    showCrateView(crate, crateAssets);
+                    renderCrateList();
+                }
+            }
+        } catch (_) { /* network hiccup — ignore, try again next tick */ }
+    }, CRATE_POLL_MS);
+}
+
+function _stopCratePolling() {
+    if (_crateRefreshInterval) {
+        clearInterval(_crateRefreshInterval);
+        _crateRefreshInterval = null;
+    }
+}
 
 // ═══════════════════════════════════════════
 //  WINDOW EXPORTS (for onclick handlers)

@@ -13,6 +13,7 @@ import rv.commands as rvc
 import rv.extra_commands as rve
 import json
 import os
+import re
 import tempfile
 
 import time
@@ -668,13 +669,73 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
         print("[MediaVault] Initialising mediavault-mode (overlay build)")
 
+        # Fetch real roles from CAM at init (falls back to defaults if
+        # the server isn't running yet).
+        self._all_role_names = self._fetchAllRoleNames()
+        print("[MediaVault] Roles for submenu: %s" % self._all_role_names)
+
+        def _role_state(role_name):
+            """Return a state callback that grays out *role_name* when
+            it has no assets for the current shot.
+
+            Eagerly fetches from the CAM API on first menu open so
+            roles are grayed out correctly even before any Compare /
+            Switch / Version action."""
+            def _check(*args, **kwargs):
+                # Populate cache on first access (fast localhost call,
+                # _getRolesData caches by path so only the first
+                # callback in the batch actually hits the network).
+                if not self._cached_data:
+                    try:
+                        self._getRolesData()
+                    except Exception:
+                        pass
+                if not self._cached_data:
+                    return rvc.NeutralMenuState   # server unreachable
+                for role in self._cached_data.get("roles", []):
+                    if (role.get("name") or "").lower() == role_name.lower():
+                        if role.get("assets"):
+                            return rvc.NeutralMenuState
+                return rvc.DisabledMenuState
+            return _check
+
+        def _role_items(mode):
+            """Build submenu item list for a given mode (compare/switch)."""
+            items = []
+            for r in self._all_role_names:
+                items.append(
+                    (r,
+                     lambda e, _m=mode, _r=r: self._loadRoleLatest(_m, _r),
+                     None,
+                     _role_state(r))
+                )
+            items.append(("_", None))
+            items.append(
+                ("Prev Version",
+                 lambda e, _m=mode: self._stepVersion(1, _m), None, None))
+            items.append(
+                ("Next Version",
+                 lambda e, _m=mode: self._stepVersion(-1, _m), None, None))
+            items.append(("_", None))
+            items.append(
+                ("Browse All ...",
+                 lambda e, _m=mode: self._showPickerDialog(_m), None, None)
+            )
+            return items
+
         self.init(
             "mediavault-mode",
-            None,
+            [
+                ("key-down--alt--v", self._showCompareRoleMenu,
+                 "Compare to ... role popup"),
+                ("key-down--alt--shift--v", self._showSwitchRoleMenu,
+                 "Switch to ... role popup"),
+            ],
             None,
             [("MediaVault", [
-                ("Compare to ...", self.showCompareMenu, "alt+v", None),
-                ("Switch to ...", self.showSwitchMenu, "alt+shift+v", None),
+                ("Compare to ...", _role_items("compare")),
+                ("Switch to ...", _role_items("switch")),
+                ("Browse All ...", self.showBrowseAll, "alt+b", None),
                 ("_", None),
                 ("Prev Version", self.prevVersion, "alt+Left", None),
                 ("Next Version", self.nextVersion, "alt+Right", None),
@@ -708,38 +769,76 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
     # ── source path resolution ───────────────────────────────────
 
-    def _getCurrentSourcePath(self):
-        """Return the file path of the currently VIEWED source (not always the first).
+    def _writeDiagLog(self, lines, force=False):
+        """Write diagnostic log to stdout and file.
 
-        When multiple clips are loaded (sequence or stack), this must return
-        only the clip the user is currently viewing — *not* the first source.
+        Only writes on failure (force=True) or when MV_DEBUG env var is set.
+        This keeps the RV console clean during normal operation.
+        """
+        if not force and not os.environ.get("MV_DEBUG"):
+            return
+        for line in lines:
+            print("[MV-DIAG] %s" % str(line))
+        try:
+            import datetime
+            for log_path in ["C:/mediavault_rv_diag.log",
+                             os.path.join(os.path.expanduser("~"),
+                                          "mediavault_rv_diag.log")]:
+                try:
+                    with open(log_path, "a") as f:
+                        f.write("\n=== %s ===\n"
+                                % datetime.datetime.now().isoformat())
+                        for line in lines:
+                            f.write("  %s\n" % str(line))
+                    break
+                except Exception:
+                    continue
+        except Exception:
+            pass
+
+    def _getCurrentSourcePath(self):
+        """Return the file path of the currently VIEWED source.
+
+        When multiple clips are loaded (sequence or stack), this must
+        return the clip the user is currently viewing, not the first
+        source.  Diagnostic output is written to a temp-file log so
+        failures can be debugged without relying on RV console capture.
 
         Strategy order:
-          1. viewNode — if RV is showing a single source group (PageUp/Down
-             sets viewNode to the source group itself), read its media directly.
-          2. sourcesAtFrame — for sequence layouts, returns the one source
-             whose frame range spans the current playhead position.  If
-             multiple sources are returned (stack/overlay), use the last
-             entry (top-of-stack, which is the visible one).
-          3. Fallback — first source (single-clip case).
+          1. viewNode — if viewNode is an RVSourceGroup (user pressed
+             PageUp/Down), read its media directly.  For RVStackGroup
+             use the active layer.  Skip RVSequenceGroup.
+          2. sourcesAtFrame + .media.movie property — the proven pattern
+             used by OpenRV's own built-in plugins.  Read the source's
+             .media.movie property, then use nodeRangeInfo to determine
+             if we need frame-to-file mapping.
+          3. Fallback — walk rvc.sources() and read .media.movie.
         """
+        LOG = []
         try:
+            frame = rvc.frame()
+            try:
+                fs = rvc.frameStart()
+                fe = rvc.frameEnd()
+            except Exception:
+                fs = fe = frame
+            LOG.append("frame=%d  range=[%d,%d]" % (frame, fs, fe))
+
             # --- Strategy 1: viewNode IS a source group (PageUp/Down) ---
             try:
                 vn = rvc.viewNode()
                 if vn:
                     vn_type = rvc.nodeType(vn)
+                    LOG.append("viewNode=%s type=%s" % (vn, vn_type))
 
-                    # Direct source group view (after pressing PageUp/Down)
                     if vn_type == "RVSourceGroup":
-                        path = self._pathFromSourceGroup(vn)
+                        path = self._pathFromSourceGroup(vn, frame)
                         if path:
+                            LOG.append("Strategy1 (RVSourceGroup): %s" % path)
+                            self._writeDiagLog(LOG)
                             return path
 
-                    # If viewNode is an RVSequenceGroup or RVStackGroup,
-                    # walk its inputs to find the active one.
-                    if vn_type in ("RVSequenceGroup", "RVStackGroup"):
-                        # For stacks, RV stores the active input index
+                    if vn_type == "RVStackGroup":
                         try:
                             for node in rvc.nodesInGroup(vn):
                                 if rvc.nodeType(node) == "RVStack":
@@ -751,67 +850,337 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                                         path = self._pathFromSourceGroup(
                                             sgs[idx])
                                         if path:
+                                            LOG.append("Strategy1 (Stack active=%d): %s" % (idx, path))
+                                            self._writeDiagLog(LOG)
                                             return path
                         except Exception:
                             pass
             except Exception as e:
-                print("[MediaVault] viewNode strategy failed: %s" % e)
+                LOG.append("Strategy1 error: %s" % e)
 
-            # --- Strategy 2: sourcesAtFrame — best for sequences ---
+            # --- Strategy 2: sourcesAtFrame + .media.movie property ---
+            # This mirrors the pattern used by OpenRV's own
+            # collapse_missing_frames.py plugin which is known to work.
             try:
-                frame = rvc.frame()
-                srcsAtFrame = rvc.sourcesAtFrame(frame)
-                if srcsAtFrame:
-                    # For stacks multiple sources share the same frame;
-                    # the LAST entry is typically the top (visible) layer.
-                    # For sequences only one source spans the current frame.
-                    entry = srcsAtFrame[-1]
-                    source_name = (entry if isinstance(entry, str)
-                                   else entry[0])
-                    path = self._resolveSourcePath(source_name)
-                    if path:
-                        return path
+                saf = rvc.sourcesAtFrame(frame)
+                LOG.append("sourcesAtFrame(%d) = %s" % (frame, saf))
+                if saf:
+                    source = saf[-1]
+                    if isinstance(source, (list, tuple)):
+                        source = source[0]
+
+                    # Read .media.movie directly (same pattern as OpenRV
+                    # collapse_missing_frames.py line 46)
+                    media_path = self._readMediaMovie(source, LOG)
+
+                    if media_path:
+                        result = self._resolveMediaPath(
+                            media_path, source, frame, fs, fe, LOG)
+                        if result:
+                            self._writeDiagLog(LOG)
+                            return result
             except Exception as e:
-                print("[MediaVault] sourcesAtFrame failed: %s" % e)
+                LOG.append("Strategy2 error: %s" % e)
 
-            # --- Strategy 3: Fallback — first source (single-clip) ---
-            srcs = rvc.sources()
-            if srcs:
-                source_name = (srcs[0][0] if isinstance(srcs[0], (list, tuple))
-                               else srcs[0])
-                path = self._resolveSourcePath(source_name)
-                if path:
-                    return path
+            # --- Strategy 3: Fallback — walk all sources ---
+            try:
+                all_srcs = rvc.sources()
+                LOG.append("sources() = %s" % (all_srcs,))
+                if all_srcs:
+                    for s in all_srcs:
+                        name = s[0] if isinstance(s, (list, tuple)) else s
+                        media_path = self._readMediaMovie(name, LOG)
+                        if media_path:
+                            result = self._resolveMediaPath(
+                                media_path, name, frame, fs, fe, LOG)
+                            if result:
+                                LOG.append("Strategy3: %s" % result)
+                                self._writeDiagLog(LOG)
+                                return result
+            except Exception as e:
+                LOG.append("Strategy3 error: %s" % e)
 
+            LOG.append("*** ALL STRATEGIES FAILED ***")
+            self._writeDiagLog(LOG, force=True)
             return None
         except Exception as e:
-            print("[MediaVault] _getCurrentSourcePath error: %s" % e)
+            LOG.append("FATAL: %s" % e)
+            import traceback
+            LOG.append(traceback.format_exc())
+            self._writeDiagLog(LOG, force=True)
             return None
 
-    def _resolveSourcePath(self, source_name):
-        """Given a source name string, resolve it to an on-disk file path."""
+    @staticmethod
+    def _readMediaMovie(source_node, LOG):
+        """Read the .media.movie property from a source node.
+
+        Tries several approaches since the node may be an RVFileSource
+        (has .media.movie directly) or a group name that requires
+        walking inner nodes.
+        """
+        # Approach A: direct property read (works for RVFileSource nodes
+        # returned by sourcesAtFrame — proven pattern from OpenRV source)
         try:
-            if os.path.exists(source_name):
-                return os.path.normpath(source_name)
-            media = rvc.sourceMedia(source_name)
-            if media and media[0] and os.path.exists(media[0]):
-                return os.path.normpath(media[0])
+            mp = rvc.getStringProperty(source_node + ".media.movie")
+            if mp and mp[0]:
+                LOG.append("  readMedia(%s) direct: %s" % (source_node, mp[0]))
+                return mp[0]
         except Exception:
             pass
-        return None
 
-    def _pathFromSourceGroup(self, sg):
-        """Extract file path from an RVSourceGroup node."""
+        # Approach B: sourceMedia() accessor
         try:
-            for n in rvc.nodesInGroup(sg):
+            mp = rvc.sourceMedia(source_node)
+            if mp and mp[0]:
+                LOG.append("  readMedia(%s) sourceMedia: %s" % (source_node, mp[0]))
+                return mp[0]
+        except Exception:
+            pass
+
+        # Approach C: walk inner nodes of the group
+        try:
+            group = source_node
+            try:
+                group = rvc.nodeGroup(source_node)
+            except Exception:
+                pass
+            for n in rvc.nodesInGroup(group):
                 try:
-                    prop = rvc.getStringProperty(n + ".media.movie", 0, 1)
-                    if prop and prop[0] and os.path.exists(prop[0]):
-                        return os.path.normpath(prop[0])
+                    mp = rvc.getStringProperty(n + ".media.movie")
+                    if mp and mp[0]:
+                        LOG.append("  readMedia(%s->%s) inner: %s"
+                                   % (source_node, n, mp[0]))
+                        return mp[0]
                 except Exception:
                     pass
         except Exception:
             pass
+
+        LOG.append("  readMedia(%s): NOT FOUND" % source_node)
+        return None
+
+    def _resolveMediaPath(self, media_path, source_node, frame, fs, fe, LOG):
+        """Resolve a .media.movie path to the actual file for the current frame.
+
+        Handles three cases:
+          A. Sequence notation  (e.g. prefix_v025-62@@@.png)
+          B. Plain file from a SINGLE-frame source → return directly
+          C. Plain file from a MULTI-frame source → map frame to sibling
+        """
+        LOG.append("  resolve: media='%s' frame=%d" % (media_path, frame))
+
+        # --- Case A: RV sequence notation (@@@ or ###) ---
+        seq_m = re.search(r'(\d+)-(\d+)(@+|#+)(\.[\w]+)$', media_path)
+        if seq_m:
+            resolved = self._resolveSequenceNotation(
+                media_path, seq_m, frame, source_node, fs, LOG)
+            if resolved:
+                return resolved
+
+        # --- Determine if this is a multi-frame source ---
+        src_start = src_end = frame
+        try:
+            ri = rvc.nodeRangeInfo(source_node)
+            src_start = int(ri.get("start", frame))
+            src_end = int(ri.get("end", frame))
+        except Exception:
+            # nodeRangeInfo may need the group name
+            try:
+                sg = rvc.nodeGroup(source_node)
+                ri = rvc.nodeRangeInfo(sg)
+                src_start = int(ri.get("start", frame))
+                src_end = int(ri.get("end", frame))
+            except Exception:
+                pass
+        is_multi = (src_end > src_start)
+        LOG.append("  resolve: range=[%d,%d] multi=%s" % (src_start, src_end, is_multi))
+
+        # --- Case B: Plain file, single-frame source → return directly ---
+        if os.path.exists(media_path) and not is_multi:
+            LOG.append("  resolve: DIRECT (single frame) %s" % media_path)
+            return os.path.normpath(media_path)
+
+        # --- Case C: Plain file, multi-frame source → map frame to sibling ---
+        if os.path.exists(media_path) and is_multi:
+            mapped = self._mapFrameToSibling(
+                media_path, frame, src_start, src_end, LOG)
+            if mapped:
+                return mapped
+            # If mapping failed, return as-is as last resort
+            LOG.append("  resolve: MAP FAILED, returning first file as-is")
+            return os.path.normpath(media_path)
+
+        # --- File doesn't exist on disk (unrecognized notation?) ---
+        LOG.append("  resolve: NOT ON DISK: %s" % media_path)
+        return None
+
+    @staticmethod
+    def _resolveSequenceNotation(media_path, match, frame, source_node,
+                                 global_start, LOG):
+        """Resolve RV sequence notation like prefix_v025-62@@@.png to a
+        specific file using frame range mapping.
+
+        CRITICAL INSIGHT (from diagnostic 2026-02-26):
+          nodeRangeInfo(source) returns FILE-NATIVE numbers (e.g. [46,62])
+          NOT global playback frames (e.g. [1,17]).
+          We must use the global frameStart() (passed as global_start)
+          to compute the offset: file_num = file_start + (frame - global_start)
+        """
+        prefix = media_path[:match.start()]
+        file_start = int(match.group(1))
+        file_end = int(match.group(2))
+        padding = len(match.group(3))
+        ext = match.group(4)
+
+        # Map global playback frame → file number
+        # Global frame 1 → file_start, global frame 2 → file_start+1, etc.
+        file_num = file_start + (frame - global_start)
+        file_num = max(file_start, min(file_end, file_num))
+
+        candidate = "%s%s%s" % (prefix, str(file_num).zfill(padding), ext)
+        LOG.append("  SEQ: file_range=[%d,%d] global_start=%d frame=%d → file_num=%d"
+                   % (file_start, file_end, global_start, frame, file_num))
+        LOG.append("  SEQ: candidate=%s exists=%s"
+                   % (candidate, os.path.exists(candidate)))
+
+        if os.path.exists(candidate):
+            return os.path.normpath(candidate)
+
+        # Glob fallback
+        import glob
+        pattern = "%s%s%s" % (prefix, "?" * padding, ext)
+        matches = sorted(glob.glob(pattern))
+        if matches:
+            LOG.append("  SEQ: glob fallback → %s" % matches[0])
+            return os.path.normpath(matches[0])
+        return None
+
+    @staticmethod
+    def _mapFrameToSibling(first_file, frame, src_start, src_end, LOG):
+        """Map an RV frame number to the correct sibling file.
+
+        When .media.movie returns a plain file path (e.g., v025.png)
+        but the source spans multiple frames, we need to find which
+        numbered sibling corresponds to the current frame.
+
+        Uses two strategies:
+          1. Offset mapping: base_num + (frame - src_start)
+          2. Positional: index into sorted sibling list
+        """
+        dirname = os.path.dirname(first_file)
+        basename = os.path.basename(first_file)
+
+        # Find trailing number: "prefix_v025.png" → ("prefix_v", "025", ".png")
+        m = re.search(r'(\d+)(\.[\w]+)$', basename)
+        if not m:
+            LOG.append("  MAP: no number pattern in '%s'" % basename)
+            return None
+
+        num_str = m.group(1)
+        ext = m.group(2)
+        prefix = basename[:m.start()]
+        pad = len(num_str)
+        base_num = int(num_str)
+
+        # Strategy 1: offset mapping — base_num anchors to src_start
+        file_num = base_num + (frame - src_start)
+        candidate = os.path.join(
+            dirname, "%s%s%s" % (prefix, str(file_num).zfill(pad), ext))
+        LOG.append("  MAP: base=%d src_start=%d frame=%d → file=%d"
+                   % (base_num, src_start, frame, file_num))
+
+        if os.path.exists(candidate):
+            LOG.append("  MAP: HIT %s" % candidate)
+            return os.path.normpath(candidate)
+
+        # Strategy 2: positional — glob siblings and index by position
+        import glob
+        pattern = os.path.join(dirname, prefix + "[0-9]" * pad + ext)
+        siblings = sorted(glob.glob(pattern))
+        LOG.append("  MAP: offset miss, glob found %d siblings" % len(siblings))
+
+        if siblings:
+            idx = frame - src_start
+            if 0 <= idx < len(siblings):
+                LOG.append("  MAP: positional idx=%d → %s"
+                           % (idx, siblings[idx]))
+                return os.path.normpath(siblings[idx])
+
+        return None
+
+    def _pathFromSourceGroup(self, sg, source_frame=None):
+        """Extract file path from an RVSourceGroup node.
+
+        Used by Strategy 1 (viewNode is an RVSourceGroup, e.g. after
+        pressing PageUp/Down).  For multi-frame sources this still
+        relies on the caller providing source_frame or falls back to
+        returning the first file.
+        """
+        try:
+            for n in rvc.nodesInGroup(sg):
+                try:
+                    prop = rvc.getStringProperty(n + ".media.movie", 0, 1)
+                    if prop and prop[0]:
+                        raw = prop[0]
+                        if source_frame is not None:
+                            seq_path = self._resolveRVSequencePath(
+                                raw, source_frame=source_frame)
+                            if seq_path:
+                                return seq_path
+                        if os.path.exists(raw):
+                            return os.path.normpath(raw)
+                        seq_path = self._resolveRVSequencePath(raw)
+                        if seq_path:
+                            return seq_path
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return None
+
+    @staticmethod
+    def _resolveRVSequencePath(raw_path, source_frame=None):
+        """Resolve RV sequence notation (@@@ or ###) to a file path.
+
+        Kept as a utility for _pathFromSourceGroup and other callers.
+        The main resolution path now goes through _resolveMediaPath.
+        """
+        m = re.search(r'(\d+)-(\d+)(@+|#+)(\.[\w]+)$', raw_path)
+        if not m:
+            return None
+        prefix = raw_path[:m.start()]
+        start_frame = int(m.group(1))
+        end_frame = int(m.group(2))
+        padding = len(m.group(3))
+        ext = m.group(4)
+
+        frames_to_try = []
+        if source_frame is not None:
+            frames_to_try.append(source_frame)
+        try:
+            gf = rvc.frame()
+            if gf not in frames_to_try:
+                frames_to_try.append(gf)
+            off1 = start_frame + (gf - 1)
+            if off1 not in frames_to_try:
+                frames_to_try.append(off1)
+        except Exception:
+            pass
+        if start_frame not in frames_to_try:
+            frames_to_try.append(start_frame)
+
+        for fr in frames_to_try:
+            if fr < start_frame or fr > end_frame:
+                continue
+            candidate = "%s%s%s" % (prefix, str(fr).zfill(padding), ext)
+            if os.path.exists(candidate):
+                return os.path.normpath(candidate)
+
+        import glob
+        pattern = "%s%s%s" % (prefix, "?" * padding, ext)
+        matches = glob.glob(pattern)
+        if matches:
+            return os.path.normpath(matches[0])
         return None
 
     # ── API ──────────────────────────────────────────────────────
@@ -973,12 +1342,20 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             rve.displayFeedback("File not found: %s" % os.path.basename(filepath), 4.0)
             return
         try:
-            srcs = rvc.sources()
-            if not srcs:
+            # Find the RVFileSource node inside the first source group
+            sourceGroups = rvc.nodesOfType("RVSourceGroup")
+            if not sourceGroups:
                 rve.displayFeedback("No source to replace", 3.0)
                 return
-            # Set only the intended file — no auto-audio
-            rvc.setSourceMedia(srcs[0][0], [filepath])
+            file_source = None
+            for node in rvc.nodesInGroup(sourceGroups[0]):
+                if rvc.nodeType(node) == "RVFileSource":
+                    file_source = node
+                    break
+            if not file_source:
+                rve.displayFeedback("No file source node found", 3.0)
+                return
+            rvc.setSourceMedia(file_source, [filepath])
 
             # Strip auto-audio from ALL source groups
             for sg in rvc.nodesOfType("RVSourceGroup"):
@@ -1084,12 +1461,105 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
     # ── version stepping ─────────────────────────────────────────
 
-    def _stepVersion(self, direction):
+    def _fetchAllRoleNames(self):
+        """Fetch every role name from CAM (GET /api/roles).
+
+        Used at init to build the submenu items.  Falls back to the
+        default seeded roles if the server is unreachable."""
+        _DEFAULTS = ["Comp", "Light", "Anim", "FX",
+                     "Enviro", "Layout", "Matchmove", "Roto"]
+        try:
+            url = DMV_URL + "/api/roles"
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            resp = urllib.request.urlopen(req, timeout=3)
+            data = json.loads(resp.read().decode("utf-8"))
+            if isinstance(data, list) and data:
+                names = [r.get("name") for r in data if r.get("name")]
+                return sorted(names, key=str.lower) if names else _DEFAULTS
+        except Exception as e:
+            print("[MediaVault] Could not fetch roles from CAM: %s (using defaults)" % e)
+        return _DEFAULTS
+
+    def _loadRoleLatest(self, mode, role_name):
+        """Load the latest version of *role_name* for compare or switch.
+
+        Prefers assets whose file extension matches the currently loaded
+        source (e.g. if you have a .mov open, pick the .mov from the
+        target role rather than a .png).  Falls back to any available
+        asset if no same-type match exists on disk.
+        """
+        data, filepath = self._getRolesData()
+        if not data:
+            return
+
+        # Determine the extension of the currently loaded source
+        current_ext = ""
+        if filepath:
+            _, current_ext = os.path.splitext(filepath)
+            current_ext = current_ext.lower()          # e.g. ".mov"
+
+        for role in data.get("roles", []):
+            if (role.get("name") or "").lower() == role_name.lower():
+                assets = role.get("assets", [])
+                if not assets:
+                    rve.displayFeedback("No files for %s" % role_name, 2.0)
+                    return
+                sorted_assets = sorted(
+                    assets,
+                    key=lambda a: self._extract_version(a.get("vault_name", "")),
+                    reverse=True
+                )
+
+                # 1) Try same media type first (highest version that exists)
+                if current_ext:
+                    for a in sorted_assets:
+                        fp = a.get("file_path", "")
+                        a_ext = (a.get("file_ext") or os.path.splitext(fp)[1]).lower()
+                        # Normalise: DB stores ".mov" or "mov" — handle both
+                        if not a_ext.startswith("."):
+                            a_ext = "." + a_ext
+                        if a_ext == current_ext and fp and os.path.exists(fp):
+                            if mode == "compare":
+                                self._loadAsCompare(fp)
+                            else:
+                                self._switchTo(fp)
+                            return
+
+                # 2) Fallback — any asset that exists on disk
+                for a in sorted_assets:
+                    fp = a.get("file_path", "")
+                    if fp and os.path.exists(fp):
+                        if mode == "compare":
+                            self._loadAsCompare(fp)
+                        else:
+                            self._switchTo(fp)
+                        return
+                rve.displayFeedback("Files for %s not on disk" % role_name, 3.0)
+                return
+
+        rve.displayFeedback("Role '%s' not found for this shot" % role_name, 2.0)
+
+    @staticmethod
+    def _extract_version(vault_name):
+        """Extract numeric version from vault_name.
+
+        Patterns matched:
+          SH010_comfyui_v205.mp4  → 205
+          PROJ_video_0247_v003.mp4 → 3
+          my_file_v12.exr          → 12
+        Falls back to 0 if no _vNNN pattern found.
+        """
+        import re
+        m = re.search(r'_v(\d+)', vault_name or '')
+        return int(m.group(1)) if m else 0
+
+    def _stepVersion(self, direction, mode="switch"):
         """
         Move to the previous or next version within the same role.
         direction: -1 = prev, +1 = next
-        Uses the is_current flag returned by the API to find the current
-        asset in the results, then steps to the adjacent version.
+        mode: "switch" (replace current) or "compare" (A/B wipe)
+        Sorts assets by version extracted from the filename (vault_name)
+        to handle cases where the DB version column is unreliable.
         """
         data, filepath = self._getRolesData()
         if not data or not filepath:
@@ -1100,7 +1570,14 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
         # Search all roles for the current asset (now included with is_current flag)
         for role in data.get("roles", []):
-            assets = role.get("assets", [])
+            raw_assets = role.get("assets", [])
+            # Sort by version extracted from filename (DESC) — DB version
+            # column can be unreliable (all '1') for convention-named files
+            assets = sorted(
+                raw_assets,
+                key=lambda a: self._extract_version(a.get("vault_name", "")),
+                reverse=True
+            )
             for i, a in enumerate(assets):
                 is_match = (
                     a.get("is_current", False)
@@ -1116,7 +1593,10 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                     if 0 <= new_idx < len(assets):
                         new_path = assets[new_idx].get("file_path", "")
                         if new_path and os.path.exists(new_path):
-                            self._switchTo(new_path)
+                            if mode == "compare":
+                                self._loadAsCompare(new_path)
+                            else:
+                                self._switchTo(new_path)
                             return
                     label = "previous" if direction < 0 else "next"
                     rve.displayFeedback("No %s version available" % label, 2.0)
@@ -1126,12 +1606,159 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
     # ── menu handlers ────────────────────────────────────────────
 
+    def _showRoleMenu(self, mode):
+        """Pop up a Qt context menu listing roles from the API.
+
+        Each role entry loads the LATEST version for that role.
+        'Browse All...' at the bottom opens the full picker dialog.
+        mode: 'compare' or 'switch'
+        """
+        if not HAS_QT:
+            # Fallback to dialog if Qt unavailable
+            self._showPickerDialog(mode)
+            return
+
+        data, filepath = self._getRolesData(force_refresh=True)
+        if not data:
+            return
+        roles = data.get("roles", [])
+        if not roles:
+            rve.displayFeedback("No related assets found", 3.0)
+            return
+
+        # Find current asset's role so we can highlight it
+        current_role_id = None
+        for role in roles:
+            for a in role.get("assets", []):
+                if a.get("is_current"):
+                    current_role_id = role.get("id")
+                    break
+            if current_role_id is not None:
+                break
+
+        try:
+            menu = QMenu()
+            menu.setStyleSheet("""
+                QMenu {
+                    background: #2a2a30;
+                    color: #d4d4d8;
+                    border: 1px solid #555;
+                    font-family: "Segoe UI", Arial, sans-serif;
+                    font-size: 13px;
+                    padding: 4px 0;
+                }
+                QMenu::item {
+                    padding: 6px 28px 6px 12px;
+                }
+                QMenu::item:selected {
+                    background: #2ec4b6;
+                    color: #111;
+                }
+                QMenu::separator {
+                    height: 1px;
+                    background: #444;
+                    margin: 4px 8px;
+                }
+            """)
+
+            # Sort roles by name, skip the current role's entry
+            sorted_roles = sorted(roles, key=lambda r: (r.get("name") or "").lower())
+            for role in sorted_roles:
+                role_name = role.get("name", "Unassigned")
+                role_id = role.get("id")
+                assets = role.get("assets", [])
+
+                # Sort this role's assets by extracted version (DESC)
+                # so [0] is the latest version
+                sorted_assets = sorted(
+                    assets,
+                    key=lambda a: self._extract_version(a.get("vault_name", "")),
+                    reverse=True
+                )
+
+                # Skip role if it only contains the current file for 'switch'
+                if role_id == current_role_id and mode == "switch":
+                    non_current = [a for a in sorted_assets if not a.get("is_current")]
+                    if not non_current:
+                        continue  # nothing else in this role to switch to
+
+                # Pick the latest asset that isn't the current file
+                target = None
+                for a in sorted_assets:
+                    if not a.get("is_current"):
+                        fp = a.get("file_path", "")
+                        if fp and os.path.exists(fp):
+                            target = a
+                            break
+                # If every asset is 'current' (single-version role in compare)
+                # use the first asset anyway for compare mode
+                if not target and mode == "compare" and sorted_assets:
+                    fp = sorted_assets[0].get("file_path", "")
+                    if fp and os.path.exists(fp):
+                        target = sorted_assets[0]
+
+                if not target:
+                    continue
+
+                # Build label: role name + version count hint
+                count = len(sorted_assets)
+                label = role_name
+                if count > 1:
+                    label += "  (%d versions)" % count
+
+                # Bold the current role
+                action = menu.addAction(label)
+                if role_id == current_role_id:
+                    font = action.font()
+                    font.setBold(True)
+                    action.setFont(font)
+
+                # Store file path on the action for retrieval
+                action.setData(target.get("file_path", ""))
+
+            if menu.isEmpty():
+                rve.displayFeedback("No roles with available files", 3.0)
+                return
+
+            menu.addSeparator()
+            browse_action = menu.addAction("Browse All ...")
+            browse_action.setData("__browse__")
+
+            # Show at cursor
+            chosen = menu.exec_(QCursor.pos())
+            if chosen:
+                path = chosen.data()
+                if path == "__browse__":
+                    self._showPickerDialog(mode)
+                elif path:
+                    if mode == "compare":
+                        self._loadAsCompare(path)
+                    else:
+                        self._switchTo(path)
+
+        except Exception as e:
+            print("[MediaVault] _showRoleMenu error: %s" % e)
+            # Fallback
+            self._showPickerDialog(mode)
+
+    def _showCompareRoleMenu(self, event):
+        """MediaVault -> Compare to ... (role submenu)"""
+        self._showRoleMenu("compare")
+
+    def _showSwitchRoleMenu(self, event):
+        """MediaVault -> Switch to ... (role submenu)"""
+        self._showRoleMenu("switch")
+
     def showCompareMenu(self, event):
-        """MediaVault -> Compare to ..."""
+        """Legacy: full picker dialog for Compare."""
         self._showPickerDialog("compare")
 
     def showSwitchMenu(self, event):
-        """MediaVault -> Switch to ..."""
+        """Legacy: full picker dialog for Switch."""
+        self._showPickerDialog("switch")
+
+    def showBrowseAll(self, event):
+        """MediaVault -> Browse All ... — full picker dialog (switch mode)."""
         self._showPickerDialog("switch")
 
     # ── publish frame ─────────────────────────────────────────
@@ -1248,6 +1875,12 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
         # Add to crate via API
         try:
+            _diag_frame = rvc.frame()
+        except Exception:
+            _diag_frame = '?'
+        print("[MediaVault] addToCrate: frame=%s  path='%s'  crate=%s"
+              % (_diag_frame, filepath, crateId))
+        try:
             payload = json.dumps({"filePath": filepath}).encode("utf-8")
             url = "%s/api/crates/%s/add-by-path" % (DMV_URL, crateId)
             req = urllib.request.Request(
@@ -1257,12 +1890,17 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             with urllib.request.urlopen(req, timeout=10) as resp:
                 result = json.loads(resp.read().decode("utf-8"))
 
+            print("[MediaVault] addToCrate response: %s" % result)
             if result.get("ok"):
                 rve.displayFeedback(
                     "Added \"%s\" to crate \"%s\"" % (
                         result.get("vaultName", os.path.basename(filepath)),
                         result.get("crateName", "?")),
                     4.0
+                )
+            elif result.get("error"):
+                rve.displayFeedback(
+                    "Failed: %s" % result.get("error", "Unknown"), 4.0
                 )
             else:
                 rve.displayFeedback(
@@ -1350,11 +1988,11 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
     def prevVersion(self, event):
         """MediaVault -> Prev Version"""
-        self._stepVersion(-1)
+        self._stepVersion(1)
 
     def nextVersion(self, event):
         """MediaVault -> Next Version"""
-        self._stepVersion(1)
+        self._stepVersion(-1)
 
     # ── overlay toggle handlers ──────────────────────────────────
 

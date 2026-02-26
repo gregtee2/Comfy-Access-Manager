@@ -246,11 +246,16 @@ function deployTo(rvpkgBuffer, install, hash) {
         const pythonDir = path.join(packagesDir, '..', 'Python');
         const loosePy = path.join(pythonDir, 'mediavault_mode.py');
 
-        // Check if already up to date
-        if (fs.existsSync(targetFile) && fs.existsSync(hashFile) && fs.existsSync(loosePy)) {
+        // Check if already up to date (rvpkg + hash match)
+        if (fs.existsSync(targetFile) && fs.existsSync(hashFile)) {
             const existingHash = fs.readFileSync(hashFile, 'utf8').trim();
             if (existingHash === hash) {
-                return false; // Already current
+                // Even if hash matches, ensure the loose .py copy is current
+                const pySrc = path.join(PLUGIN_SRC, 'mediavault_mode.py');
+                if (fs.existsSync(pySrc) && fs.existsSync(pythonDir)) {
+                    try { fs.copyFileSync(pySrc, loosePy); } catch {}
+                }
+                return false; // rvpkg already current
             }
         }
 
@@ -335,6 +340,23 @@ function sync() {
         } else {
             skipped++;
         }
+    }
+
+    // Always copy to user-level ~/.rv/Python/ — this is the primary
+    // directory RV searches for Python plugins.  The rvpkg registry
+    // may or may not extract the .py there, so we ensure it manually.
+    try {
+        const userRvPython = path.join(os.homedir(), '.rv', 'Python');
+        const pySrc = path.join(PLUGIN_SRC, 'mediavault_mode.py');
+        if (fs.existsSync(pySrc)) {
+            if (!fs.existsSync(userRvPython)) {
+                fs.mkdirSync(userRvPython, { recursive: true });
+            }
+            fs.copyFileSync(pySrc, path.join(userRvPython, 'mediavault_mode.py'));
+            console.log(`[RVPlugin] ✓ Copied .py to ${userRvPython}`);
+        }
+    } catch (err) {
+        console.log(`[RVPlugin] Warning: Could not copy to ~/.rv/Python: ${err.message}`);
     }
 
     if (deployed > 0) {

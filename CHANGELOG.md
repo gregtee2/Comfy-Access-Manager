@@ -2,6 +2,19 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.5.1] - 2026-02-26
+
+### Fixed
+- **RV plugin frame mapping** — Alt+C (Add to Crate) now correctly identifies which file is being viewed when scrubbing through versioned image sequences. Previously always sent the first file (e.g., v025) regardless of current frame.
+  - Root cause: `nodeRangeInfo()` returns file-native numbers (46-62), not global playback frames (1-27). The mapping formula was comparing incompatible coordinate systems.
+  - Fix: `file_num = file_start + (frame - globalFrameStart)` — maps global playback frame to correct file number.
+- **RV plugin deployment** — `RVPluginSync` now copies the `.py` file directly to `~/.rv/Python/` on every server startup. Previously only deployed `.rvpkg` files to `Packages/` directories, but RV loads from the `Python/` directory — causing stale plugin code to persist for days.
+- **RV plugin hash check** — The deploy hash-check now refreshes the loose `.py` copy even when the `.rvpkg` hash is current, preventing stale code when the `.py` was manually overwritten.
+
+### Added
+- **Crate auto-refresh** — Crate panel in the browser now polls every 3 seconds for changes, so assets added from RV appear automatically without manual refresh.
+- **RV plugin diagnostics** — Added `[MV-DIAG]` logging for frame resolution debugging. Quiet by default; enable with `MV_DEBUG=1` environment variable. Always fires on errors.
+
 ## [1.5.0] - 2026-02-23
 
 ### Added

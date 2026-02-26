@@ -276,8 +276,14 @@ router.post('/:id/add-by-path', (req, res) => {
             if (asset) break;
         }
 
+        console.log('[Crate] add-by-path lookup:', { rawPath, variants: variants.slice(0, 3), foundAsset: asset ? { id: asset.id, vault_name: asset.vault_name } : null });
+
         if (!asset) return res.status(404).json({ error: 'Asset not found in vault for this path' });
 
+        const existing = db.prepare('SELECT id FROM crate_items WHERE crate_id = ? AND asset_id = ?').get(crate.id, asset.id);
+        if (existing) {
+            console.log('[Crate] DUPLICATE — asset %d already in crate %d', asset.id, crate.id);
+        }
         db.prepare('INSERT OR IGNORE INTO crate_items (crate_id, asset_id) VALUES (?, ?)').run(crate.id, asset.id);
 
         logActivity('add_to_crate_by_path', 'crate', crate.id, { assetId: asset.id, vaultName: asset.vault_name });
