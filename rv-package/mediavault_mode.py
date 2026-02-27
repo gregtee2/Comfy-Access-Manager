@@ -669,6 +669,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         self._overlay_tick     = 0      # frame counter for lazy refresh
         self._comfyui_meta     = None   # cached ComfyUI prompt data
         self._comfyui_path     = None   # path the ComfyUI cache belongs to
+        self._comfyui_cache    = {}     # {filepath: meta_dict | False} – survives scrub
 
         # ── Compare / version cache ──────────────────────────────
         self._cached_data = None
@@ -2045,6 +2046,8 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             self._overlay_enabled = True
             self._refreshOverlayMeta()
         if self._show_comfyui:
+            self._comfyui_path = None   # force re-lookup (hits dict cache)
+            self._comfyui_meta = None
             self._refreshComfyUIMeta()
         rve.displayFeedback(
             "ComfyUI Metadata: %s" % ("ON" if self._show_comfyui else "OFF"), 1.5)
@@ -2093,8 +2096,14 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         return None
 
     @staticmethod
-    def _readVideoPrompt(filepath):
-        """Extract ComfyUI prompt from video comment metadata (via ffprobe)."""
+    def _readVideoMeta(filepath):
+        """Extract ComfyUI metadata from video comment tag (via ffprobe).
+
+        Returns the raw JSON dict from the comment, which may be:
+        - Prompt-wrapped: {"prompt": "...", "workflow": "..."}
+        - Direct LiteGraph workflow: {"nodes": [...], "links": [...], ...}
+        - None if no metadata found
+        """
         try:
             # Try common ffprobe locations
             ffprobe = None
@@ -2133,16 +2142,9 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             if not comment:
                 return None
 
-            meta = json.loads(comment)
-            # Comment may contain {"prompt": "...", "workflow": "..."}
-            prompt_str = meta.get("prompt")
-            if isinstance(prompt_str, str):
-                return json.loads(prompt_str)
-            elif isinstance(prompt_str, dict):
-                return prompt_str
-            return None
+            return json.loads(comment)
         except Exception as e:
-            print("[MediaVault] Video prompt read error: %s" % e)
+            print("[MediaVault] Video meta read error: %s" % e)
         return None
 
     @staticmethod
@@ -2441,29 +2443,312 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             "resolution": resolution,
         }
 
+    @staticmethod
+    def _parseComfyWorkflow(workflow):
+        """Parse LiteGraph workflow JSON into structured summary dict.
+
+        Workflow format stores nodes as an array with positional
+        widgets_values instead of named inputs.  Widget positions are
+        node-type specific and mapped from known ComfyUI definitions.
+
+        Returns same shape as _parseComfyPrompt():
+        {models, samplers, loras, resolution}
+        """
+        nodes = workflow.get("nodes")
+        if not nodes or not isinstance(nodes, list):
+            return None
+
+        def _short_name(path):
+            if not path:
+                return path
+            name = str(path).replace("\\\\", "\\").replace("\\", "/")
+            name = name.rsplit("/", 1)[-1]
+            for ext in (".safetensors", ".ckpt", ".pt", ".pth", ".bin",
+                        ".gguf"):
+                if name.lower().endswith(ext):
+                    name = name[:-len(ext)]
+                    break
+            return name
+
+        def _wv(wv, idx, default=None):
+            """Safe positional widget_values access."""
+            if wv and isinstance(wv, list) and idx < len(wv):
+                return wv[idx]
+            return default
+
+        models = []
+        samplers = []
+        loras = []
+        resolution = None
+        seen_models = set()
+        seen_samplers = set()
+        seen_loras = set()
+
+        for node in nodes:
+            ntype = node.get("type", "")
+            wv = node.get("widgets_values") or []
+            title = node.get("title", ntype)
+
+            # ── Model / checkpoint loaders ──────────────────────
+            # All loader nodes store the filename at widgets_values[0]
+            if ntype in ("CheckpointLoaderSimple", "CheckpointLoader"):
+                name = _short_name(_wv(wv, 0))
+                if name and name not in seen_models:
+                    seen_models.add(name)
+                    models.append({"name": name, "type": "Checkpoint"})
+
+            elif ntype == "WanVideoModelLoader":
+                name = _short_name(_wv(wv, 0))
+                if name and name not in seen_models:
+                    seen_models.add(name)
+                    models.append({"name": name, "type": "WanVideo"})
+
+            elif ntype in ("WanVideoVAELoader", "WanVideoTinyVAELoader",
+                           "VAELoader"):
+                name = _short_name(_wv(wv, 0))
+                if name and name not in seen_models:
+                    seen_models.add(name)
+                    models.append({"name": name, "type": "VAE"})
+
+            elif ntype in ("CLIPVisionLoader", "CLIPLoader"):
+                name = _short_name(_wv(wv, 0))
+                if name and name not in seen_models:
+                    seen_models.add(name)
+                    models.append({"name": name, "type": "CLIP"})
+
+            elif ntype == "DiffusionModelLoaderKJ":
+                name = _short_name(_wv(wv, 0))
+                if name and name not in seen_models:
+                    seen_models.add(name)
+                    models.append({"name": name, "type": "Diffusion"})
+
+            elif ntype == "UpscaleModelLoader":
+                name = _short_name(_wv(wv, 0))
+                if name and name not in seen_models:
+                    seen_models.add(name)
+                    models.append({"name": name, "type": "Upscale"})
+
+            # Generic ModelLoader fallback
+            elif "ModelLoader" in ntype:
+                name = _short_name(_wv(wv, 0))
+                if name and name not in seen_models:
+                    seen_models.add(name)
+                    mtype = "VAE" if "VAE" in ntype else (
+                        "WanVideo" if "WanVideo" in ntype else "Model")
+                    models.append({"name": name, "type": mtype})
+
+            # ── Sampler nodes ───────────────────────────────────
+            elif ntype in ("KSampler",):
+                # widgets: [seed, ctrl_after, steps, cfg, sampler,
+                #           scheduler, denoise]
+                seed = _wv(wv, 0, "?")
+                steps = _wv(wv, 2, "?")
+                cfg = _wv(wv, 3, "?")
+                sampler = _wv(wv, 4, "?")
+                scheduler = _wv(wv, 5, "?")
+                denoise = _wv(wv, 6, 1.0)
+                key = "%s_%s_%s_%s" % (sampler, scheduler, steps, cfg)
+                if key not in seen_samplers:
+                    seen_samplers.add(key)
+                    samplers.append({
+                        "sampler": sampler, "scheduler": scheduler,
+                        "steps": steps, "cfg": cfg, "seed": seed,
+                        "denoise": denoise, "title": title,
+                    })
+
+            elif ntype == "KSamplerAdvanced":
+                # widgets: [add_noise, noise_seed, steps, cfg, sampler,
+                #           scheduler, start, end, return_noise]
+                seed = _wv(wv, 1, "?")
+                steps = _wv(wv, 2, "?")
+                cfg = _wv(wv, 3, "?")
+                sampler = _wv(wv, 4, "?")
+                scheduler = _wv(wv, 5, "?")
+                key = "%s_%s_%s_%s" % (sampler, scheduler, steps, cfg)
+                if key not in seen_samplers:
+                    seen_samplers.add(key)
+                    samplers.append({
+                        "sampler": sampler, "scheduler": scheduler,
+                        "steps": steps, "cfg": cfg, "seed": seed,
+                        "denoise": "", "title": title,
+                    })
+
+            elif ntype == "WanChunkedI2VSampler":
+                # Verified positions from real workflow data:
+                # [0]=num_frames  [2]=width   [3]=height
+                # [9]=seed  [12]=sampler  [14]=steps  [15]=cfg
+                # [16]=denoise
+                num_frames = _wv(wv, 0, "?")
+                w = _wv(wv, 2)
+                h = _wv(wv, 3)
+                seed = _wv(wv, 9, "?")
+                sampler = _wv(wv, 12, "?")
+                steps = _wv(wv, 14, "?")
+                cfg = _wv(wv, 15, "?")
+                denoise = _wv(wv, 16, 1.0)
+                key = "wanchunked_%s_%s_%s" % (sampler, steps, cfg)
+                if key not in seen_samplers:
+                    seen_samplers.add(key)
+                    samplers.append({
+                        "sampler": "WanChunked", "scheduler": str(sampler),
+                        "steps": steps, "cfg": cfg, "seed": seed,
+                        "denoise": denoise, "title": title,
+                        "num_frames": num_frames,
+                    })
+                if not resolution and w and h:
+                    try:
+                        resolution = {
+                            "width": int(w), "height": int(h)}
+                        if num_frames and isinstance(num_frames, (int, float)):
+                            resolution["num_frames"] = int(num_frames)
+                    except (ValueError, TypeError):
+                        pass
+
+            elif ntype == "WanVideoSampler":
+                # Standard Wan sampler — try known widget positions
+                # May vary by version; extract what we can
+                seed = _wv(wv, 0, "?")
+                scheduler = _wv(wv, 1, "?")
+                steps = _wv(wv, 2, "?")
+                cfg = _wv(wv, 3, "?")
+                denoise = _wv(wv, 4, 1.0)
+                key = "wansampler_%s_%s_%s" % (scheduler, steps, cfg)
+                if key not in seen_samplers:
+                    seen_samplers.add(key)
+                    samplers.append({
+                        "sampler": "WanVideo",
+                        "scheduler": str(scheduler),
+                        "steps": steps, "cfg": cfg, "seed": seed,
+                        "denoise": denoise, "title": title,
+                    })
+
+            # ── LoRA nodes ──────────────────────────────────────
+            elif ntype == "WanVideoLoraSelect":
+                # [0]=lora_name  [1]=strength
+                name = _short_name(_wv(wv, 0))
+                strength = _wv(wv, 1, 1.0)
+                if name and name not in seen_loras and name != "none":
+                    seen_loras.add(name)
+                    loras.append({"name": name, "strength": strength})
+
+            elif ntype in ("LoraLoader", "LoraLoaderModelOnly"):
+                # [0]=lora_name  [1]=strength_model
+                name = _short_name(_wv(wv, 0))
+                strength = _wv(wv, 1, 1.0)
+                if name and name not in seen_loras:
+                    seen_loras.add(name)
+                    loras.append({"name": name, "strength": strength})
+
+            # ── Resolution ──────────────────────────────────────
+            if not resolution:
+                if ntype == "ImageResizeKJv2":
+                    # [0]=width  [1]=height
+                    w = _wv(wv, 0)
+                    h = _wv(wv, 1)
+                    if isinstance(w, (int, float)) and \
+                       isinstance(h, (int, float)):
+                        resolution = {"width": int(w), "height": int(h)}
+
+                elif ntype == "EmptyLatentImage":
+                    w = _wv(wv, 0)
+                    h = _wv(wv, 1)
+                    if isinstance(w, (int, float)) and \
+                       isinstance(h, (int, float)):
+                        resolution = {"width": int(w), "height": int(h)}
+
+        if not models and not samplers and not loras:
+            return None
+
+        return {
+            "models": models,
+            "samplers": samplers,
+            "loras": loras,
+            "resolution": resolution,
+        }
+
     def _refreshComfyUIMeta(self):
-        """Load and cache ComfyUI metadata for the current source."""
+        """Load and cache ComfyUI metadata for the current source.
+
+        Uses a persistent dict cache (_comfyui_cache) keyed by filepath so
+        each file is only probed ONCE per RV session.  Files without
+        metadata are stored as ``False`` to avoid re-probing.
+        """
         filepath = self._getCurrentSourcePath()
         if not filepath:
-            self._comfyui_meta = None
+            # Path temporarily unavailable (scrubbing) — keep last overlay.
             return
 
-        if filepath == self._comfyui_path and self._comfyui_meta is not None:
-            return  # already cached
+        # ── Fast path: already probed this file ──────────────────
+        if filepath in self._comfyui_cache:
+            cached = self._comfyui_cache[filepath]
+            self._comfyui_path = filepath
+            self._comfyui_meta = cached if cached is not False else None
+            return
 
+        # ── Slow path: first time seeing this file — run ffprobe ─
         self._comfyui_path = filepath
         ext = os.path.splitext(filepath)[1].lower()
+        fname = os.path.basename(filepath)
+        print("[MediaVault] ComfyUI: reading %s  (ext=%s)" % (fname, ext))
 
-        prompt = None
+        self._comfyui_meta = None
+
         if ext == ".png":
             prompt = self._readPngPrompt(filepath)
-        elif ext in (".mp4", ".mov", ".mkv", ".webm", ".avi"):
-            prompt = self._readVideoPrompt(filepath)
+            if prompt:
+                nc = len(prompt) if isinstance(prompt, dict) else 0
+                print("[MediaVault] ComfyUI: PNG prompt format (%d nodes)" % nc)
+                self._comfyui_meta = self._parseComfyPrompt(prompt)
+            else:
+                print("[MediaVault] ComfyUI: no prompt data in PNG")
 
-        if prompt:
-            self._comfyui_meta = self._parseComfyPrompt(prompt)
+        elif ext in (".mp4", ".mov", ".mkv", ".webm", ".avi"):
+            raw = self._readVideoMeta(filepath)
+            if raw:
+                # Detect: workflow format has 'nodes' array,
+                # prompt-wrapped has 'prompt' key
+                if "nodes" in raw and isinstance(raw.get("nodes"), list):
+                    nc = len(raw["nodes"])
+                    print("[MediaVault] ComfyUI: workflow format "
+                          "(%d nodes)" % nc)
+                    self._comfyui_meta = self._parseComfyWorkflow(raw)
+                else:
+                    # Prompt-wrapped: {"prompt": "...", "workflow": "..."}
+                    prompt = raw.get("prompt")
+                    if isinstance(prompt, str):
+                        try:
+                            prompt = json.loads(prompt)
+                        except Exception:
+                            prompt = None
+                    elif not isinstance(prompt, dict):
+                        prompt = None
+                    if prompt:
+                        nc = len(prompt) if isinstance(prompt, dict) else 0
+                        print("[MediaVault] ComfyUI: prompt format "
+                              "(%d nodes)" % nc)
+                        self._comfyui_meta = self._parseComfyPrompt(prompt)
+                    else:
+                        print("[MediaVault] ComfyUI: comment JSON has "
+                              "no 'prompt' or 'nodes' key")
+            else:
+                print("[MediaVault] ComfyUI: no comment metadata in file")
         else:
-            self._comfyui_meta = None  # no ComfyUI data in this file
+            print("[MediaVault] ComfyUI: unsupported ext '%s'" % ext)
+
+        # ── Store result in dict cache (False = no metadata) ─────
+        self._comfyui_cache[filepath] = (
+            self._comfyui_meta if self._comfyui_meta else False
+        )
+
+        if self._comfyui_meta:
+            m = len(self._comfyui_meta.get("models", []))
+            s = len(self._comfyui_meta.get("samplers", []))
+            lo = len(self._comfyui_meta.get("loras", []))
+            r = self._comfyui_meta.get("resolution")
+            print("[MediaVault] ComfyUI: parsed — %d models, %d samplers,"
+                  " %d loras, res=%s" % (m, s, lo, r))
+        else:
+            print("[MediaVault] ComfyUI: no metadata extracted")
 
     # ── overlay metadata fetch ───────────────────────────────────
 
