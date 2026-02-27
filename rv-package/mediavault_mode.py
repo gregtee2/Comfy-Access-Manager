@@ -900,13 +900,52 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             except Exception as e:
                 LOG.append("Strategy2 error: %s" % e)
 
-            # --- Strategy 3: Fallback — walk all sources ---
+            # --- Strategy 2.5: Direct RVSourceGroup enumeration ---
+            # This mirrors _getAllSourcePaths() which ALWAYS finds files.
+            # Works even before clip is fully loaded.
+            try:
+                sgs = rvc.nodesOfType("RVSourceGroup")
+                sg_paths = []
+                for sg in sgs:
+                    path = self._pathFromSourceGroup(sg, frame)
+                    if path:
+                        sg_paths.append(path)
+                if len(sg_paths) == 1:
+                    LOG.append("Strategy2.5 (single source): %s"
+                               % sg_paths[0])
+                    self._writeDiagLog(LOG)
+                    return sg_paths[0]
+                elif sg_paths:
+                    # Multiple sources — try to match frame position.
+                    # For now return the first; frame-based matching
+                    # is handled by the sequence strategies above.
+                    LOG.append("Strategy2.5 (multi, first): %s"
+                               % sg_paths[0])
+                    self._writeDiagLog(LOG)
+                    return sg_paths[0]
+            except Exception as e:
+                LOG.append("Strategy2.5 error: %s" % e)
+
+            # --- Strategy 3: Fallback — rvc.sources() tuples ---
+            # rvc.sources() returns tuples: (filepath, start, end, inc,
+            # fps, hasAudio, hasVideo).  s[0] is already the file path,
+            # NOT an RV node name — return it directly.
             try:
                 all_srcs = rvc.sources()
                 LOG.append("sources() = %s" % (all_srcs,))
                 if all_srcs:
                     for s in all_srcs:
                         name = s[0] if isinstance(s, (list, tuple)) else s
+                        # If it looks like a file path, return directly
+                        if (os.sep in name or '/' in name
+                                or (len(name) > 2 and name[1] == ':')):
+                            normed = os.path.normpath(name)
+                            if os.path.exists(normed):
+                                LOG.append("Strategy3 (direct path): %s"
+                                           % normed)
+                                self._writeDiagLog(LOG)
+                                return normed
+                        # Otherwise treat as node name (legacy)
                         media_path = self._readMediaMovie(name, LOG)
                         if media_path:
                             result = self._resolveMediaPath(
@@ -2064,6 +2103,21 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                     cached = self._comfyui_cache.get(key)
                 self._comfyui_path = key
                 self._comfyui_meta = cached if cached is not False else None
+            elif self._comfyui_cache:
+                # _getCurrentSourcePath() failed (clip still loading,
+                # or RV can't resolve frame) but cache is populated.
+                # Use the only cached entry if there's exactly one,
+                # or the first entry with real metadata.
+                entries = [(k, v) for k, v in self._comfyui_cache.items()
+                           if v is not False]
+                if len(entries) == 1:
+                    self._comfyui_path = entries[0][0]
+                    self._comfyui_meta = entries[0][1]
+                elif not entries and len(self._comfyui_cache) == 1:
+                    # Single entry but no metadata
+                    k = list(self._comfyui_cache.keys())[0]
+                    self._comfyui_path = k
+                    self._comfyui_meta = None
         rve.displayFeedback(
             "ComfyUI Metadata: %s" % ("ON" if self._show_comfyui else "OFF"), 1.5)
 
@@ -2105,6 +2159,19 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         _refreshOverlayMeta() or touches _comfyui_meta/_comfyui_path.
         """
         cur = self._getCurrentSourcePath()
+
+        # If _getCurrentSourcePath failed but cache has exactly one
+        # source, use it.  This handles the "clip still loading" case.
+        if not cur and self._comfyui_cache:
+            entries = [(k, v) for k, v in self._comfyui_cache.items()
+                       if v is not False]
+            if len(entries) == 1:
+                cur_key = entries[0][0]
+                if self._show_comfyui and cur_key != self._comfyui_path:
+                    self._comfyui_path = cur_key
+                    self._comfyui_meta = entries[0][1]
+            return
+
         if not cur:
             return
 
