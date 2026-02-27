@@ -145,6 +145,38 @@ router.get('/browse', (req, res) => {
     });
 });
 
+// ═══════════════════════════════════════════
+//  CREATE FOLDER (for folder picker "New Folder" button)
+//  MUST be above /:id to avoid wildcard match
+// ═══════════════════════════════════════════
+
+router.post('/create-folder', (req, res) => {
+    const { parentDir, folderName } = req.body;
+
+    if (!parentDir || !folderName) {
+        return res.status(400).json({ error: 'parentDir and folderName are required' });
+    }
+
+    // Sanitize folder name — strip path separators and dangerous characters
+    const sanitized = folderName.replace(/[<>:"/\\|?*]/g, '').trim();
+    if (!sanitized) {
+        return res.status(400).json({ error: 'Invalid folder name' });
+    }
+
+    const newPath = path.join(parentDir, sanitized);
+
+    try {
+        if (fs.existsSync(newPath)) {
+            return res.status(409).json({ error: 'Folder already exists', path: newPath });
+        }
+
+        fs.mkdirSync(newPath, { recursive: true });
+        res.json({ success: true, path: newPath, name: sanitized });
+    } catch (err) {
+        res.status(500).json({ error: `Failed to create folder: ${err.message}` });
+    }
+});
+
 
 // ═══════════════════════════════════════════
 //  PREVIEW NAME — preview what the rename would produce

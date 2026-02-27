@@ -795,9 +795,14 @@ function showInlineNewShot() {
     const form = document.getElementById('inlineNewShot');
     // Always show (don't toggle - Cancel button hides)
     form.style.display = 'flex';
+    // Parse existing shot codes from the dropdown to find the next available code
     const shotSel = document.getElementById('importShot');
-    const count = Math.max(shotSel.options.length - 1, 0);
-    const nextNum = (count + 1) * 10;
+    let maxNum = 0;
+    for (const opt of shotSel.options) {
+        const m = opt.textContent?.match(/\(SH(\d+)\)/i);
+        if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
+    }
+    const nextNum = maxNum + 10;
     document.getElementById('newShotCode').value = `SH${String(nextNum).padStart(3, '0')}`;
     document.getElementById('newShotCode').dataset.defaultCode = `SH${String(nextNum).padStart(3, '0')}`;
     document.getElementById('newShotCode').dataset.manual = 'false';

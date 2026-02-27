@@ -2,6 +2,14 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.5.4] - 2026-02-27
+
+### Added
+- **Create folder during export** — The folder picker (used by Crate Export and vault setup) now has a "+ New Folder" button. Create a destination folder without leaving CAM. Backend endpoint `POST /api/assets/create-folder` sanitizes names and prevents duplicates.
+
+### Fixed
+- **Shot code auto-increment** — "Add Shot" no longer defaults to SH010 every time. All three Add Shot flows (right-click context menu, Edit Project modal, Import tab) now parse existing shot codes in the sequence, find the highest number, and auto-fill the next available code (e.g., SH010 exists -> defaults to SH020). Previously the context menu hardcoded SH010 and the other flows used a count-based calculation that broke when shots were deleted or renumbered.
+
 ## [1.5.3] - 2026-02-27
 
 ### Fixed

@@ -376,6 +376,32 @@ function fpSelectEntry(path) {
     event.currentTarget.classList.add('fp-entry-selected');
 }
 
+async function fpNewFolder() {
+    if (!fpCurrentDir) {
+        showToast('Navigate into a drive or folder first', 'error');
+        return;
+    }
+
+    const name = prompt('New folder name:');
+    if (!name || !name.trim()) return;
+
+    try {
+        const result = await api('/api/assets/create-folder', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ parentDir: fpCurrentDir, folderName: name.trim() })
+        });
+
+        if (result.success) {
+            showToast(`Created folder: ${result.name}`, 'success');
+            // Navigate into the new folder
+            fpNavigate(result.path);
+        }
+    } catch (err) {
+        showToast('Failed to create folder: ' + err.message, 'error');
+    }
+}
+
 // ===========================================
 //  ROLES MANAGEMENT
 // ===========================================
@@ -1394,6 +1420,7 @@ window.closeFolderPicker = closeFolderPicker;
 window.confirmFolderPicker = confirmFolderPicker;
 window.fpNavigate = fpNavigate;
 window.fpSelectEntry = fpSelectEntry;
+window.fpNewFolder = fpNewFolder;
 window.addRole = addRole;
 window.updateRoleColor = updateRoleColor;
 window.startRoleRename = startRoleRename;

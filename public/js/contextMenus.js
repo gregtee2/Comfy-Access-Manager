@@ -647,12 +647,17 @@ async function createSequence() {
 }
 
 function showAddShotModal(sequenceId) {
+    // Find existing shots for this sequence to calculate next available code
+    const seq = state.currentProject?.sequences?.find(s => s.id === sequenceId);
+    const existingShots = seq?.shots || [];
+    const nextCode = _nextShotCode(existingShots);
+
     document.getElementById('modalContent').innerHTML = `
         <h3>Add Shot</h3>
         <label>Shot Name</label>
         <input type="text" id="shotName" placeholder="Hero Close-Up" autofocus>
         <label>Shot Code</label>
-        <input type="text" id="shotCode" value="SH010" 
+        <input type="text" id="shotCode" value="${nextCode}" 
             oninput="this.value=this.value.toUpperCase()">
         <input type="hidden" id="shotSeqId" value="${sequenceId}">
         <div class="form-actions">
@@ -661,6 +666,16 @@ function showAddShotModal(sequenceId) {
         </div>
     `;
     document.getElementById('modal').style.display = 'flex';
+}
+
+/** Parse existing shot codes and return the next available code (SH010, SH020, etc.) */
+function _nextShotCode(shots) {
+    let maxNum = 0;
+    for (const sh of shots) {
+        const m = sh.code?.match(/^SH(\d+)$/i);
+        if (m) maxNum = Math.max(maxNum, parseInt(m[1], 10));
+    }
+    return `SH${String(maxNum + 10).padStart(3, '0')}`;
 }
 
 async function createShot() {

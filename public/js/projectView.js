@@ -206,7 +206,13 @@ async function showEditProjectModal(projectId) {
             const shotRow = shots.length
                 ? `<div class="ep-shot-row">${shotChips}</div>`
                 : '';
-            const nextShotNum = (shots.length + 1) * 10;
+            // Parse existing shot codes to find next available
+            let maxShotNum = 0;
+            for (const sh of shots) {
+                const m = sh.code?.match(/^SH(\d+)$/i);
+                if (m) maxShotNum = Math.max(maxShotNum, parseInt(m[1], 10));
+            }
+            const nextShotNum = maxShotNum + 10;
             const defaultShotCode = `SH${String(nextShotNum).padStart(3, '0')}`;
             return `<div class="ep-seq-item ep-seq-expandable">
                 <div class="ep-seq-main">
