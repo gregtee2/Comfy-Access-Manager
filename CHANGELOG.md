@@ -2,6 +2,20 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.5.3] - 2026-02-27
+
+### Fixed
+- **RV overlay intermittent failure** — ComfyUI metadata overlay now works reliably on first toggle. Previously, the overlay only worked sometimes because `_syncCurrentSource()` gated pointer updates behind `_show_comfyui`, which is `False` at startup when `_onSourceLoaded` fires. Pointers are now set unconditionally; the toggle only controls rendering.
+- **Multi-clip metadata switching** — When multiple clips are loaded in RV (sequence mode), the ComfyUI metadata overlay now updates automatically when switching between clips. Previously it always showed metadata for the first loaded clip.
+  - Root cause: `graph-state-change` fires on graph structure changes, NOT on frame changes. In sequence mode, switching clips is just a frame change.
+  - Fix 1: Added `frame-changed` event handler (`_onFrameChanged`) — gated behind `len(cache) > 1` so single-clip viewing has zero overhead.
+  - Fix 2: Added `RVSequenceGroup` handler to Strategy 1 — uses `sourcesAtFrame(frame)` to find which source owns the current frame.
+  - Fix 3: Made Strategy 2.5 frame-aware — when multiple sources exist, matches current frame to correct source group via `sourcesAtFrame` instead of blindly returning the first source.
+
+### Added
+- **`_setComfyUIPointersFromCache(hint_path)`** — New centralized method for setting ComfyUI overlay pointers. Priority: hint_path > `_getCurrentSourcePath()` > single-entry cache fallback. NOT gated behind `_show_comfyui` so pointers are ready before the user toggles the overlay on.
+- **Source-switch diagnostic** — Console prints `[MediaVault] source switched -> filename (cached=True/False)` when the viewed clip changes, aiding multi-clip debugging.
+
 ## [1.5.2] - 2026-02-26
 
 ### Fixed

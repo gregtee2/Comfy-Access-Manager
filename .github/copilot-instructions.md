@@ -572,7 +572,7 @@ This was a real bug (commit `4ccf32b`): `executeIngest()` was hardcoded to alway
 
 ### RV Plugin (rv-package/mediavault_mode.py)
 
-A 1093-line Python plugin that adds a **MediaVault** menu and **OpenGL overlay system** to OpenRV:
+A ~3,400-line Python plugin that adds a **MediaVault** menu, **OpenGL overlay system**, and **ComfyUI metadata overlay** to OpenRV:
 
 | Menu Item | Hotkey | What It Does |
 |-----------|--------|-------------|
@@ -618,6 +618,62 @@ The plugin renders metadata overlays directly in the RV viewport using pure Open
 **⚠️ CRITICAL**: Do NOT use GLUT bitmap fonts — `freeglut.dll` does not exist in the RV build. The embedded `glBitmap` approach works on all platforms (Windows, macOS, Linux) with zero external dependencies.
 
 **API endpoint**: `GET /api/assets/overlay-info?path=<filepath>` — returns asset metadata (vault_name, shot_name, role, version, status) for the currently-loaded file. Uses `getAllPathVariants()` for cross-platform path matching.
+
+### ComfyUI Metadata Overlay (Shift+C)
+
+Displays embedded ComfyUI workflow metadata (model, sampler, steps, CFG, seed, etc.) overlaid on the RV viewport. Works with PNG and video files that have ComfyUI prompt data embedded.
+
+**Event-Driven Architecture:**
+```
+source-group-complete / after-progressive-loading
+    → _onSourceLoaded
+        → ffprobe / PNG tEXt extraction → cache result
+        → _setComfyUIPointersFromCache(last_probed_path)
+
+graph-state-change
+    → _onViewChanged → _syncCurrentSource()
+
+frame-changed
+    → _onFrameChanged → _syncCurrentSource()
+      (gated: only fires when len(cache) > 1 or overlay enabled)
+
+render (every frame)
+    → _drawComfyUI() — reads cached pointers, zero I/O
+```
+
+**Key State Variables:**
+| Variable | Type | Purpose |
+|----------|------|---------|
+| `_comfyui_cache` | `{norm_key: dict or False}` | Probe results keyed by `_normKey(path)`. `False` = probed, no metadata. |
+| `_comfyui_path` | `str` | Normalized path of the currently pointed-to clip |
+| `_comfyui_meta` | `dict or None` | Parsed metadata for the current clip (from cache) |
+| `_show_comfyui` | `bool` | Whether overlay is visually toggled ON. Does NOT gate pointer updates. |
+
+**Key Methods:**
+| Method | Called By | Purpose |
+|--------|-----------|---------|
+| `_setComfyUIPointersFromCache(hint_path)` | `_onSourceLoaded`, `_toggleComfyUI` | Sets `_comfyui_path`/`_comfyui_meta` from cache. Priority: hint > current source > first cached entry. NOT gated behind `_show_comfyui`. |
+| `_syncCurrentSource()` | `_onViewChanged`, `_onFrameChanged` | Resolves current source via `_getCurrentSourcePath()`, updates pointers from cache. No I/O. |
+| `_onFrameChanged(event)` | RV `frame-changed` event | Calls `_syncCurrentSource()` only when `len(cache) > 1` (zero overhead for single clips). |
+
+**Multi-Clip Switching:**
+- When multiple clips are loaded, `_getCurrentSourcePath()` must return the *currently viewed* clip, not the first one.
+- **Strategy 1** handles `RVSequenceGroup` (default sequence mode) by calling `sourcesAtFrame(frame)` to find which source owns the current frame.
+- **Strategy 2.5** is frame-aware: when multiple `RVSourceGroup` nodes exist, it matches the current frame to the correct source group via `sourcesAtFrame`.
+- `frame-changed` event fires `_syncCurrentSource()` which updates pointers to the cache entry for the new clip.
+
+**Source Path Resolution Strategies (`_getCurrentSourcePath`):**
+| Strategy | When It Works | Method |
+|----------|--------------|--------|
+| 1 (viewNode) | User pressed PageUp/Down, or sequence mode | Read `viewNode()` type: RVSourceGroup → read `.media.movie` directly. RVStackGroup → active layer index. RVSequenceGroup → `sourcesAtFrame(frame)` → match to source group. |
+| 2 (sourcesAtFrame) | Standard playback | `sourcesAtFrame(frame)` → read `.media.movie` from source node → `_resolveMediaPath()` for frame-to-file mapping. |
+| 2.5 (enumerate) | Works even before clip fully loaded | Enumerate all `RVSourceGroup` nodes → read `.media.movie`. If multiple: match current frame via `sourcesAtFrame`. |
+| 3 (fallback) | Last resort | `rvc.sources()` tuples → try as file paths → try as node names. |
+
+**⚠️ CRITICAL: Pointer updates vs toggle state:**
+- `_onSourceLoaded` always sets pointers via `_setComfyUIPointersFromCache()`, regardless of `_show_comfyui`. This ensures metadata is ready *before* the user toggles the overlay on.
+- `_syncCurrentSource()` always updates pointers on source change. The `_show_comfyui` flag only controls whether `_drawComfyUI()` renders anything.
+- Previous bug: gating pointer updates behind `_show_comfyui` caused intermittent "No ComfyUI metadata" because pointers were never set if the toggle was off when sources loaded.
 
 ### findRV() Path Priority (assetRoutes.js)
 1. User-configured `rv_path` setting
@@ -1122,6 +1178,11 @@ CAM (Node.js) ← GET /api/resolve/timeline ← scripts/resolve_bridge.py ← Da
 | — | **v1.4.1 — SQLite Migration & UI Professionalization (February 2026)** |
 | — | refactor: Migrated from sql.js (WASM) to better-sqlite3 (Native) for improved performance and concurrency |
 | — | refactor: Purged all emojis and non-ASCII characters from frontend UI and docs for a professional aesthetic |
+| — | **v1.5.3 — ComfyUI Metadata Overlay Reliability + Multi-Clip Switching (February 2026)** |
+| — | fix: RV overlay intermittent failure — pointer updates no longer gated behind `_show_comfyui` |
+| — | fix: Multi-clip metadata switching — added `frame-changed` event, RVSequenceGroup Strategy 1, frame-aware Strategy 2.5 |
+| — | feat: `_setComfyUIPointersFromCache()` centralized pointer method |
+| — | feat: Source-switch diagnostic print for multi-clip debugging |
 
 ---
 

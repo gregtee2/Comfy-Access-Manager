@@ -740,6 +740,8 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                  "Auto-probe ComfyUI metadata after progressive load"),
                 ("graph-state-change", self._onViewChanged,
                  "Update overlay when active source changes"),
+                ("frame-changed", self._onFrameChanged,
+                 "Update overlay on frame change (multi-clip)"),
                 ("key-down--alt--v", self._showCompareRoleMenu,
                  "Compare to ... role popup"),
                 ("key-down--alt--shift--v", self._showSwitchRoleMenu,
@@ -873,6 +875,44 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                                             return path
                         except Exception:
                             pass
+
+                    if vn_type == "RVSequenceGroup":
+                        # In sequence mode the viewNode is the sequence
+                        # group, not an individual source.  Use
+                        # sourcesAtFrame to find which source owns the
+                        # current frame, then match it to its source
+                        # group so we can read the file path.
+                        try:
+                            saf = rvc.sourcesAtFrame(frame)
+                            if saf:
+                                src = saf[-1]
+                                if isinstance(src, (list, tuple)):
+                                    src = src[0]
+                                # Source node names look like
+                                # "sourceGroup000001_source" — find the
+                                # matching RVSourceGroup.
+                                for sg in rvc.nodesOfType("RVSourceGroup"):
+                                    if src.startswith(sg):
+                                        path = self._pathFromSourceGroup(
+                                            sg, frame)
+                                        if path:
+                                            LOG.append(
+                                                "Strategy1 (Seq frame=%d "
+                                                "→ %s): %s"
+                                                % (frame, sg, path))
+                                            self._writeDiagLog(LOG)
+                                            return path
+                                # If no startswith match, try reading
+                                # media directly from the source node.
+                                media = self._readMediaMovie(src, LOG)
+                                if media and os.path.exists(media):
+                                    LOG.append(
+                                        "Strategy1 (Seq direct): %s"
+                                        % media)
+                                    self._writeDiagLog(LOG)
+                                    return os.path.normpath(media)
+                        except Exception as e:
+                            LOG.append("Strategy1 Sequence error: %s" % e)
             except Exception as e:
                 LOG.append("Strategy1 error: %s" % e)
 
@@ -905,24 +945,40 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             # Works even before clip is fully loaded.
             try:
                 sgs = rvc.nodesOfType("RVSourceGroup")
-                sg_paths = []
+                sg_map = {}  # sg_name → file path
                 for sg in sgs:
                     path = self._pathFromSourceGroup(sg, frame)
                     if path:
-                        sg_paths.append(path)
-                if len(sg_paths) == 1:
-                    LOG.append("Strategy2.5 (single source): %s"
-                               % sg_paths[0])
+                        sg_map[sg] = path
+                if len(sg_map) == 1:
+                    path = list(sg_map.values())[0]
+                    LOG.append("Strategy2.5 (single source): %s" % path)
                     self._writeDiagLog(LOG)
-                    return sg_paths[0]
-                elif sg_paths:
-                    # Multiple sources — try to match frame position.
-                    # For now return the first; frame-based matching
-                    # is handled by the sequence strategies above.
-                    LOG.append("Strategy2.5 (multi, first): %s"
-                               % sg_paths[0])
+                    return path
+                elif sg_map:
+                    # Multiple sources — match current frame to the
+                    # correct source group using sourcesAtFrame.
+                    try:
+                        saf = rvc.sourcesAtFrame(frame)
+                        if saf:
+                            src = saf[-1]
+                            if isinstance(src, (list, tuple)):
+                                src = src[0]
+                            for sg_name, path in sg_map.items():
+                                if src.startswith(sg_name):
+                                    LOG.append(
+                                        "Strategy2.5 (frame-matched "
+                                        "%s): %s" % (sg_name, path))
+                                    self._writeDiagLog(LOG)
+                                    return path
+                    except Exception:
+                        pass
+                    # Fallback: return first
+                    first = list(sg_map.values())[0]
+                    LOG.append("Strategy2.5 (multi, fallback): %s"
+                               % first)
                     self._writeDiagLog(LOG)
-                    return sg_paths[0]
+                    return first
             except Exception as e:
                 LOG.append("Strategy2.5 error: %s" % e)
 
@@ -2091,33 +2147,16 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             self._overlay_enabled = True
             self._refreshOverlayMeta()
         if self._show_comfyui:
-            # Metadata should already be cached by _onSourceLoaded.
-            # Just set the current-file pointer from cache.
-            cur = self._getCurrentSourcePath()
-            if cur:
-                key = self._normKey(cur)
-                cached = self._comfyui_cache.get(key)
-                if cached is None:
-                    # Safety net: not cached yet — probe this one file
+            # Pointers should already be set by _onSourceLoaded.
+            # But if they're not (race condition), set them now.
+            if not self._comfyui_meta:
+                self._setComfyUIPointersFromCache()
+            # Last resort: if still nothing cached, probe now
+            if not self._comfyui_meta and not self._comfyui_cache:
+                cur = self._getCurrentSourcePath()
+                if cur:
                     self._probeAndCacheFile(cur)
-                    cached = self._comfyui_cache.get(key)
-                self._comfyui_path = key
-                self._comfyui_meta = cached if cached is not False else None
-            elif self._comfyui_cache:
-                # _getCurrentSourcePath() failed (clip still loading,
-                # or RV can't resolve frame) but cache is populated.
-                # Use the only cached entry if there's exactly one,
-                # or the first entry with real metadata.
-                entries = [(k, v) for k, v in self._comfyui_cache.items()
-                           if v is not False]
-                if len(entries) == 1:
-                    self._comfyui_path = entries[0][0]
-                    self._comfyui_meta = entries[0][1]
-                elif not entries and len(self._comfyui_cache) == 1:
-                    # Single entry but no metadata
-                    k = list(self._comfyui_cache.keys())[0]
-                    self._comfyui_path = k
-                    self._comfyui_meta = None
+                    self._setComfyUIPointersFromCache(cur)
         rve.displayFeedback(
             "ComfyUI Metadata: %s" % ("ON" if self._show_comfyui else "OFF"), 1.5)
 
@@ -2131,15 +2170,24 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         """
         all_paths = self._getAllSourcePaths()
         newly_probed = 0
+        last_probed_path = None
         for fp in all_paths:
-            if self._normKey(fp) not in self._comfyui_cache:
+            key = self._normKey(fp)
+            if key not in self._comfyui_cache:
                 self._probeAndCacheFile(fp)
                 newly_probed += 1
+            last_probed_path = fp
         if newly_probed:
             print("[MediaVault] ComfyUI auto-probe: %d new source(s) cached"
                   " (%d total)" % (newly_probed, len(self._comfyui_cache)))
 
-        # Update current-file pointers (both standard + ComfyUI)
+        # ALWAYS pre-set ComfyUI pointers from cache so they're ready
+        # when the user toggles the overlay on.  Don't gate behind
+        # _show_comfyui — the whole point is to have this ready BEFORE
+        # the toggle.
+        self._setComfyUIPointersFromCache(last_probed_path)
+
+        # Update standard overlay pointers
         self._syncCurrentSource()
 
     def _onViewChanged(self, event):
@@ -2151,29 +2199,74 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         """
         self._syncCurrentSource()
 
+    def _onFrameChanged(self, event):
+        """Handle frame change — needed for multi-clip sequence mode.
+
+        In sequence mode, switching clips is just a frame change (the
+        graph structure doesn't change).  This handler only does work
+        when there are 2+ cached sources, so single-clip viewing has
+        zero overhead.
+        """
+        if len(self._comfyui_cache) > 1 or self._overlay_enabled:
+            self._syncCurrentSource()
+
+    def _setComfyUIPointersFromCache(self, hint_path=None):
+        """Set _comfyui_path and _comfyui_meta from the cache.
+
+        Called by _onSourceLoaded (always) and _toggleComfyUI (on toggle).
+        NOT gated behind _show_comfyui — we want pointers ready BEFORE
+        the user toggles the overlay on.
+
+        Priority:
+          1. hint_path (if provided and cached with metadata)
+          2. _getCurrentSourcePath() result
+          3. Single-entry cache fallback
+        """
+        # Try hint_path first
+        if hint_path:
+            key = self._normKey(hint_path)
+            cached = self._comfyui_cache.get(key)
+            if cached and cached is not False:
+                self._comfyui_path = key
+                self._comfyui_meta = cached
+                return
+
+        # Try current source path
+        cur = self._getCurrentSourcePath()
+        if cur:
+            key = self._normKey(cur)
+            cached = self._comfyui_cache.get(key)
+            if cached is not None:
+                self._comfyui_path = key
+                self._comfyui_meta = cached if cached is not False else None
+                return
+
+        # Fallback: if cache has entries with metadata, use the first
+        if self._comfyui_cache:
+            for k, v in self._comfyui_cache.items():
+                if v is not False:
+                    self._comfyui_path = k
+                    self._comfyui_meta = v
+                    return
+
     def _syncCurrentSource(self):
         """Update overlay pointers for the currently viewed source.
 
         Called by event handlers (_onSourceLoaded, _onViewChanged) —
-        NEVER from the render loop.  This is the ONLY place that calls
-        _refreshOverlayMeta() or touches _comfyui_meta/_comfyui_path.
+        NEVER from the render loop.
         """
         cur = self._getCurrentSourcePath()
-
-        # If _getCurrentSourcePath failed but cache has exactly one
-        # source, use it.  This handles the "clip still loading" case.
-        if not cur and self._comfyui_cache:
-            entries = [(k, v) for k, v in self._comfyui_cache.items()
-                       if v is not False]
-            if len(entries) == 1:
-                cur_key = entries[0][0]
-                if self._show_comfyui and cur_key != self._comfyui_path:
-                    self._comfyui_path = cur_key
-                    self._comfyui_meta = entries[0][1]
-            return
-
         if not cur:
+            # Can't determine current source — leave pointers as-is.
+            # They were set by _onSourceLoaded / _setComfyUIPointersFromCache.
             return
+
+        # Diagnostic: show what we resolved (helps debug multi-clip)
+        key = self._normKey(cur)
+        if key != self._comfyui_path:
+            in_cache = key in self._comfyui_cache
+            print("[MediaVault] source switched → %s  (cached=%s)"
+                  % (os.path.basename(cur), in_cache))
 
         # Standard overlay (shot name, status, etc.)
         if self._overlay_enabled:
@@ -2181,14 +2274,14 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             if nkey != self._normKey(self._overlay_path):
                 self._refreshOverlayMeta(cur)
 
-        # ComfyUI overlay: pure cache lookup
-        if self._show_comfyui:
-            key = self._normKey(cur)
-            if key != self._comfyui_path:
-                self._comfyui_path = key
-                cached = self._comfyui_cache.get(key)
-                self._comfyui_meta = (
-                    cached if cached is not False else None)
+        # ComfyUI overlay: pure cache lookup — ALWAYS update, not
+        # gated behind _show_comfyui, so pointers are ready.
+        key = self._normKey(cur)
+        if key != self._comfyui_path:
+            self._comfyui_path = key
+            cached = self._comfyui_cache.get(key)
+            self._comfyui_meta = (
+                cached if cached is not False else None)
 
     # ── ComfyUI metadata extraction ─────────────────────────────
 
