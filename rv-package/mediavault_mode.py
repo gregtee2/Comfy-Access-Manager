@@ -14,6 +14,8 @@ import rv.extra_commands as rve
 import json
 import os
 import re
+import struct
+import subprocess
 import tempfile
 
 import time
@@ -214,6 +216,8 @@ QLabel#titleLabel {
 _OV_BG      = (0.0, 0.0, 0.0, 0.55)       # semi-transparent black background
 _OV_TEXT    = (1.0, 1.0, 1.0, 0.90)       # white text
 _OV_WM      = (1.0, 1.0, 1.0, 0.07)       # very faint watermark
+_OV_LABEL   = (0.18, 0.77, 0.71, 0.95)    # teal accent for section headers
+_OV_DIM     = (0.7, 0.7, 0.7, 0.80)       # dimmed text for labels
 _STATUS_COLORS = {
     "WIP":      (1.0, 0.65, 0.0,  0.85),   # orange
     "Review":   (0.3, 0.6,  1.0,  0.85),   # blue
@@ -659,9 +663,12 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         self._show_metadata    = True   # on by default when overlay enabled
         self._show_status      = True
         self._show_watermark   = False  # off by default (opt-in)
+        self._show_comfyui     = False  # ComfyUI generation metadata
         self._overlay_meta     = None   # cached API response
         self._overlay_path     = None   # path the cache belongs to
         self._overlay_tick     = 0      # frame counter for lazy refresh
+        self._comfyui_meta     = None   # cached ComfyUI prompt data
+        self._comfyui_path     = None   # path the ComfyUI cache belongs to
 
         # ── Compare / version cache ──────────────────────────────
         self._cached_data = None
@@ -763,6 +770,10 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                          else rvc.UncheckedMenuState),
                 ("  Watermark", self._toggleWatermark, None,
                  lambda *args, **kwargs: rvc.CheckedMenuState if self._show_watermark
+                         else rvc.UncheckedMenuState),
+                ("_", None),
+                ("ComfyUI Metadata", self._toggleComfyUI, "shift+c",
+                 lambda *args, **kwargs: rvc.CheckedMenuState if self._show_comfyui
                          else rvc.UncheckedMenuState),
             ])]
         )
@@ -2028,6 +2039,297 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         rve.displayFeedback(
             "Watermark: %s" % ("ON" if self._show_watermark else "OFF"), 1.5)
 
+    def _toggleComfyUI(self, event):
+        self._show_comfyui = not self._show_comfyui
+        if self._show_comfyui and not self._overlay_enabled:
+            self._overlay_enabled = True
+            self._refreshOverlayMeta()
+        if self._show_comfyui:
+            self._refreshComfyUIMeta()
+        rve.displayFeedback(
+            "ComfyUI Metadata: %s" % ("ON" if self._show_comfyui else "OFF"), 1.5)
+
+    # ── ComfyUI metadata extraction ─────────────────────────────
+
+    @staticmethod
+    def _readPngPrompt(filepath):
+        """Extract ComfyUI 'prompt' JSON from PNG tEXt / iTXt chunks."""
+        try:
+            with open(filepath, "rb") as f:
+                sig = f.read(8)
+                if sig[:4] != b'\x89PNG':
+                    return None
+                while True:
+                    hdr = f.read(8)
+                    if len(hdr) < 8:
+                        break
+                    length = struct.unpack(">I", hdr[:4])[0]
+                    ctype = hdr[4:8]
+                    data = f.read(length)
+                    f.read(4)  # CRC
+                    if ctype == b'tEXt':
+                        nul = data.find(b'\x00')
+                        if nul >= 0:
+                            key = data[:nul].decode("latin-1")
+                            val = data[nul + 1:].decode("latin-1")
+                            if key == "prompt":
+                                return json.loads(val)
+                    elif ctype == b'iTXt':
+                        nul = data.find(b'\x00')
+                        if nul >= 0:
+                            key = data[:nul].decode("utf-8")
+                            if key == "prompt":
+                                rest = data[nul + 1:]
+                                # skip compression flag, method, lang, keyword
+                                for _ in range(3):
+                                    n = rest.find(b'\x00')
+                                    if n >= 0:
+                                        rest = rest[n + 1:]
+                                return json.loads(rest.decode("utf-8"))
+                    elif ctype == b'IEND':
+                        break
+        except Exception as e:
+            print("[MediaVault] PNG prompt read error: %s" % e)
+        return None
+
+    @staticmethod
+    def _readVideoPrompt(filepath):
+        """Extract ComfyUI prompt from video comment metadata (via ffprobe)."""
+        try:
+            # Try common ffprobe locations
+            ffprobe = None
+            for candidate in [
+                "ffprobe",
+                r"C:\ffmpeg\bin\ffprobe.exe",
+                r"C:\ffmpeg\ffprobe.exe",
+                "/opt/homebrew/bin/ffprobe",
+                "/usr/bin/ffprobe",
+                "/usr/local/bin/ffprobe",
+            ]:
+                try:
+                    # Quick existence check on Windows
+                    if os.name == "nt" and not os.path.isabs(candidate):
+                        pass  # will try via subprocess
+                    result = subprocess.run(
+                        [candidate, "-version"],
+                        capture_output=True, timeout=3)
+                    if result.returncode == 0:
+                        ffprobe = candidate
+                        break
+                except Exception:
+                    continue
+            if not ffprobe:
+                return None
+
+            result = subprocess.run(
+                [ffprobe, "-v", "quiet", "-print_format", "json",
+                 "-show_format", filepath],
+                capture_output=True, text=True, timeout=10)
+            if result.returncode != 0:
+                return None
+
+            fmt = json.loads(result.stdout)
+            comment = fmt.get("format", {}).get("tags", {}).get("comment", "")
+            if not comment:
+                return None
+
+            meta = json.loads(comment)
+            # Comment may contain {"prompt": "...", "workflow": "..."}
+            prompt_str = meta.get("prompt")
+            if isinstance(prompt_str, str):
+                return json.loads(prompt_str)
+            elif isinstance(prompt_str, dict):
+                return prompt_str
+            return None
+        except Exception as e:
+            print("[MediaVault] Video prompt read error: %s" % e)
+        return None
+
+    @staticmethod
+    def _parseComfyPrompt(prompt):
+        """Parse ComfyUI prompt JSON into a structured summary dict.
+
+        Returns {
+            'models': [{'name': ..., 'type': ...}],
+            'samplers': [{'sampler': ..., 'scheduler': ..., 'steps': ...,
+                          'cfg': ..., 'seed': ..., 'denoise': ...}],
+            'loras': [{'name': ..., 'strength': ...}],
+            'resolution': {'width': ..., 'height': ...},
+        }
+        """
+        if not prompt or not isinstance(prompt, dict):
+            return None
+
+        def _resolve(val):
+            """Resolve a value that might be a node reference [nodeId, idx]."""
+            if isinstance(val, list) and len(val) == 2:
+                ref_id = str(val[0])
+                ref_node = prompt.get(ref_id, {})
+                inputs = ref_node.get("inputs", {})
+                cls = ref_node.get("class_type", "")
+                # For INTConstant / FloatConstant nodes
+                if "Constant" in cls and "value" in inputs:
+                    return inputs["value"]
+                # For CreateCFGScheduleFloatList – return start value
+                if "CFGSchedule" in cls:
+                    return inputs.get("cfg_scale_start",
+                           inputs.get("value", val))
+                # Generic: look for a 'value' input
+                if "value" in inputs:
+                    return inputs["value"]
+                return val  # unresolvable – return raw
+            return val
+
+        def _short_name(path):
+            """Extract short model name from full path."""
+            if not path:
+                return path
+            name = path.replace("\\\\", "\\").replace("\\", "/")
+            name = name.rsplit("/", 1)[-1]
+            # Remove common extensions
+            for ext in (".safetensors", ".ckpt", ".pt", ".pth", ".bin",
+                        ".gguf"):
+                if name.endswith(ext):
+                    name = name[:-len(ext)]
+                    break
+            return name
+
+        models = []
+        samplers = []
+        loras = []
+        resolution = None
+        seen_samplers = set()
+        seen_loras = set()
+        seen_models = set()
+
+        for node_id, node in prompt.items():
+            cls = node.get("class_type", "")
+            inputs = node.get("inputs", {})
+            title = node.get("_meta", {}).get("title", "")
+
+            # ── Checkpoint / model loaders ──
+            if cls in ("CheckpointLoaderSimple", "CheckpointLoader"):
+                name = _short_name(inputs.get("ckpt_name", ""))
+                if name and name not in seen_models:
+                    seen_models.add(name)
+                    models.append({"name": name, "type": "Checkpoint"})
+
+            elif "ModelLoader" in cls and "model" in inputs:
+                name = _short_name(str(inputs.get("model", "")))
+                if name and name not in seen_models and not isinstance(inputs["model"], list):
+                    seen_models.add(name)
+                    mtype = "Model"
+                    if "VAE" in cls:
+                        mtype = "VAE"
+                    elif "WanVideo" in cls:
+                        mtype = "WanVideo"
+                    models.append({"name": name, "type": mtype})
+
+            elif cls == "WanVideoVAELoader":
+                name = _short_name(inputs.get("model_name", ""))
+                if name and name not in seen_models:
+                    seen_models.add(name)
+                    models.append({"name": name, "type": "VAE"})
+
+            elif cls == "UpscaleModelLoader":
+                name = _short_name(inputs.get("model_name", ""))
+                if name and name not in seen_models:
+                    seen_models.add(name)
+                    models.append({"name": name, "type": "Upscale"})
+
+            # ── Sampler nodes ──
+            elif cls in ("KSampler", "KSamplerAdvanced"):
+                steps = _resolve(inputs.get("steps", "?"))
+                cfg = _resolve(inputs.get("cfg", "?"))
+                seed = inputs.get("seed", "?")
+                sampler = inputs.get("sampler_name", "?")
+                scheduler = inputs.get("scheduler", "?")
+                denoise = inputs.get("denoise", 1.0)
+                key = "%s_%s_%s_%s" % (sampler, scheduler, steps, cfg)
+                if key not in seen_samplers:
+                    seen_samplers.add(key)
+                    samplers.append({
+                        "sampler": sampler, "scheduler": scheduler,
+                        "steps": steps, "cfg": cfg, "seed": seed,
+                        "denoise": denoise, "title": title or cls,
+                    })
+
+            elif cls == "WanVideoSampler":
+                steps = _resolve(inputs.get("steps", "?"))
+                cfg = _resolve(inputs.get("cfg", "?"))
+                seed = inputs.get("seed", "?")
+                scheduler = inputs.get("scheduler", "?")
+                denoise = inputs.get("denoise_strength",
+                          inputs.get("denoise", 1.0))
+                shift = inputs.get("shift", "")
+                key = "wan_%s_%s_%s" % (scheduler, steps, cfg)
+                if key not in seen_samplers:
+                    seen_samplers.add(key)
+                    samplers.append({
+                        "sampler": "WanVideo", "scheduler": scheduler,
+                        "steps": steps, "cfg": cfg, "seed": seed,
+                        "denoise": denoise, "title": title or cls,
+                        "shift": shift,
+                    })
+
+            # ── LoRA nodes ──
+            elif cls in ("LoraLoader", "LoraLoaderModelOnly"):
+                name = _short_name(inputs.get("lora_name", ""))
+                strength = inputs.get("strength_model",
+                           inputs.get("strength", 1.0))
+                if name and name not in seen_loras:
+                    seen_loras.add(name)
+                    loras.append({"name": name, "strength": strength})
+
+            elif cls == "WanVideoLoraSelect":
+                name = _short_name(inputs.get("lora", ""))
+                strength = inputs.get("strength", 1.0)
+                if name and name not in seen_loras:
+                    seen_loras.add(name)
+                    loras.append({"name": name, "strength": strength})
+
+            # ── Resolution ──
+            if not resolution and cls in ("EmptyLatentImage",
+                "WanVideoImageToVideoEncode", "ImageResizeKJv2"):
+                w = inputs.get("width")
+                h = inputs.get("height")
+                if isinstance(w, (int, float)) and isinstance(h, (int, float)):
+                    resolution = {"width": int(w), "height": int(h)}
+
+        if not models and not samplers and not loras:
+            return None
+
+        return {
+            "models": models,
+            "samplers": samplers,
+            "loras": loras,
+            "resolution": resolution,
+        }
+
+    def _refreshComfyUIMeta(self):
+        """Load and cache ComfyUI metadata for the current source."""
+        filepath = self._getCurrentSourcePath()
+        if not filepath:
+            self._comfyui_meta = None
+            return
+
+        if filepath == self._comfyui_path and self._comfyui_meta is not None:
+            return  # already cached
+
+        self._comfyui_path = filepath
+        ext = os.path.splitext(filepath)[1].lower()
+
+        prompt = None
+        if ext == ".png":
+            prompt = self._readPngPrompt(filepath)
+        elif ext in (".mp4", ".mov", ".mkv", ".webm", ".avi"):
+            prompt = self._readVideoPrompt(filepath)
+
+        if prompt:
+            self._comfyui_meta = self._parseComfyPrompt(prompt)
+        else:
+            self._comfyui_meta = None  # no ComfyUI data in this file
+
     # ── overlay metadata fetch ───────────────────────────────────
 
     def _refreshOverlayMeta(self):
@@ -2087,6 +2389,8 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 cur = self._getCurrentSourcePath()
                 if cur and cur != self._overlay_path:
                     self._refreshOverlayMeta()
+                if self._show_comfyui and cur and cur != self._comfyui_path:
+                    self._refreshComfyUIMeta()
 
             # ── Set up 2D ortho projection ──
             glMatrixMode(GL_PROJECTION)
@@ -2106,6 +2410,8 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 self._drawStatusStamp(w, h)
             if self._show_watermark:
                 self._drawWatermarkText(w, h)
+            if self._show_comfyui:
+                self._drawComfyUIOverlay(w, h)
 
             glDisable(GL_BLEND)
             glPopMatrix()
@@ -2246,6 +2552,139 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         tw2 = self._textW(text2)
         tx2 = (w - tw2) // 2
         self._glText(tx2, ty - 20, text2)
+
+    # ── ComfyUI metadata overlay (top-left) ──────────────────────
+
+    def _drawComfyUIOverlay(self, w, h):
+        """Render ComfyUI generation metadata as a top-left overlay panel."""
+        lh = _GLYPH_H + 5           # line height
+        pad = 10                     # inner padding
+        gap = 6                      # gap between sections
+        ox = 15                      # left margin
+        max_label_w = 0              # track widest line for box
+
+        # ── build lines: list of (color, text) ──
+        lines = []
+
+        meta = self._comfyui_meta
+        if meta is None:
+            lines.append((_OV_DIM, "No ComfyUI metadata"))
+        else:
+            # Resolution
+            res = meta.get("resolution")
+            if res:
+                rw = res.get("width")
+                rh = res.get("height")
+                nf = res.get("num_frames")
+                res_txt = "%sx%s" % (rw, rh) if rw and rh else ""
+                if nf:
+                    res_txt += "  %s frames" % nf
+                if res_txt:
+                    lines.append((_OV_LABEL, "RES"))
+                    lines.append((_OV_TEXT, "  " + res_txt))
+
+            # Models
+            models = meta.get("models", [])
+            if models:
+                if lines:
+                    lines.append((None, ""))          # spacer
+                lines.append((_OV_LABEL, "MODEL"))
+                for m in models:
+                    name = m.get("name", "?")
+                    mtype = m.get("type", "")
+                    txt = "  %s" % name
+                    if mtype:
+                        txt += "  (%s)" % mtype
+                    lines.append((_OV_TEXT, txt))
+
+            # Samplers
+            samplers = meta.get("samplers", [])
+            if samplers:
+                if lines:
+                    lines.append((None, ""))
+                lines.append((_OV_LABEL, "SAMPLER"))
+                for s in samplers:
+                    sname = s.get("sampler", s.get("scheduler", "?"))
+                    sched = s.get("scheduler", "")
+                    parts = []
+                    if sname:
+                        parts.append(sname)
+                    if sched and sched != sname:
+                        parts.append(sched)
+                    line1 = "  " + " / ".join(parts) if parts else "  ?"
+                    lines.append((_OV_TEXT, line1))
+
+                    # Detail line: steps, cfg, seed, denoise
+                    detail_parts = []
+                    steps = s.get("steps")
+                    if steps is not None:
+                        detail_parts.append("Steps:%s" % steps)
+                    cfg = s.get("cfg")
+                    if cfg is not None:
+                        detail_parts.append("CFG:%s" % cfg)
+                    seed = s.get("seed")
+                    if seed is not None:
+                        detail_parts.append("Seed:%s" % seed)
+                    denoise = s.get("denoise")
+                    if denoise is not None and float(denoise) < 1.0:
+                        detail_parts.append("Denoise:%s" % denoise)
+                    shift = s.get("shift")
+                    if shift is not None:
+                        detail_parts.append("Shift:%s" % shift)
+                    if detail_parts:
+                        lines.append((_OV_DIM, "  " + "  ".join(detail_parts)))
+
+            # LoRAs
+            loras = meta.get("loras", [])
+            if loras:
+                if lines:
+                    lines.append((None, ""))
+                lines.append((_OV_LABEL, "LORA"))
+                for lo in loras:
+                    lname = lo.get("name", "?")
+                    lstr = lo.get("strength")
+                    txt = "  %s" % lname
+                    if lstr is not None:
+                        txt += "  @ %s" % lstr
+                    lines.append((_OV_TEXT, txt))
+
+        if not lines:
+            return
+
+        # ── measure box ──
+        for _, text in lines:
+            tw = self._textW(text)
+            if tw > max_label_w:
+                max_label_w = tw
+
+        # Count real lines (skip spacers for height calc but keep padding)
+        total_h = pad * 2
+        for i, (color, text) in enumerate(lines):
+            if color is None:
+                total_h += gap
+            else:
+                total_h += lh
+        box_w = max_label_w + pad * 2 + 4
+        box_h = total_h
+
+        # Top-left position
+        bx = ox
+        by = h - box_h - 15          # 15px from top (OpenGL y=0 is bottom)
+
+        # ── draw background ──
+        self._box(bx, by, box_w, box_h, _OV_BG)
+        self._boxOutline(bx, by, box_w, box_h, (0.18, 0.77, 0.71, 0.3), 1.0)
+
+        # ── draw lines top-down ──
+        # OpenGL y grows upward, so first line starts at top of box
+        cy = by + box_h - pad - _GLYPH_H
+        for color, text in lines:
+            if color is None:
+                cy -= gap
+            else:
+                glColor4f(*color)
+                self._glText(bx + pad, int(cy), text)
+                cy -= lh
 
 
 def createMode():
