@@ -669,7 +669,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         self._overlay_tick     = 0      # frame counter for lazy refresh
         self._comfyui_meta     = None   # cached ComfyUI prompt data
         self._comfyui_path     = None   # path the ComfyUI cache belongs to
-        self._comfyui_cache    = {}     # {filepath: meta_dict | False} – survives scrub
+        self._comfyui_cache    = {}     # {norm_key: meta_dict | False}
 
         # ── Compare / version cache ──────────────────────────────
         self._cached_data = None
@@ -2664,8 +2664,24 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             "resolution": resolution,
         }
 
+    @staticmethod
+    def _normKey(filepath):
+        """Normalize a path for use as a dict-cache key.
+
+        On Windows os.path.normcase lowercases and fixes slashes,
+        so  C:/Foo/Bar.mp4  and  c:\\foo\\bar.mp4  both produce
+        the same key.
+        """
+        if not filepath:
+            return filepath
+        return os.path.normcase(os.path.normpath(filepath))
+
     def _getAllSourcePaths(self):
-        """Return a list of file paths for ALL sources loaded in RV."""
+        """Return a list of file paths for ALL sources loaded in RV.
+
+        Returns RAW paths (not cache-normalised) so ffprobe can open
+        them.  Each path is os.path.normpath'd but NOT normcase'd.
+        """
         paths = []
         try:
             for sg in rvc.nodesOfType("RVSourceGroup"):
@@ -2697,7 +2713,8 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         is probed now so that the render loop never needs to run ffprobe.
         """
         all_paths = self._getAllSourcePaths()
-        uncached = [p for p in all_paths if p not in self._comfyui_cache]
+        uncached = [p for p in all_paths
+                    if self._normKey(p) not in self._comfyui_cache]
         if not uncached:
             print("[MediaVault] ComfyUI batch: all %d sources already "
                   "cached" % len(all_paths))
@@ -2715,8 +2732,13 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         # Set current-file pointer for the overlay renderer
         cur = self._getCurrentSourcePath()
         if cur:
-            self._comfyui_path = cur
-            cached = self._comfyui_cache.get(cur)
+            key = self._normKey(cur)
+            self._comfyui_path = key
+            cached = self._comfyui_cache.get(key)
+            if cached is None:
+                # Path format mismatch — probe under live path
+                self._probeAndCacheFile(cur)
+                cached = self._comfyui_cache.get(key)
             self._comfyui_meta = cached if cached is not False else None
 
     def _probeAndCacheFile(self, filepath):
@@ -2746,7 +2768,9 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                     if prompt:
                         meta = self._parseComfyPrompt(prompt)
 
-        self._comfyui_cache[filepath] = meta if meta else False
+        self._comfyui_cache[self._normKey(filepath)] = (
+            meta if meta else False
+        )
 
         if meta:
             m = len(meta.get("models", []))
@@ -2768,14 +2792,15 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             return
 
         # ── Fast path: already probed this file ──────────────────
-        if filepath in self._comfyui_cache:
-            cached = self._comfyui_cache[filepath]
-            self._comfyui_path = filepath
+        key = self._normKey(filepath)
+        if key in self._comfyui_cache:
+            cached = self._comfyui_cache[key]
+            self._comfyui_path = key
             self._comfyui_meta = cached if cached is not False else None
             return
 
         # ── Slow path: first time seeing this file — run ffprobe ─
-        self._comfyui_path = filepath
+        self._comfyui_path = key
         ext = os.path.splitext(filepath)[1].lower()
         fname = os.path.basename(filepath)
         print("[MediaVault] ComfyUI: reading %s  (ext=%s)" % (fname, ext))
@@ -2825,7 +2850,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             print("[MediaVault] ComfyUI: unsupported ext '%s'" % ext)
 
         # ── Store result in dict cache (False = no metadata) ─────
-        self._comfyui_cache[filepath] = (
+        self._comfyui_cache[key] = (
             self._comfyui_meta if self._comfyui_meta else False
         )
 
@@ -2898,16 +2923,16 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 cur = self._getCurrentSourcePath()
                 if cur and cur != self._overlay_path:
                     self._refreshOverlayMeta()
-                if self._show_comfyui and cur and cur != self._comfyui_path:
-                    # Pure cache lookup — never triggers ffprobe
-                    if cur:
-                        self._comfyui_path = cur
-                        cached = self._comfyui_cache.get(cur)
+                if self._show_comfyui and cur:
+                    key = self._normKey(cur)
+                    if key != self._comfyui_path:
+                        # Pure cache lookup — never triggers ffprobe
+                        self._comfyui_path = key
+                        cached = self._comfyui_cache.get(key)
                         if cached is None:
-                            # New file added after batch preload —
-                            # probe it once
+                            # New file after batch preload — probe once
                             self._probeAndCacheFile(cur)
-                            cached = self._comfyui_cache.get(cur)
+                            cached = self._comfyui_cache.get(key)
                         self._comfyui_meta = (
                             cached if cached is not False else None)
 
