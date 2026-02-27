@@ -2046,9 +2046,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             self._overlay_enabled = True
             self._refreshOverlayMeta()
         if self._show_comfyui:
-            self._comfyui_path = None   # force re-lookup (hits dict cache)
-            self._comfyui_meta = None
-            self._refreshComfyUIMeta()
+            self._batchPreloadComfyUI()
         rve.displayFeedback(
             "ComfyUI Metadata: %s" % ("ON" if self._show_comfyui else "OFF"), 1.5)
 
@@ -2666,6 +2664,97 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             "resolution": resolution,
         }
 
+    def _getAllSourcePaths(self):
+        """Return a list of file paths for ALL sources loaded in RV."""
+        paths = []
+        try:
+            for sg in rvc.nodesOfType("RVSourceGroup"):
+                try:
+                    for n in rvc.nodesInGroup(sg):
+                        try:
+                            mp = rvc.getStringProperty(
+                                n + ".media.movie", 0, 1)
+                            if mp and mp[0]:
+                                raw = mp[0]
+                                # Skip sequence notation (image seqs)
+                                if re.search(r'\d+-\d+[@#]+\.[\w]+$', raw):
+                                    continue
+                                normed = os.path.normpath(raw)
+                                if normed not in paths:
+                                    paths.append(normed)
+                        except Exception:
+                            pass
+                except Exception:
+                    pass
+        except Exception:
+            pass
+        return paths
+
+    def _batchPreloadComfyUI(self):
+        """Probe ALL loaded sources at once and populate the dict cache.
+
+        Called when the user toggles the ComfyUI overlay ON.  Every file
+        is probed now so that the render loop never needs to run ffprobe.
+        """
+        all_paths = self._getAllSourcePaths()
+        uncached = [p for p in all_paths if p not in self._comfyui_cache]
+        if not uncached:
+            print("[MediaVault] ComfyUI batch: all %d sources already "
+                  "cached" % len(all_paths))
+        else:
+            print("[MediaVault] ComfyUI batch: probing %d of %d sources..."
+                  % (len(uncached), len(all_paths)))
+            for fp in uncached:
+                self._probeAndCacheFile(fp)
+            cached_with_meta = sum(
+                1 for v in self._comfyui_cache.values() if v is not False)
+            print("[MediaVault] ComfyUI batch: done — %d with metadata, "
+                  "%d without" % (cached_with_meta,
+                                   len(self._comfyui_cache) - cached_with_meta))
+
+        # Set current-file pointer for the overlay renderer
+        cur = self._getCurrentSourcePath()
+        if cur:
+            self._comfyui_path = cur
+            cached = self._comfyui_cache.get(cur)
+            self._comfyui_meta = cached if cached is not False else None
+
+    def _probeAndCacheFile(self, filepath):
+        """Run ffprobe on a single file and store result in dict cache."""
+        ext = os.path.splitext(filepath)[1].lower()
+        fname = os.path.basename(filepath)
+        meta = None
+
+        if ext == ".png":
+            prompt = self._readPngPrompt(filepath)
+            if prompt:
+                meta = self._parseComfyPrompt(prompt)
+        elif ext in (".mp4", ".mov", ".mkv", ".webm", ".avi"):
+            raw = self._readVideoMeta(filepath)
+            if raw:
+                if "nodes" in raw and isinstance(raw.get("nodes"), list):
+                    meta = self._parseComfyWorkflow(raw)
+                else:
+                    prompt = raw.get("prompt")
+                    if isinstance(prompt, str):
+                        try:
+                            prompt = json.loads(prompt)
+                        except Exception:
+                            prompt = None
+                    elif not isinstance(prompt, dict):
+                        prompt = None
+                    if prompt:
+                        meta = self._parseComfyPrompt(prompt)
+
+        self._comfyui_cache[filepath] = meta if meta else False
+
+        if meta:
+            m = len(meta.get("models", []))
+            s = len(meta.get("samplers", []))
+            lo = len(meta.get("loras", []))
+            print("[MediaVault] ComfyUI:   %s — %d models, %d samplers, "
+                  "%d loras" % (fname, m, s, lo))
+
     def _refreshComfyUIMeta(self):
         """Load and cache ComfyUI metadata for the current source.
 
@@ -2810,7 +2899,17 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 if cur and cur != self._overlay_path:
                     self._refreshOverlayMeta()
                 if self._show_comfyui and cur and cur != self._comfyui_path:
-                    self._refreshComfyUIMeta()
+                    # Pure cache lookup — never triggers ffprobe
+                    if cur:
+                        self._comfyui_path = cur
+                        cached = self._comfyui_cache.get(cur)
+                        if cached is None:
+                            # New file added after batch preload —
+                            # probe it once
+                            self._probeAndCacheFile(cur)
+                            cached = self._comfyui_cache.get(cur)
+                        self._comfyui_meta = (
+                            cached if cached is not False else None)
 
             # ── Set up 2D ortho projection ──
             glMatrixMode(GL_PROJECTION)
