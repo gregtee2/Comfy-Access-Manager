@@ -13,7 +13,7 @@ const Database = require('better-sqlite3');
 const path = require('path');
 const fs = require('fs');
 
-const DATA_DIR = path.join(__dirname, '..', 'data');
+const DATA_DIR = process.env.CAM_DATA_DIR || path.join(__dirname, '..', 'data');
 const CONFIG_PATH = path.join(DATA_DIR, 'config.json');
 const LOCAL_DB_PATH = path.join(DATA_DIR, 'mediavault.db');
 

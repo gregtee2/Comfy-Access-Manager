@@ -14,13 +14,39 @@ const express = require('express');
 const cors = require('cors');
 const path = require('path');
 const fs = require('fs');
-const { initDb, closeDb } = require('./database');
+const { initDb, closeDb, loadConfig } = require('./database');
 const WatcherService = require('./services/WatcherService');
 const RVPluginSync = require('./services/RVPluginSync');
 const pluginLoader = require('./pluginLoader');
 
+// ─── Hub/Spoke Mode (from config.json) ───
+// "standalone" (default) = current behaviour, no sync
+// "hub"        = central server, broadcasts changes to spokes via SSE
+// "spoke"      = local replica, proxies writes to hub, receives SSE updates
+const _config = loadConfig();
+const APP_MODE = _config.mode || 'standalone';
+
 const app = express();
 const PORT = process.env.PORT || 7700;
+
+// ─── Spoke write-proxy (if spoke mode) ───
+// Must be registered before API routes so it can intercept writes
+let _spokeService = null;
+if (APP_MODE === 'spoke') {
+    const SpokeService = require('./services/SpokeService');
+    const { createSpokeProxy } = require('./middleware/spokeProxy');
+    _spokeService = new SpokeService(
+        _config.hub_url || 'http://localhost:7700',
+        _config.hub_secret || '',
+        _config.spoke_name || require('os').hostname()
+    );
+    app.use(createSpokeProxy(_spokeService));
+    console.log(`[Mode] SPOKE — writes forwarded to ${_config.hub_url}`);
+} else if (APP_MODE === 'hub') {
+    console.log('[Mode] HUB — broadcasting changes to spokes');
+} else {
+    console.log('[Mode] STANDALONE');
+}
 
 // ─── Middleware ───
 app.use(cors());
@@ -45,7 +71,7 @@ app.use(express.static(path.join(__dirname, '..', 'public')));
 
 // Serve thumbnails directory (with caching — thumbnails rarely change)
 app.use('/thumbnails', (req, res, next) => {
-    res.setHeader('Cache-Control', 'public, max-age=86400'); // 24 hours
+    res.setHeader('Cache-Control', 'public, max-age=3600'); // 1 hour
     next();
 }, express.static(path.join(__dirname, '..', 'thumbnails')));
 
@@ -89,6 +115,12 @@ app.use('/api/servers', serverRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/crates', crateRoutes);
 app.use('/api/overlay', overlayRoutes);
+
+// ─── Hub Sync Routes (hub mode only) ───
+if (APP_MODE === 'hub') {
+    const syncRoutes = require('./routes/syncRoutes');
+    app.use('/api/sync', syncRoutes);
+}
 
 // ─── Load Plugins + SPA Fallback (registered inside start() to ensure order) ───
 // Plugin loader, SPA fallback, and error handler are registered in start()
@@ -151,6 +183,9 @@ async function start() {
         console.log(`  ║   Comfy Asset Manager (CAM) v${version.padEnd(10)}  ║`);
         console.log('  ║   Local Media Asset Manager              ║');
         console.log(`  ║   http://localhost:${PORT}                  ║`);
+        if (APP_MODE !== 'standalone') {
+        console.log(`  ║   Mode: ${APP_MODE.toUpperCase().padEnd(33)}║`);
+        }
         console.log('  ╚══════════════════════════════════════════╝');
         console.log('');
 
@@ -192,11 +227,29 @@ async function start() {
                 console.error('[Thumbnails] Batch repair error:', err.message);
             }
         }, 5000); // Wait 5s after startup so the UI is responsive first
+
+        // ─── Hub / Spoke initialization (after server is listening) ───
+        if (APP_MODE === 'hub') {
+            try {
+                const HubService = require('./services/HubService');
+                HubService.init(_config.hub_secret || '');
+                console.log(`[Hub] Sync API available at http://localhost:${PORT}/api/sync/`);
+            } catch (err) {
+                console.error('[Hub] Init error:', err.message);
+            }
+        }
+
+        if (APP_MODE === 'spoke' && _spokeService) {
+            _spokeService.start().catch(err => {
+                console.error('[Spoke] Start error:', err.message);
+            });
+        }
     });
 
     // ─── Graceful Shutdown ───
     const shutdown = () => {
         console.log('\n[DMV] Shutting down...');
+        if (_spokeService) _spokeService.stop();
         DiscoveryService.stop();
         WatcherService.stopAll();
         closeDb();

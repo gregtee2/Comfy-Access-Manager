@@ -5,7 +5,7 @@
  * See LICENSE file for details.
  */
 /**
- * CAM - Asset Grid Module
+ * CAM — Asset Grid Module
  * Browser tab: project detail, asset loading/rendering, selection,
  * drag & drop, star toggle, polling for new assets.
  */
@@ -16,60 +16,9 @@ import { esc, formatSize, formatDuration, formatDateTime, typeIcon, showToast } 
 import { openPlayer } from './player.js';
 import { getActiveCrateId } from './crate.js';
 
-// ===========================================
-//  LIST VIEW COLUMN SORTING
-// ===========================================
-let _sortColumn = null;   // current sort key or null (default order)
-let _sortDirection = 'asc'; // 'asc' or 'desc'
-
-const SORT_COLUMNS = {
-    id:         { key: 'id',          type: 'number' },
-    show:       { key: 'project_code',type: 'string' },
-    shot:       { key: 'shot_name',   type: 'string', alt: 'shot_code' },
-    name:       { key: 'vault_name',  type: 'string' },
-    role:       { key: 'role_code',   type: 'string' },
-    status:     { key: 'status',      type: 'string' },
-    resolution: { key: 'width',       type: 'number' },
-    size:       { key: 'file_size',   type: 'number' },
-    created:    { key: 'created_at',  type: 'date' }
-};
-
-function handleColumnSort(col) {
-    if (_sortColumn === col) {
-        _sortDirection = _sortDirection === 'asc' ? 'desc' : 'asc';
-    } else {
-        _sortColumn = col;
-        _sortDirection = 'asc';
-    }
-    renderAssets();
-}
-
-function sortAssets(assets) {
-    if (!_sortColumn || !SORT_COLUMNS[_sortColumn]) return assets;
-    const cfg = SORT_COLUMNS[_sortColumn];
-    const dir = _sortDirection === 'asc' ? 1 : -1;
-    return [...assets].sort((a, b) => {
-        let va = a[cfg.key] ?? (cfg.alt ? a[cfg.alt] : null);
-        let vb = b[cfg.key] ?? (cfg.alt ? b[cfg.alt] : null);
-        // Nulls always sort last
-        if (va == null && vb == null) return 0;
-        if (va == null) return 1;
-        if (vb == null) return -1;
-        if (cfg.type === 'string') {
-            return dir * String(va).localeCompare(String(vb), undefined, { sensitivity: 'base' });
-        }
-        if (cfg.type === 'date') {
-            return dir * (new Date(va) - new Date(vb));
-        }
-        return dir * (Number(va) - Number(vb));
-    });
-}
-
-window.handleColumnSort = handleColumnSort;
-
-// ===========================================
+// ═══════════════════════════════════════════
 //  PROJECT DETAIL / BROWSER
-// ===========================================
+// ═══════════════════════════════════════════
 
 export async function openProject(id) {
     try {
@@ -107,7 +56,7 @@ export function renderProjectDetail(project) {
     const vaultRoot = state.settings?.vault_root || '';
     const sep = vaultRoot.includes('/') ? '/' : '\\';
     const projectFolder = vaultRoot ? `${vaultRoot}${vaultRoot.endsWith('\\') || vaultRoot.endsWith('/') ? '' : sep}${project.code}` : '';
-    document.getElementById('projectPath').textContent = projectFolder ? ` ${projectFolder}` : '';
+    document.getElementById('projectPath').textContent = projectFolder ? `📂 ${projectFolder}` : '';
     document.getElementById('projectPath').title = projectFolder;
 
     // Sequences panel
@@ -146,7 +95,7 @@ export function renderProjectDetail(project) {
                           ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                           ondrop="event.stopPropagation();onShotDrop(event, ${s.id}, ${sh.id})"
                           style="display:inline-flex;flex-direction:column;align-items:flex-start;"
-                          ><span> ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span></span>${rolePills ? `<span style="margin-top:2px;">${rolePills}</span>` : ''}</span>`;
+                          ><span>🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span></span>${rolePills ? `<span style="margin-top:2px;">${rolePills}</span>` : ''}</span>`;
                 }).join('')}
                     <span class="shot-chip shot-add" onclick="event.stopPropagation();showAddShotModal(${s.id})">+ Shot</span>
                 </div>`;
@@ -169,7 +118,7 @@ export function renderProjectDetail(project) {
                  oncontextmenu="showSeqContextMenu(event, ${s.id}, '${esc(s.name).replace(/'/g, "\\'")}')"
                  ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                  ondrop="onSeqDrop(event, ${s.id})">
-                 ${esc(s.name)} <span style="opacity:.5;font-size:.8em">${esc(s.code)}</span>
+                📋 ${esc(s.name)} <span style="opacity:.5;font-size:.8em">${esc(s.code)}</span>
                 <span class="chip-count">${s.asset_count || 0}</span>
             </div>${seqRolePills}${shotHtml}`;
         }).join('');
@@ -178,7 +127,7 @@ export function renderProjectDetail(project) {
         filterSeq.innerHTML = '<option value="">All Sequences</option>' +
             project.sequences.map(s => `<option value="${s.id}">${s.name} (${s.code})</option>`).join('');
     } else if (project.orphanShots?.length > 0) {
-        // Fallback: shots without sequences - show directly with role pills
+        // Fallback: shots without sequences — show directly with role pills
         seqPanel.style.display = 'block';
         filterSeq.style.display = 'none';
         seqList.innerHTML = project.orphanShots.map(sh => {
@@ -191,7 +140,7 @@ export function renderProjectDetail(project) {
             <span class="shot-chip ${isShActive ? 'active' : ''}" 
                   onclick="event.stopPropagation();selectShot(null, ${sh.id})"
                   style="display:inline-flex;flex-direction:column;align-items:flex-start;margin:2px;"
-                  > ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span>${rolePills ? `<span style="margin-top:2px;">${rolePills}</span>` : ''}</span>`;
+                  >🎬 ${esc(sh.name)} <span class="chip-count">${sh.asset_count || 0}</span>${rolePills ? `<span style="margin-top:2px;">${rolePills}</span>` : ''}</span>`;
         }).join('');
     } else {
         seqPanel.style.display = project.type === 'simple' ? 'none' : 'block';
@@ -225,9 +174,9 @@ export function selectShot(seqId, shotId) {
     loadProjectAssets(state.currentProject.id);
 }
 
-// ===========================================
+// ═══════════════════════════════════════════
 //  ASSET LOADING & RENDERING
-// ===========================================
+// ═══════════════════════════════════════════
 
 export async function loadProjectAssets(projectId) {
     // Don't overwrite the asset grid when viewing a crate
@@ -274,7 +223,7 @@ function setView(mode) {
 }
 
 /**
- * Lightweight selection update - toggles CSS classes on existing DOM elements
+ * Lightweight selection update — toggles CSS classes on existing DOM elements
  * without rebuilding the entire grid. Eliminates flicker/jiggle on click.
  */
 export function updateSelectionClasses() {
@@ -290,14 +239,16 @@ export function updateSelectionClasses() {
     updateSelectionToolbar();
 }
 
-
 // ─── Lazy-load thumbnails via IntersectionObserver ───
 let _thumbObserver = null;
 
 function _observeThumbnails(container) {
+    // Disconnect previous observer
     if (_thumbObserver) _thumbObserver.disconnect();
+
     const lazyImages = container.querySelectorAll('img[data-src]');
     if (!lazyImages.length) return;
+
     if ('IntersectionObserver' in window) {
         _thumbObserver = new IntersectionObserver((entries) => {
             for (const entry of entries) {
@@ -308,12 +259,17 @@ function _observeThumbnails(container) {
                     _thumbObserver.unobserve(img);
                 }
             }
-        }, { rootMargin: '200px' });
+        }, { rootMargin: '200px' }); // Start loading 200px before visible
+
         lazyImages.forEach(img => _thumbObserver.observe(img));
     } else {
+        // Fallback: load all immediately
         lazyImages.forEach(img => { img.src = img.dataset.src; delete img.dataset.src; });
     }
 }
+
+// Cache-buster: changes once per app load so browser re-checks thumbnails
+const _thumbCacheBuster = Date.now();
 
 function renderAssets() {
     const container = document.getElementById('assetContainer');
@@ -321,7 +277,7 @@ function renderAssets() {
     if (state.assets.length === 0) {
         container.innerHTML = `
             <div class="empty-state" style="grid-column: 1/-1;">
-                <div class="empty-icon"></div>
+                <div class="empty-icon">📭</div>
                 <p>No assets yet. Import some files to get started!</p>
             </div>
         `;
@@ -336,20 +292,18 @@ function renderAssets() {
                 data-aidx="${i}" onclick="handleAssetClick(event, ${i})" ondblclick="handleAssetDblClick(event, ${i})" oncontextmenu="showContextMenu(event, ${i})"
                 draggable="true" ondragstart="onAssetDragStart(event, ${i})">
                 <div class="asset-thumb" ${a.media_type === 'video' ? `data-duration="${a.duration || 0}" data-codec="${a.codec || ''}" onmouseenter="handleVideoHover(this, ${a.id})" onmousemove="handleVideoMove(event, this)" onmouseleave="handleVideoLeave(this)"` : ''}>
-                    <img data-src="/thumbnails/thumb_${a.id}.jpg" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
+                    <img data-src="/thumbnails/thumb_${a.id}.jpg?v=${_thumbCacheBuster}" loading="lazy" onerror="this.style.display='none';this.nextElementSibling.style.display='flex'">
                     <div class="thumb-placeholder" style="display:none">${typeIcon(a.media_type)}</div>
                     <span class="asset-type-badge ${a.media_type}">${a.media_type}</span>
-                    ${a.is_linked ? '<span class="asset-link-badge" title="Linked - file remains at original location"></span>' : ''}
-                    ${a.role_name ? `<span class="asset-role-badge" style="background:${a.role_color || '#666'}">${a.role_icon || ''} ${esc(a.role_code)}</span>` : ''}
-                      ${a.status ? `<span class="asset-status-badge status-${a.status.toLowerCase()}">${esc(a.status)}</span>` : ''}
+                    ${a.is_linked ? '<span class="asset-link-badge" title="Linked – file remains at original location">🔗</span>' : ''}
+                    ${a.role_name ? `<span class="asset-role-badge" style="background:${a.role_color || '#666'}">${a.role_icon || '🎭'} ${esc(a.role_code)}</span>` : ''}
                     ${a.duration ? `<span class="asset-duration">${formatDuration(a.duration)}</span>` : ''}
-                    ${a.file_ext && !a.duration ? `<span class="asset-ext-label">${a.file_ext.replace('.','')}</span>` : ''}
                 </div>
-                <button class="asset-star" onclick="event.stopPropagation();toggleStar(${a.id})">${a.starred ? '*' : '*'}</button>
+                <button class="asset-star" onclick="event.stopPropagation();toggleStar(${a.id})">${a.starred ? '⭐' : '☆'}</button>
                 <div class="asset-info">
                     <div class="asset-name" title="${esc(a.vault_name)}">${esc(a.vault_name)}</div>
                     <div class="asset-meta">
-                        ${a.width ? `<span>${a.width}x${a.height}</span>` : ''}
+                        ${a.width ? `<span>${a.width}×${a.height}</span>` : ''}
                         <span>${formatSize(a.file_size)}</span>
                     </div>
                 </div>
@@ -357,82 +311,71 @@ function renderAssets() {
         `).join('');
     } else {
         container.className = 'asset-list';
-        const arrow = (col) => _sortColumn === col ? (_sortDirection === 'asc' ? ' \u25B2' : ' \u25BC') : '';
-        const sc = (col) => _sortColumn === col ? ' sort-active' : '';
         const headerRow = `
             <div class="asset-row asset-row-header">
-                <div class="row-id sort-col${sc('id')}" onclick="handleColumnSort('id')">ID${arrow('id')}</div>
+                <div class="row-id">ID</div>
                 <div class="row-thumb">Media</div>
                 <div class="row-audio">Audio</div>
-                <div class="row-show sort-col${sc('show')}" onclick="handleColumnSort('show')">Show${arrow('show')}</div>
-                <div class="row-shot sort-col${sc('shot')}" onclick="handleColumnSort('shot')">Shot${arrow('shot')}</div>
-                <div class="row-name sort-col${sc('name')}" onclick="handleColumnSort('name')">Vault Name${arrow('name')}</div>
-                <div class="row-role sort-col${sc('role')}" onclick="handleColumnSort('role')">Role${arrow('role')}</div>
-                <div class="row-status sort-col${sc('status')}" onclick="handleColumnSort('status')">Status${arrow('status')}</div>
-                <div class="row-res sort-col${sc('resolution')}" onclick="handleColumnSort('resolution')">Resolution${arrow('resolution')}</div>
-                <div class="row-size sort-col${sc('size')}" onclick="handleColumnSort('size')">Size${arrow('size')}</div>
-                <div class="row-date sort-col${sc('created')}" onclick="handleColumnSort('created')">Created${arrow('created')}</div>
+                <div class="row-show">Show</div>
+                <div class="row-shot">Shot</div>
+                <div class="row-name">Vault Name</div>
+                <div class="row-role">Role</div>
+                <div class="row-res">Resolution</div>
+                <div class="row-size">Size</div>
+                <div class="row-date">Created</div>
                 <div class="row-star"></div>
             </div>`;
-        const sorted = sortAssets(state.assets);
-        const rows = sorted.map((a, i) => {
-            const origIdx = state.assets.indexOf(a);
+        const rows = state.assets.map((a, i) => {
             const hasAudio = a.media_type === 'audio' || (a.media_type === 'video' && a.codec && !a.codec.toLowerCase().includes('mjpeg'));
             return `
             <div class="asset-row ${state.selectedAssets.includes(a.id) ? 'asset-selected' : ''}" 
-                data-aidx="${origIdx}" onclick="handleAssetClick(event, ${origIdx})" ondblclick="handleAssetDblClick(event, ${origIdx})" oncontextmenu="showContextMenu(event, ${origIdx})"
-                draggable="true" ondragstart="onAssetDragStart(event, ${origIdx})">
+                data-aidx="${i}" onclick="handleAssetClick(event, ${i})" ondblclick="handleAssetDblClick(event, ${i})" oncontextmenu="showContextMenu(event, ${i})"
+                draggable="true" ondragstart="onAssetDragStart(event, ${i})">
                 <div class="row-id">${a.id}</div>
                 <div class="row-thumb" ${a.media_type === 'video' ? `data-duration="${a.duration || 0}" data-codec="${a.codec || ''}" onmouseenter="handleVideoHover(this, ${a.id})" onmousemove="handleVideoMove(event, this)" onmouseleave="handleVideoLeave(this)"` : ''}>
-                    <img data-src="/thumbnails/thumb_${a.id}.jpg" loading="lazy" onerror="this.outerHTML='<span>${typeIcon(a.media_type)}</span>'">
+                    <img data-src="/thumbnails/thumb_${a.id}.jpg?v=${_thumbCacheBuster}" loading="lazy" onerror="this.outerHTML='<span>${typeIcon(a.media_type)}</span>'">
                     <span class="row-type-pip ${a.media_type}" title="${a.media_type}">${a.file_ext || ''}</span>
                 </div>
-                <div class="row-audio">${hasAudio ? '' : '<span style="opacity:.25"></span>'}</div>
+                <div class="row-audio">${hasAudio ? '🔊' : '<span style="opacity:.25">🔇</span>'}</div>
                 <div class="row-show">${esc(a.project_code || '')}</div>
-                <div class="row-shot">${esc(a.shot_name || a.shot_code || '-')}</div>
-                <div class="row-name">${a.is_linked ? ' ' : ''}${esc(a.vault_name)}</div>
+                <div class="row-shot">${esc(a.shot_name || a.shot_code || '—')}</div>
+                <div class="row-name">${a.is_linked ? '🔗 ' : ''}${esc(a.vault_name)}</div>
                 <div class="row-role">${a.role_name ? `<span class="role-tag" style="background:${a.role_color || '#666'}">${a.role_icon || ''} ${esc(a.role_code)}</span>` : ''}</div>
-                  <div class="row-status">${a.status ? `<span class="status-tag status-${a.status.toLowerCase()}">${esc(a.status)}</span>` : '-'}</div>
-                <div class="row-res">${a.width ? `${a.width}x${a.height}` : '-'}</div>
+                <div class="row-res">${a.width ? `${a.width}×${a.height}` : '—'}</div>
                 <div class="row-size">${formatSize(a.file_size)}</div>
                 <div class="row-date">${formatDateTime(a.created_at)}</div>
-                <button class="asset-star" onclick="event.stopPropagation();toggleStar(${a.id})" style="position:static">${a.starred ? '*' : '*'}</button>
+                <button class="asset-star" onclick="event.stopPropagation();toggleStar(${a.id})" style="position:static">${a.starred ? '⭐' : '☆'}</button>
             </div>`;
         }).join('');
         container.innerHTML = headerRow + rows;
     }
 
+    // Lazy-load thumbnails with IntersectionObserver
     _observeThumbnails(container);
+
     updateSelectionToolbar();
 }
 
-// Click on empty space in the grid -> deselect all
+// Click on empty space in the grid → deselect all
 // (suppressed briefly after a marquee drag so the click doesn't undo the selection)
 let _suppressNextClick = false;
 document.addEventListener('click', (e) => {
     if (_suppressNextClick) { _suppressNextClick = false; return; }
     const container = document.getElementById('assetContainer');
     if (!container) return;
-    
-    const isCard = e.target.closest('[data-aidx]');
-    const isToolbar = e.target.closest('.selection-toolbar');
-    const isHeader = e.target.closest('.project-sticky-header');
-    const isBreadcrumb = e.target.closest('.breadcrumb');
-    const isFilterBar = e.target.closest('.filter-bar');
-    const inBrowserMain = e.target.closest('.browser-main');
-    
-    if (inBrowserMain && !isCard && !isToolbar && !isHeader && !isBreadcrumb && !isFilterBar) {
-        if (state.selectedAssets.length > 0) {
-            state.selectedAssets = [];
-            state.lastClickedAsset = -1;
-            updateSelectionClasses();
-        }
+    // Only deselect when clicking directly on the grid background, not on a card
+    const wrap = document.getElementById('assetContainerWrap');
+    const onBackground = e.target === container || e.target === wrap;
+    if (onBackground && state.selectedAssets.length > 0) {
+        state.selectedAssets = [];
+        state.lastClickedAsset = -1;
+        updateSelectionClasses();
     }
 });
 
-// ===========================================
+// ═══════════════════════════════════════════
 //  MARQUEE (rubber-band) DRAG SELECTION
-// ===========================================
+// ═══════════════════════════════════════════
 
 (function initMarqueeSelection() {
     let active = false;
@@ -441,7 +384,6 @@ document.addEventListener('click', (e) => {
     const THRESHOLD = 5; // px of movement before marquee activates
     let thresholdMet = false;
     let priorSelected = []; // selection before drag (for shift-additive)
-    let dragMode = 'normal'; // 'normal', 'add', 'remove'
 
     function getScrollParent() {
         return document.querySelector('.browser-main') || document.documentElement;
@@ -476,7 +418,7 @@ document.addEventListener('click', (e) => {
                  a.bottom < b.top || a.top > b.bottom);
     }
 
-    function selectIntersecting() {
+    function selectIntersecting(additive) {
         const wrap = document.getElementById('assetContainerWrap');
         const container = document.getElementById('assetContainer');
         if (!wrap || !container || !marqueeEl) return;
@@ -490,11 +432,7 @@ document.addEventListener('click', (e) => {
                 if (asset) hits.push(asset.id);
             }
         });
-        
-        if (dragMode === 'remove') {
-            const hitSet = new Set(hits);
-            state.selectedAssets = priorSelected.filter(id => !hitSet.has(id));
-        } else if (dragMode === 'add') {
+        if (additive) {
             const merged = new Set([...priorSelected, ...hits]);
             state.selectedAssets = [...merged];
         } else {
@@ -503,7 +441,7 @@ document.addEventListener('click', (e) => {
         updateSelectionClasses();
     }
 
-    // -- Auto-scroll while dragging near edges --
+    // ── Auto-scroll while dragging near edges ──
     let scrollRAF = null;
     function autoScroll(e) {
         const sp = getScrollParent();
@@ -521,48 +459,26 @@ document.addEventListener('click', (e) => {
     }
 
     document.addEventListener('mousedown', (e) => {
+        // Only start on the container or its wrapper background
         const container = document.getElementById('assetContainer');
         if (!container) return;
         if (e.button !== 0) return;               // left-click only
-
-        const onCard = e.target.closest('[data-aidx]');
-        const isModifier = e.shiftKey || e.ctrlKey || e.metaKey;
-        if (onCard && !isModifier) return; // started on a card without modifier -> allow native drag
-        
+        if (e.target.closest('[data-aidx]')) return; // started on a card
         if (e.target.closest('.asset-star')) return;  // star button
         if (e.target.closest('.selection-toolbar')) return;
         if (e.target.closest('.project-sticky-header')) return;
         if (e.target.closest('.sequence-chip')) return;
         if (e.target.closest('.shot-chip')) return;
-        if (e.target.closest('.filter-bar')) return;
-        if (e.target.closest('.breadcrumb')) return;
-
-        // Must be inside the asset container area or browser-main
+        // Must be inside the asset container area
         const wrap = document.getElementById('assetContainerWrap');
-        const browserMain = e.target.closest('.browser-main');
-        if (!wrap && !browserMain) return;
-        
-        let isInside = false;
-        if (wrap && wrap.contains(e.target)) isInside = true;
-        if (browserMain && browserMain.contains(e.target)) isInside = true;
-        if (!isInside) return;
+        if (!wrap || !wrap.contains(e.target)) return;
 
-        // If we are on a card and holding modifier, prevent default to stop native drag-and-drop
-        if (onCard && isModifier) {
-            e.preventDefault();
-        }
-
-        const wr = wrap ? wrap.getBoundingClientRect() : browserMain.getBoundingClientRect();
+        const wr = wrap.getBoundingClientRect();
         startX = e.clientX - wr.left;
         startY = e.clientY - wr.top;
         active = true;
         thresholdMet = false;
-        
-        if (e.ctrlKey || e.metaKey) dragMode = 'remove';
-        else if (e.shiftKey) dragMode = 'add';
-        else dragMode = 'normal';
-        
-        priorSelected = (dragMode !== 'normal') ? [...state.selectedAssets] : [];
+        priorSelected = e.shiftKey ? [...state.selectedAssets] : [];
     });
 
     document.addEventListener('mousemove', (e) => {
@@ -579,7 +495,7 @@ document.addEventListener('click', (e) => {
             document.body.classList.add('marquee-active');
         }
         updateRect(e);
-        selectIntersecting();
+        selectIntersecting(e.shiftKey || priorSelected.length > 0);
         autoScroll(e);
     });
 
@@ -588,13 +504,12 @@ document.addEventListener('click', (e) => {
         const didMarquee = thresholdMet;
         active = false;
         if (marqueeEl) {
-            selectIntersecting();
+            selectIntersecting(e.shiftKey || priorSelected.length > 0);
             marqueeEl.remove();
             marqueeEl = null;
         }
         document.body.classList.remove('marquee-active');
         priorSelected = [];
-        dragMode = 'normal';
         // Suppress the click event that fires right after mouseup
         // so it doesn't clear the selection we just made
         if (didMarquee) _suppressNextClick = true;
@@ -602,13 +517,11 @@ document.addEventListener('click', (e) => {
     });
 })();
 
-// ===========================================
+// ═══════════════════════════════════════════
 //  ASSET SELECTION (click, shift-click, bulk)
-// ===========================================
+// ═══════════════════════════════════════════
 
 function handleAssetClick(event, assetIdx) {
-    if (_suppressNextClick) return;
-
     const asset = state.assets[assetIdx];
     if (!asset) return;
 
@@ -712,9 +625,9 @@ function updateSelectionToolbar() {
         `${count} selected (${formatSize(state.assets.filter(a => state.selectedAssets.includes(a.id)).reduce((s, a) => s + (a.file_size || 0), 0))})`;
 }
 
-// ===========================================
+// ═══════════════════════════════════════════
 //  STAR TOGGLE
-// ===========================================
+// ═══════════════════════════════════════════
 
 async function toggleStar(assetId) {
     try {
@@ -727,9 +640,9 @@ async function toggleStar(assetId) {
     }
 }
 
-// ===========================================
-//  DRAG & DROP - Assets -> Sequences/Shots
-// ===========================================
+// ═══════════════════════════════════════════
+//  DRAG & DROP — Assets → Sequences/Shots
+// ═══════════════════════════════════════════
 
 function onAssetDragStart(event, assetIdx) {
     const asset = state.assets[assetIdx];
@@ -746,7 +659,7 @@ function onAssetDragStart(event, assetIdx) {
 
     const ghost = document.createElement('div');
     ghost.className = 'drag-ghost';
-    ghost.textContent = ` ${ids.length} asset${ids.length > 1 ? 's' : ''}`;
+    ghost.textContent = `📦 ${ids.length} asset${ids.length > 1 ? 's' : ''}`;
     document.body.appendChild(ghost);
     event.dataTransfer.setDragImage(ghost, 0, 0);
     setTimeout(() => ghost.remove(), 0);
@@ -790,7 +703,7 @@ async function onShotDrop(event, seqId, shotId) {
             loadProjectAssets(pid);
         }
     } catch (err) {
-        alert(' Move failed: ' + err.message);
+        alert('❌ Move failed: ' + err.message);
     }
 }
 
@@ -822,13 +735,13 @@ async function onSeqDrop(event, seqId, projectId) {
             loadProjectAssets(pid);
         }
     } catch (err) {
-        alert(' Move failed: ' + err.message);
+        alert('❌ Move failed: ' + err.message);
     }
 }
 
-// ===========================================
-//  DRAG & DROP - Files from OS -> Import
-// ===========================================
+// ═══════════════════════════════════════════
+//  DRAG & DROP — Files from OS → Import
+// ═══════════════════════════════════════════
 
 let fileDragCounter = 0;
 
@@ -899,7 +812,7 @@ async function onFileDrop(e) {
     const prevHTML = container.innerHTML;
     container.innerHTML = `
         <div class="empty-state" style="grid-column:1/-1">
-            <div class="empty-icon"></div>
+            <div class="empty-icon">⏳</div>
             <p>Importing ${fileCount} file${fileCount > 1 ? 's' : ''}...</p>
         </div>
     `;
@@ -919,10 +832,10 @@ async function onFileDrop(e) {
         await loadProjectAssets(projectId);
         await window.loadTree?.();
 
-        showToast(` Imported ${result.imported} file${result.imported !== 1 ? 's' : ''}`);
+        showToast(`✅ Imported ${result.imported} file${result.imported !== 1 ? 's' : ''}`);
     } catch (err) {
         console.error('File drop upload failed:', err);
-        alert(' Import failed: ' + err.message);
+        alert('❌ Import failed: ' + err.message);
         container.innerHTML = prevHTML;
     }
 }
@@ -932,8 +845,8 @@ function showFileDropOverlay() {
     if (!overlay) return;
 
     let target = state.currentProject?.name || '';
-    if (state.currentSequence) target += ' -> ' + state.currentSequence.name;
-    if (state.currentShot) target += ' -> ' + state.currentShot.name;
+    if (state.currentSequence) target += ' → ' + state.currentSequence.name;
+    if (state.currentShot) target += ' → ' + state.currentShot.name;
     document.getElementById('dropTargetLabel').textContent = target;
 
     overlay.style.display = 'flex';
@@ -944,14 +857,13 @@ function hideFileDropOverlay() {
     if (overlay) overlay.style.display = 'none';
 }
 
-// ===========================================
+// ═══════════════════════════════════════════
 //  AUTO-REFRESH (poll for new assets)
-// ===========================================
+// ═══════════════════════════════════════════
 
 let _pollTimer = null;
 let _lastPollCount = null;
 let _lastPollLatest = null;
-let _lastPollUpdated = null;
 const POLL_INTERVAL = 5000;
 
 export async function refreshAssets() {
@@ -961,7 +873,6 @@ export async function refreshAssets() {
         const info = await api(`/api/assets/poll?project_id=${state.currentProject.id}`);
         _lastPollCount = info.count;
         _lastPollLatest = info.latest;
-        _lastPollUpdated = info.last_updated;
     } catch {}
     showToast('Assets refreshed', 'success');
 }
@@ -976,11 +887,9 @@ function startAssetPoll() {
         try {
             const info = await api(`/api/assets/poll?project_id=${state.currentProject.id}`);
             const changed = (_lastPollCount !== null && info.count !== _lastPollCount)
-                         || (_lastPollLatest !== null && info.latest !== _lastPollLatest)
-                         || (_lastPollUpdated !== null && info.last_updated !== _lastPollUpdated);
+                         || (_lastPollLatest !== null && info.latest !== _lastPollLatest);
             _lastPollCount = info.count;
             _lastPollLatest = info.latest;
-            _lastPollUpdated = info.last_updated;
 
             if (changed) {
                 await loadProjectAssets(state.currentProject.id);
@@ -994,7 +903,6 @@ function stopAssetPoll() {
     if (_pollTimer) { clearInterval(_pollTimer); _pollTimer = null; }
     _lastPollCount = null;
     _lastPollLatest = null;
-    _lastPollUpdated = null;
 }
 
 // Start polling when a project is opened, stop when leaving
@@ -1012,14 +920,14 @@ if (_origSwitchTab) {
     };
 }
 
-// --- Filter bar event listeners (JS-based for Safari compatibility) ---
+// ─── Filter bar event listeners (JS-based for Safari compatibility) ───
 document.getElementById('filterMediaType')?.addEventListener('change', filterAssets);
 document.getElementById('filterSequence')?.addEventListener('change', filterAssets);
 document.getElementById('searchInput')?.addEventListener('input', filterAssets);
 
-// ===========================================
+// ═══════════════════════════════════════════
 //  EXPOSE ON WINDOW
-// ===========================================
+// ═══════════════════════════════════════════
 
 window.openProject = openProject;
 window.renderProjectDetail = renderProjectDetail;
@@ -1045,9 +953,9 @@ window.onShotDrop = onShotDrop;
 window.onSeqDrop = onSeqDrop;
 window.refreshAssets = refreshAssets;
 
-// ===========================================
+// ═══════════════════════════════════════════
 //  VIDEO SCRUBBING
-// ===========================================
+// ═══════════════════════════════════════════
 
 let scrubTimeout = null;
 
@@ -1170,7 +1078,3 @@ window.handleVideoLeave = handleVideoLeave;
 
 // Expose tree expand helper for openProject
 window._treeExpandNode = null; // Set by browser.js orchestrator after treeNav loads
-
-
-
-
