@@ -18,6 +18,7 @@
 
 const express = require('express');
 const fs = require('fs');
+const path = require('path');
 const crypto = require('crypto');
 const router = express.Router();
 
@@ -111,6 +112,74 @@ router.get('/db', (req, res) => {
         });
     } catch (err) {
         res.status(500).json({ error: err.message });
+    }
+});
+
+// ─── GET /thumbnails - Download all thumbnails as tar stream ───
+// Spoke calls this after DB sync to get all thumbnail images.
+// Uses a simple custom tar-like format: for each file,
+//   4 bytes (UInt32BE) = filename length
+//   N bytes = filename (e.g., "thumb_123.jpg")
+//   4 bytes (UInt32BE) = file data length
+//   M bytes = file data (raw JPEG)
+// Ends with 4 zero bytes (filename length = 0) as sentinel.
+router.get('/thumbnails', (req, res) => {
+    try {
+        const thumbDir = path.join(__dirname, '..', '..', 'thumbnails');
+        if (!fs.existsSync(thumbDir)) {
+            return res.status(404).json({ error: 'Thumbnails directory not found' });
+        }
+
+        const files = fs.readdirSync(thumbDir).filter(f => f.endsWith('.jpg') || f.endsWith('.png'));
+        console.log(`[Hub] Serving ${files.length} thumbnails to spoke`);
+
+        res.setHeader('Content-Type', 'application/octet-stream');
+        res.setHeader('Content-Disposition', 'attachment; filename="thumbnails.bin"');
+        res.setHeader('X-Thumbnail-Count', files.length.toString());
+
+        for (const file of files) {
+            const filePath = path.join(thumbDir, file);
+            try {
+                const data = fs.readFileSync(filePath);
+                const nameBytes = Buffer.from(file, 'utf8');
+                // Write filename length + filename
+                const nameLen = Buffer.alloc(4);
+                nameLen.writeUInt32BE(nameBytes.length);
+                res.write(nameLen);
+                res.write(nameBytes);
+                // Write file data length + file data
+                const dataLen = Buffer.alloc(4);
+                dataLen.writeUInt32BE(data.length);
+                res.write(dataLen);
+                res.write(data);
+            } catch (err) {
+                // Skip unreadable files
+            }
+        }
+
+        // Sentinel: 4 zero bytes = end of stream
+        res.write(Buffer.alloc(4, 0));
+        res.end();
+    } catch (err) {
+        console.error('[Hub] Thumbnails download error:', err.message);
+        if (!res.headersSent) {
+            res.status(500).json({ error: err.message });
+        }
+    }
+});
+
+// ─── GET /thumbnail/:id - Download a single thumbnail by asset ID ───
+// Used by spokes when a new asset is added via SSE and they need just one thumb.
+router.get('/thumbnail/:id', (req, res) => {
+    const thumbDir = path.join(__dirname, '..', '..', 'thumbnails');
+    const thumbPath = path.join(thumbDir, `thumb_${req.params.id}.jpg`);
+
+    if (fs.existsSync(thumbPath)) {
+        res.setHeader('Content-Type', 'image/jpeg');
+        res.setHeader('Cache-Control', 'public, max-age=3600');
+        res.sendFile(thumbPath);
+    } else {
+        res.status(404).json({ error: 'Thumbnail not found' });
     }
 });
 

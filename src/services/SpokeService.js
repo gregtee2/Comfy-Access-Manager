@@ -59,7 +59,14 @@ class SpokeService extends EventEmitter {
             console.error(`[Spoke] DB sync failed: ${err.message}`);
         }
 
-        // 3. Connect SSE for real-time updates
+        // 3. Sync thumbnails from hub
+        try {
+            await this.syncThumbnails();
+        } catch (err) {
+            console.error(`[Spoke] Thumbnail sync failed: ${err.message}`);
+        }
+
+        // 4. Connect SSE for real-time updates
         this._connectSSE();
     }
 
@@ -114,6 +121,70 @@ class SpokeService extends EventEmitter {
         console.log('[Spoke] Local DB updated from hub snapshot');
 
         this.emit('db-synced');
+    }
+
+    /**
+     * Download all thumbnails from the hub.
+     * Uses a binary stream format (see syncRoutes GET /thumbnails).
+     */
+    async syncThumbnails() {
+        console.log('[Spoke] Downloading thumbnails from hub...');
+
+        const thumbDir = path.join(__dirname, '..', '..', 'thumbnails');
+        if (!fs.existsSync(thumbDir)) {
+            fs.mkdirSync(thumbDir, { recursive: true });
+        }
+
+        // Download binary thumbnail bundle
+        const data = await this._downloadBuffer('/api/sync/thumbnails');
+
+        // Parse the binary format: [4B nameLen][nameBytes][4B dataLen][dataBytes] ... [4B 0x00 sentinel]
+        let offset = 0;
+        let count = 0;
+
+        while (offset + 4 <= data.length) {
+            const nameLen = data.readUInt32BE(offset);
+            offset += 4;
+
+            if (nameLen === 0) break; // sentinel — end of stream
+
+            if (offset + nameLen + 4 > data.length) break; // malformed
+            const fileName = data.slice(offset, offset + nameLen).toString('utf8');
+            offset += nameLen;
+
+            const dataLen = data.readUInt32BE(offset);
+            offset += 4;
+
+            if (offset + dataLen > data.length) break; // malformed
+            const fileData = data.slice(offset, offset + dataLen);
+            offset += dataLen;
+
+            // Write thumbnail to disk
+            const destPath = path.join(thumbDir, fileName);
+            fs.writeFileSync(destPath, fileData);
+            count++;
+        }
+
+        console.log(`[Spoke] Synced ${count} thumbnails from hub (${(data.length / 1024 / 1024).toFixed(1)} MB)`);
+    }
+
+    /**
+     * Download a single thumbnail by asset ID from the hub.
+     * Called when a new asset is added via SSE.
+     */
+    async fetchSingleThumbnail(assetId) {
+        const thumbDir = path.join(__dirname, '..', '..', 'thumbnails');
+        if (!fs.existsSync(thumbDir)) {
+            fs.mkdirSync(thumbDir, { recursive: true });
+        }
+
+        const destPath = path.join(thumbDir, `thumb_${assetId}.jpg`);
+
+        try {
+            await this._downloadFile(`/api/sync/thumbnail/${assetId}`, destPath);
+        } catch (err) {
+            // Not all assets have thumbnails — this is fine
+        }
     }
 
     /**
@@ -270,6 +341,18 @@ class SpokeService extends EventEmitter {
             }
 
             this.emit('change', { table, action, data });
+
+            // Sync thumbnail for newly inserted assets
+            if (table === 'assets' && (action === 'insert' || action === 'bulk-insert')) {
+                const ids = action === 'bulk-insert' && data.records
+                    ? data.records.map(r => r.id).filter(Boolean)
+                    : data.record?.id ? [data.record.id] : [];
+                for (const id of ids) {
+                    this.fetchSingleThumbnail(id).catch(err => {
+                        console.error(`[Spoke] Thumbnail sync failed for asset ${id}:`, err.message);
+                    });
+                }
+            }
         } catch (err) {
             console.error(`[Spoke] Failed to apply ${table}.${action}:`, err.message);
             // On failure, schedule a full re-sync
@@ -386,6 +469,47 @@ class SpokeService extends EventEmitter {
 
             req.on('error', reject);
             req.setTimeout(120000, () => {
+                req.destroy(new Error('Download timeout'));
+            });
+            req.end();
+        });
+    }
+
+    /**
+     * Download a URL and return the response as a Buffer (in-memory).
+     * Used for thumbnail bundle download where we parse the binary format.
+     */
+    async _downloadBuffer(apiPath) {
+        return new Promise((resolve, reject) => {
+            const url = new URL(this.hubUrl + apiPath);
+            const isHttps = url.protocol === 'https:';
+            const transport = isHttps ? https : http;
+
+            const options = {
+                hostname: url.hostname,
+                port: url.port || (isHttps ? 443 : 80),
+                path: url.pathname + (url.search || '') + (this.hubSecret ? `${url.search ? '&' : '?'}secret=${this.hubSecret}` : ''),
+                method: 'GET',
+                headers: {
+                    ...(this.hubSecret ? { 'X-Hub-Secret': this.hubSecret } : {}),
+                },
+            };
+
+            const req = transport.request(options, (res) => {
+                if (res.statusCode !== 200) {
+                    res.resume();
+                    reject(new Error(`Download failed: HTTP ${res.statusCode}`));
+                    return;
+                }
+
+                const chunks = [];
+                res.on('data', (chunk) => chunks.push(chunk));
+                res.on('end', () => resolve(Buffer.concat(chunks)));
+                res.on('error', reject);
+            });
+
+            req.on('error', reject);
+            req.setTimeout(300000, () => { // 5 min timeout for large bundles
                 req.destroy(new Error('Download timeout'));
             });
             req.end();

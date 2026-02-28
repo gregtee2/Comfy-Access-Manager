@@ -1151,8 +1151,8 @@ CAM supports a **hub-and-spoke** architecture for multi-user teams connected ove
 | File | Mode | Purpose |
 |------|------|---------|
 | `src/services/HubService.js` | hub | SSE broadcast to spokes, spoke registry, DB checkpoint for snapshots, shared-secret auth middleware |
-| `src/services/SpokeService.js` | spoke | SSE client with auto-reconnect (exponential backoff), DB snapshot download, incremental change application, write forwarding |
-| `src/routes/syncRoutes.js` | hub | Hub API: `GET /status`, `GET /events` (SSE), `GET /db` (snapshot), `GET /spokes`, `POST /write` |
+| `src/services/SpokeService.js` | spoke | SSE client with auto-reconnect (exponential backoff), DB snapshot download, **thumbnail sync**, incremental change application, write forwarding |
+| `src/routes/syncRoutes.js` | hub | Hub API: `GET /status`, `GET /events` (SSE), `GET /db` (snapshot), **`GET /thumbnails` (bulk)**, **`GET /thumbnail/:id`**, `GET /spokes`, `POST /write` |
 | `src/middleware/spokeProxy.js` | spoke | Express middleware — intercepts POST/PUT/DELETE on `/api/*`, forwards to hub via SpokeService |
 | `src/server.js` | all | Reads `mode` from config.json, conditionally loads hub/spoke components |
 
@@ -1164,14 +1164,17 @@ All require `X-Hub-Secret` header (or `?secret=` query param) matching `hub_secr
 | `/api/sync/status` | GET | Health check — returns mode, version, asset count, connected spoke count |
 | `/api/sync/events` | GET | SSE stream — spokes subscribe here for real-time `db-change` events |
 | `/api/sync/db` | GET | Download full SQLite DB snapshot (WAL checkpoint first for consistency) |
+| `/api/sync/thumbnails` | GET | Download ALL thumbnails as a binary bundle (custom format: 4B nameLen + name + 4B dataLen + data, sentinel = 4 zero bytes) |
+| `/api/sync/thumbnail/:id` | GET | Download a single thumbnail JPEG by asset ID (for incremental SSE sync) |
 | `/api/sync/spokes` | GET | List connected spokes with names and connection times |
 | `/api/sync/write` | POST | Receive a proxied write from a spoke — executes locally and broadcasts |
 
 ### Spoke Startup Sequence
 1. Check hub health via `GET /api/sync/status`
 2. Download full DB snapshot via `GET /api/sync/db` → replace local `mediavault.db`
-3. Connect SSE to `GET /api/sync/events` for real-time incremental updates
-4. If hub is unreachable, retry with exponential backoff (2s → 30s)
+3. **Download all thumbnails** via `GET /api/sync/thumbnails` → parse binary bundle → write to local `thumbnails/` dir
+4. Connect SSE to `GET /api/sync/events` for real-time incremental updates
+5. If hub is unreachable, retry with exponential backoff (2s → 30s)
 
 ### SSE Event Format
 ```
@@ -1180,6 +1183,8 @@ event: db-change
 data: {"table": "assets", "action": "insert", "data": {"record": {...}}, "timestamp": 1234567890}
 ```
 Actions: `insert`, `update`, `delete`, `bulk-insert`. Spoke applies via `INSERT OR REPLACE` / `UPDATE` / `DELETE`.
+
+**Thumbnail sync on insert**: When `table === 'assets'` and action is `insert` or `bulk-insert`, the spoke automatically calls `fetchSingleThumbnail(id)` to download the thumbnail for the new asset from the hub.
 
 ### Spoke Write Proxy Flow
 1. User on spoke makes a POST/PUT/DELETE to any `/api/*` endpoint
@@ -1335,6 +1340,12 @@ Port 7700 must be open between hub and spokes. On Windows, the first server star
 | — | feat: server.js conditional hub/spoke/standalone mode from `data/config.json` |
 | — | feat: `CAM_DATA_DIR` env var for running multiple instances with separate data dirs |
 | — | feat: Startup banner shows mode (HUB/SPOKE) when not standalone |
+| — | **v1.5.8 — Hub-Spoke Thumbnail Sync (February 2026)** |
+| — | feat: Hub bulk thumbnail endpoint — streams all thumbnails as binary bundle (`GET /api/sync/thumbnails`) |
+| — | feat: Hub single thumbnail endpoint — serves individual JPEG by asset ID (`GET /api/sync/thumbnail/:id`) |
+| — | feat: Spoke `syncThumbnails()` — downloads and unpacks binary bundle on startup after DB sync |
+| — | feat: Spoke `fetchSingleThumbnail()` — incremental download triggered by SSE asset insert events |
+| — | feat: `_downloadBuffer()` helper — in-memory HTTP response for binary format parsing |
 
 ---
 

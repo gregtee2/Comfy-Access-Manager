@@ -2,6 +2,14 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.5.8] - 2026-02-28
+
+### Added
+- **Hub-spoke thumbnail sync** — Spokes now download all thumbnails from the hub alongside the SQLite database on startup. New assets added on the hub trigger real-time single-thumbnail downloads on connected spokes via SSE. Custom binary bundle format streams ~34 MB of thumbnails efficiently.
+  - Hub endpoints: `GET /api/sync/thumbnails` (bulk binary bundle), `GET /api/sync/thumbnail/:id` (single)
+  - Spoke: `syncThumbnails()` bulk download, `fetchSingleThumbnail()` incremental SSE-triggered download
+  - New `_downloadBuffer()` helper for in-memory HTTP response parsing
+
 ## [1.5.7] - 2026-02-28
 
 ### Added
