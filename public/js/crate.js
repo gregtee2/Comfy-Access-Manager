@@ -217,6 +217,7 @@ function showCrateView(crate, items) {
                     <span class="asset-type-badge ${a.media_type}">${a.media_type}</span>
                     ${a.role_name ? `<span class="asset-role-badge" style="background:${a.role_color || '#666'}">${a.role_icon || '🎭'} ${esc(a.role_code)}</span>` : ''}
                     ${a.duration ? `<span class="asset-duration">${a.duration}</span>` : ''}
+                    ${a.file_ext && !a.duration ? `<span class="asset-ext-label">${a.file_ext.replace('.','')}</span>` : ''}
                 </div>
                 <div class="asset-info">
                     <div class="asset-name" title="${esc(a.vault_name)}">${esc(a.vault_name)}</div>

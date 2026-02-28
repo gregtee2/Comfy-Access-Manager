@@ -343,6 +343,7 @@ function renderAssets() {
                     ${a.role_name ? `<span class="asset-role-badge" style="background:${a.role_color || '#666'}">${a.role_icon || ''} ${esc(a.role_code)}</span>` : ''}
                       ${a.status ? `<span class="asset-status-badge status-${a.status.toLowerCase()}">${esc(a.status)}</span>` : ''}
                     ${a.duration ? `<span class="asset-duration">${formatDuration(a.duration)}</span>` : ''}
+                    ${a.file_ext && !a.duration ? `<span class="asset-ext-label">${a.file_ext.replace('.','')}</span>` : ''}
                 </div>
                 <button class="asset-star" onclick="event.stopPropagation();toggleStar(${a.id})">${a.starred ? '*' : '*'}</button>
                 <div class="asset-info">

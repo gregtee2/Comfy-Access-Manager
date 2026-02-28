@@ -2,6 +2,11 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.5.7] - 2026-02-28
+
+### Added
+- **File extension badge on thumbnails** — Asset thumbnails in grid view now show the file extension (EXR, PNG, JPG, MOV, etc.) as a subtle label in the bottom-right corner. Videos with a duration badge are skipped to avoid overlap. Applied to both asset grid and crate views.
+
 ## [1.5.6] - 2026-02-28
 
 ### Added
