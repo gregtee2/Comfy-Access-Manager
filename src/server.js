@@ -29,6 +29,11 @@ const APP_MODE = _config.mode || 'standalone';
 const app = express();
 const PORT = process.env.PORT || 7700;
 
+// ─── Middleware (must be before spoke proxy so req.body is parsed) ───
+app.use(cors());
+app.use(express.json({ limit: '50mb' }));
+app.use(express.urlencoded({ extended: true, limit: '50mb' }));
+
 // ─── Spoke write-proxy (if spoke mode) ───
 // Must be registered before API routes so it can intercept writes
 let _spokeService = null;
@@ -47,11 +52,6 @@ if (APP_MODE === 'spoke') {
 } else {
     console.log('[Mode] STANDALONE');
 }
-
-// ─── Middleware ───
-app.use(cors());
-app.use(express.json({ limit: '50mb' }));
-app.use(express.urlencoded({ extended: true, limit: '50mb' }));
 
 // ─── Static Files ───
 // Prevent aggressive caching of JS modules during development
