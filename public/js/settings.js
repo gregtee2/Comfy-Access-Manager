@@ -1134,6 +1134,7 @@ function loadNetworkSettings() {
     loadPathMappings();
     loadDbInfo();
     loadDiscoveredServersForPull();
+    loadSyncConfig();
 }
 
 // ===========================================
@@ -1407,6 +1408,92 @@ async function removeUserPin(userId) {
 }
 
 // ===========================================
+//  HUB / SPOKE SYNC CONFIG
+// ===========================================
+
+async function loadSyncConfig() {
+    try {
+        const cfg = await api('/api/settings/sync-config');
+        const modeSelect = document.getElementById('syncModeSelect');
+        if (modeSelect) modeSelect.value = cfg.mode || 'standalone';
+
+        // Populate fields
+        document.getElementById('syncHubSecret')?.setAttribute('value', '');
+        document.getElementById('syncHubUrl')?.setAttribute('value', '');
+        document.getElementById('syncSpokeSecret')?.setAttribute('value', '');
+        document.getElementById('syncSpokeName')?.setAttribute('value', '');
+
+        if (cfg.mode === 'hub') {
+            const el = document.getElementById('syncHubSecret');
+            if (el) el.value = cfg.hub_secret || '';
+        } else if (cfg.mode === 'spoke') {
+            const urlEl = document.getElementById('syncHubUrl');
+            const secEl = document.getElementById('syncSpokeSecret');
+            const nameEl = document.getElementById('syncSpokeName');
+            if (urlEl) urlEl.value = cfg.hub_url || '';
+            if (secEl) secEl.value = cfg.hub_secret || '';
+            if (nameEl) nameEl.value = cfg.spoke_name || '';
+        }
+
+        onSyncModeChange(); // show/hide fields
+        updateSyncModeStatus(cfg.mode);
+    } catch (err) {
+        console.error('[SyncConfig] Failed to load:', err);
+    }
+}
+
+function onSyncModeChange() {
+    const mode = document.getElementById('syncModeSelect')?.value || 'standalone';
+    const hubFields = document.getElementById('syncHubFields');
+    const spokeFields = document.getElementById('syncSpokeFields');
+
+    if (hubFields) hubFields.style.display = mode === 'hub' ? 'block' : 'none';
+    if (spokeFields) spokeFields.style.display = mode === 'spoke' ? 'block' : 'none';
+}
+
+function updateSyncModeStatus(mode) {
+    const el = document.getElementById('syncModeStatus');
+    if (!el) return;
+
+    if (mode === 'hub') {
+        el.innerHTML = '<span style="color:var(--success);font-weight:600;">Active: Hub</span> — broadcasting changes to connected spokes';
+    } else if (mode === 'spoke') {
+        el.innerHTML = '<span style="color:var(--accent);font-weight:600;">Active: Spoke</span> — syncing from hub, writes forwarded';
+    } else {
+        el.innerHTML = '<span style="color:var(--text-dim);">Standalone</span> — no sync active';
+    }
+}
+
+async function saveSyncConfig() {
+    const mode = document.getElementById('syncModeSelect')?.value || 'standalone';
+    const statusEl = document.getElementById('syncSaveStatus');
+
+    const body = { mode };
+
+    if (mode === 'hub') {
+        body.hub_secret = document.getElementById('syncHubSecret')?.value?.trim() || '';
+    } else if (mode === 'spoke') {
+        body.hub_url    = document.getElementById('syncHubUrl')?.value?.trim() || '';
+        body.hub_secret = document.getElementById('syncSpokeSecret')?.value?.trim() || '';
+        body.spoke_name = document.getElementById('syncSpokeName')?.value?.trim() || '';
+    }
+
+    if (statusEl) statusEl.innerHTML = '<span style="color:var(--text-muted);">Saving...</span>';
+
+    try {
+        const result = await api('/api/settings/sync-config', { method: 'POST', body });
+        if (statusEl) {
+            statusEl.innerHTML = `<span style="color:var(--success);">Saved! Restart the server to apply.</span>`;
+        }
+        updateSyncModeStatus(mode);
+    } catch (err) {
+        if (statusEl) {
+            statusEl.innerHTML = `<span style="color:var(--danger);">Error: ${esc(err.message)}</span>`;
+        }
+    }
+}
+
+// ===========================================
 //  EXPOSE ON WINDOW (for HTML onclick handlers)
 // ===========================================
 
@@ -1457,6 +1544,8 @@ window.loadTeamSettings = loadTeamSettings;
 window.showSetPinModal = showSetPinModal;
 window.saveUserPin = saveUserPin;
 window.removeUserPin = removeUserPin;
+window.onSyncModeChange = onSyncModeChange;
+window.saveSyncConfig = saveSyncConfig;
 
 
 

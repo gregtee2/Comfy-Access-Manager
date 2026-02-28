@@ -26,6 +26,8 @@ const LOCAL_ONLY_PATTERNS = [
     '/api/assets/rv-push',         // Launch / push to RV (local process)
     '/api/users/verify-pin',       // PIN check — read-only, use local replica
     '/api/assets/rv-status',       // Check local RV status
+    '/api/settings/sync-config',   // Per-machine hub/spoke config (local config.json)
+    '/api/settings/db-config',     // Per-machine shared DB path (local config.json)
 ];
 // Regex patterns for parameterised routes that must run locally
 const LOCAL_ONLY_REGEX = [

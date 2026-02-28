@@ -612,6 +612,45 @@ Import from Resolve</button>
                 </div>
 
                 <div class="settings-section">
+                    <h3>Sync Mode <span class="help-icon" data-tip="Configure how this instance syncs with others. Standalone runs independently. Hub is the central server that spokes connect to. Spoke syncs its database from a hub and forwards writes to it.">?</span></h3>
+                    <div id="syncModeStatus" style="margin-bottom:8px;font-size:0.82rem;"></div>
+                    <div class="setting-row">
+                        <label>Mode</label>
+                        <select id="syncModeSelect" class="setting-select" onchange="onSyncModeChange()">
+                            <option value="standalone">Standalone (default)</option>
+                            <option value="hub">Hub (central server)</option>
+                            <option value="spoke">Spoke (syncs from hub)</option>
+                        </select>
+                        <p class="hint">Standalone = no sync. Hub = other machines connect here. Spoke = this machine syncs from a hub.</p>
+                    </div>
+                    <div id="syncHubFields" style="display:none;">
+                        <div class="setting-row">
+                            <label>Hub Secret <span class="help-icon" data-tip="A shared passphrase that spokes must provide to connect. Choose something unique - all machines in the sync group must use the same secret.">?</span></label>
+                            <input type="text" id="syncHubSecret" placeholder="e.g., my-team-sync-2026">
+                        </div>
+                    </div>
+                    <div id="syncSpokeFields" style="display:none;">
+                        <div class="setting-row">
+                            <label>Hub URL <span class="help-icon" data-tip="The full URL of the hub server to connect to, including port. Example: http://192.168.1.47:7700">?</span></label>
+                            <input type="text" id="syncHubUrl" placeholder="http://192.168.1.47:7700">
+                        </div>
+                        <div class="setting-row">
+                            <label>Hub Secret</label>
+                            <input type="text" id="syncSpokeSecret" placeholder="Must match the hub's secret">
+                        </div>
+                        <div class="setting-row">
+                            <label>Spoke Name <span class="help-icon" data-tip="A friendly name for this machine, shown in the hub's connected-spokes list. Leave blank to use the computer's hostname.">?</span></label>
+                            <input type="text" id="syncSpokeName" placeholder="e.g., Greg-Mac (blank = hostname)">
+                        </div>
+                    </div>
+                    <div style="margin-top:8px;display:flex;gap:8px;align-items:center;">
+                        <button onclick="saveSyncConfig()">Save Sync Config</button>
+                        <span id="syncSaveStatus" style="font-size:0.82rem;"></span>
+                    </div>
+                    <p class="hint" style="margin-top:6px;">Changes require a server restart to take effect.</p>
+                </div>
+
+                <div class="settings-section">
                     <h3> Network &amp; Multi-Machine <span class="help-icon" data-tip="Access your MediaVault database from other machines on your network. Give this server a friendly name and configure path mappings for cross-platform file access.">?</span></h3>
                     <div class="setting-row">
                         <label>Server Name</label>

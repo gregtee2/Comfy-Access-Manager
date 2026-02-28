@@ -813,6 +813,66 @@ router.post('/pull-db', async (req, res) => {
 //  GITHUB TOKEN (for private repo auto-updates)
 // ═══════════════════════════════════════════════════════════════════
 
+// ═══════════════════════════════════════════
+//  HUB / SPOKE SYNC CONFIG
+// ═══════════════════════════════════════════
+
+// GET /api/settings/sync-config — Read hub/spoke mode settings from config.json
+router.get('/sync-config', (req, res) => {
+    const config = loadConfig();
+    res.json({
+        mode:       config.mode       || 'standalone',
+        hub_url:    config.hub_url    || '',
+        hub_secret: config.hub_secret || '',
+        spoke_name: config.spoke_name || '',
+    });
+});
+
+// POST /api/settings/sync-config — Save hub/spoke mode settings to config.json
+router.post('/sync-config', (req, res) => {
+    const { mode, hub_url, hub_secret, spoke_name } = req.body;
+
+    if (!mode || !['standalone', 'hub', 'spoke'].includes(mode)) {
+        return res.status(400).json({ error: 'Invalid mode. Must be standalone, hub, or spoke.' });
+    }
+
+    if (mode === 'spoke') {
+        if (!hub_url || !hub_url.trim()) {
+            return res.status(400).json({ error: 'Hub URL is required for spoke mode.' });
+        }
+        if (!hub_secret || !hub_secret.trim()) {
+            return res.status(400).json({ error: 'Hub secret is required for spoke mode.' });
+        }
+    }
+
+    const config = loadConfig();
+    config.mode = mode;
+
+    if (mode === 'standalone') {
+        // Clean up spoke/hub fields
+        delete config.hub_url;
+        delete config.hub_secret;
+        delete config.spoke_name;
+    } else if (mode === 'hub') {
+        config.hub_secret = hub_secret?.trim() || '';
+        delete config.hub_url;
+        delete config.spoke_name;
+    } else if (mode === 'spoke') {
+        config.hub_url    = hub_url.trim();
+        config.hub_secret = hub_secret?.trim() || '';
+        config.spoke_name = spoke_name?.trim() || require('os').hostname();
+    }
+
+    saveConfig(config);
+
+    res.json({
+        success: true,
+        mode: config.mode,
+        restart_required: true,
+        message: `Sync mode set to "${mode}". Restart the server to apply.`,
+    });
+});
+
 // GET /api/settings/github-token — Check if a PAT is configured (does NOT return token)
 router.get('/github-token', (req, res) => {
     const config = loadConfig();
