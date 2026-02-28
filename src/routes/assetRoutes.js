@@ -2602,10 +2602,101 @@ router.post('/publish-frame', async (req, res) => {
 
         res.json({ success: true, assets: publishedAssets });
 
+        // ── Forward new asset records to hub (spoke mode) ──
+        // publish-frame runs locally (LOCAL_ONLY) but we need the hub DB to
+        // know about these assets so they survive the next DB sync.
+        const spokeService = req.app.locals.spokeService;
+        if (spokeService && publishedAssets.length > 0) {
+            setImmediate(() => {
+                for (const pa of publishedAssets) {
+                    const record = db.prepare('SELECT * FROM assets WHERE id = ?').get(pa.id);
+                    if (!record) continue;
+                    spokeService.forwardRequest('POST', '/api/sync/write', {
+                        method: 'POST',
+                        path: '/api/assets/spoke-register',
+                        body: record,
+                        headers: {},
+                        spokeName: spokeService.localName,
+                    }).then(() => {
+                        console.log(`[Spoke] Forwarded asset ${pa.id} (${pa.vault_name}) to hub`);
+                    }).catch(err => {
+                        console.error(`[Spoke] Failed to forward asset ${pa.id} to hub:`, err.message);
+                    });
+                }
+            });
+        }
+
     } catch (err) {
         console.error('[publish-frame] Error:', err.message);
         try { fs.rmSync(tempDir, { recursive: true }); } catch (_) {}
         res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ═══════════════════════════════════════════
+//  SPOKE-REGISTER (Internal — hub-side asset insertion)
+// ═══════════════════════════════════════════
+
+/**
+ * POST /api/assets/spoke-register
+ * Internal endpoint used by spoke mode to register locally-created assets
+ * (e.g., from publish-frame) on the hub's database so they survive DB syncs.
+ * Accepts a full asset record and does an INSERT OR IGNORE.
+ */
+router.post('/spoke-register', (req, res) => {
+    const db = getDb();
+    const a = req.body;
+
+    if (!a || !a.vault_name) {
+        return res.status(400).json({ error: 'Asset data with vault_name is required' });
+    }
+
+    try {
+        // Check if this asset already exists (by vault_name + project)
+        const existing = db.prepare(
+            'SELECT id FROM assets WHERE vault_name = ? AND project_id = ?'
+        ).get(a.vault_name, a.project_id);
+
+        if (existing) {
+            return res.json({ success: true, id: existing.id, already_exists: true });
+        }
+
+        const result = db.prepare(`
+            INSERT INTO assets (
+                project_id, sequence_id, shot_id, role_id,
+                original_name, vault_name, file_path, relative_path,
+                media_type, file_ext, file_size, version,
+                is_linked, status, notes, tags, starred,
+                thumbnail_path, created_at
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))
+        `).run(
+            a.project_id || null,
+            a.sequence_id || null,
+            a.shot_id || null,
+            a.role_id || null,
+            a.original_name || a.vault_name,
+            a.vault_name,
+            a.file_path || '',
+            a.relative_path || '',
+            a.media_type || 'image',
+            a.file_ext || '',
+            a.file_size || 0,
+            a.version || 1,
+            a.is_linked || 0,
+            a.status || null,
+            a.notes || null,
+            a.tags || null,
+            a.starred || 0,
+            a.thumbnail_path || null
+        );
+
+        logActivity('spoke_register', 'asset', result.lastInsertRowid,
+            `Asset registered from spoke: ${a.vault_name}`);
+
+        res.json({ success: true, id: Number(result.lastInsertRowid) });
+    } catch (err) {
+        console.error('[spoke-register] Error:', err.message);
+        res.status(500).json({ error: err.message });
     }
 });
 

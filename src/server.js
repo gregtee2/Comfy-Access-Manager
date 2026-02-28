@@ -46,6 +46,7 @@ if (APP_MODE === 'spoke') {
         _config.spoke_name || require('os').hostname()
     );
     app.use(createSpokeProxy(_spokeService));
+    app.locals.spokeService = _spokeService;
     console.log(`[Mode] SPOKE — writes forwarded to ${_config.hub_url}`);
 } else if (APP_MODE === 'hub') {
     console.log('[Mode] HUB — broadcasting changes to spokes');
