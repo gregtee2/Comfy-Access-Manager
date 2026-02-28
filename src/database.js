@@ -397,6 +397,18 @@ function runMigrations(wrapper) {
         CREATE INDEX IF NOT EXISTS idx_crate_items_asset ON crate_items(asset_id);
     `);
 
+    // ─── Overlay Presets (burn-in text overlays for export) ───
+    wrapper.exec(`
+        CREATE TABLE IF NOT EXISTS overlay_presets (
+            id INTEGER PRIMARY KEY AUTOINCREMENT,
+            name TEXT NOT NULL,
+            config TEXT NOT NULL DEFAULT '{}',
+            is_default INTEGER DEFAULT 0,
+            created_at TEXT DEFAULT (datetime('now')),
+            updated_at TEXT DEFAULT (datetime('now'))
+        );
+    `);
+
     // Seed default Admin user if users table is empty
     const userCount = wrapper.prepare('SELECT COUNT(*) as count FROM users').get();
     if (userCount.count === 0) {

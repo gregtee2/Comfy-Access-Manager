@@ -298,7 +298,7 @@ async function onImportProjectChange() {
         const seqSel = document.getElementById('importSequence');
         if (project.sequences?.length > 0) {
             seqSel.innerHTML = '<option value="">-- None --</option>' +
-                project.sequences.map(s => `<option value="${s.id}">${s.name} (${s.code})</option>`).join('');
+                project.sequences.map(s => `<option value="${s.id}" data-name="${esc(s.name)}" data-code="${esc(s.code)}">${s.name} (${s.code})</option>`).join('');
         } else {
             seqSel.innerHTML = '<option value="">-- None --</option>';
         }
@@ -342,7 +342,7 @@ async function onImportSequenceChange() {
     if (seqId && projectId) {
         const shots = await api(`/api/projects/${projectId}/sequences/${seqId}/shots`);
         shotSel.innerHTML = '<option value="">-- None --</option>' +
-            shots.map(s => `<option value="${s.id}">${s.name} (${s.code})</option>`).join('');
+            shots.map(s => `<option value="${s.id}" data-name="${esc(s.name)}" data-code="${esc(s.code)}">${s.name} (${s.code})</option>`).join('');
     } else {
         shotSel.innerHTML = '<option value="">-- None --</option>';
     }
@@ -383,16 +383,18 @@ async function updateRenamePreview() {
         const shotId = document.getElementById('importShot')?.value;
         const take = document.getElementById('importTake')?.value || 1;
 
-        let seqCode = '', shotCode = '';
+        let seqCode = '', seqName = '', shotCode = '', shotName = '';
         if (seqId) {
             const seqSel = document.getElementById('importSequence');
             const opt = seqSel.options[seqSel.selectedIndex];
-            seqCode = opt?.textContent?.split(' - ')[0]?.trim() || '';
+            seqCode = opt?.dataset?.code || '';
+            seqName = opt?.dataset?.name || '';
         }
         if (shotId) {
             const shotSel = document.getElementById('importShot');
             const opt = shotSel.options[shotSel.selectedIndex];
-            shotCode = opt?.textContent?.split(' - ')[0]?.trim() || '';
+            shotCode = opt?.dataset?.code || '';
+            shotName = opt?.dataset?.name || '';
         }
 
         // Get role code for naming
@@ -411,7 +413,9 @@ async function updateRenamePreview() {
                 originalName: firstFile.name,
                 projectCode: project.code,
                 sequenceCode: seqCode || undefined,
+                sequenceName: seqName || undefined,
                 shotCode: shotCode || undefined,
+                shotName: shotName || undefined,
                 roleCode: roleCode || undefined,
                 takeNumber: parseInt(take),
                 customName: customName || undefined,
@@ -774,7 +778,7 @@ async function createInlineSequence() {
         const seqSel = document.getElementById('importSequence');
         seqSel.innerHTML = '<option value="">-- None --</option>' +
             project.sequences.map(s =>
-                `<option value="${s.id}" ${s.id === newSeq.id ? 'selected' : ''}>${s.name} (${s.code})</option>`
+                `<option value="${s.id}" data-name="${esc(s.name)}" data-code="${esc(s.code)}" ${s.id === newSeq.id ? 'selected' : ''}>${s.name} (${s.code})</option>`
             ).join('');
 
         // Enable the Shot + button now
@@ -839,7 +843,7 @@ async function createInlineShot() {
         const shotSel = document.getElementById('importShot');
         shotSel.innerHTML = '<option value="">-- None --</option>' +
             shots.map(s =>
-                `<option value="${s.id}" ${s.id === newShot.id ? 'selected' : ''}>${s.name} (${s.code})</option>`
+                `<option value="${s.id}" data-name="${esc(s.name)}" data-code="${esc(s.code)}" ${s.id === newShot.id ? 'selected' : ''}>${s.name} (${s.code})</option>`
             ).join('');
 
         updateRenamePreview();

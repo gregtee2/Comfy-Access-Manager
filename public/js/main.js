@@ -17,6 +17,7 @@ import { loadImportTab } from './import.js';
 import { loadSettings, loadRoles, openFolderPicker, autoCheckForUpdates } from './settings.js';
 import pluginRegistry from './pluginRegistry.js';
 import './export.js';
+import './overlayEditor.js';
 
 // ===========================================
 //  INIT

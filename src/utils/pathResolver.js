@@ -105,43 +105,53 @@ function getAllPathVariants(filePath) {
 
     try {
         const raw = getSetting('path_mappings');
-        if (!raw) return [...variants];
-        const mappings = JSON.parse(raw);
-        if (!Array.isArray(mappings) || mappings.length === 0) return [...variants];
+        if (raw) {
+            const mappings = JSON.parse(raw);
+            if (Array.isArray(mappings) && mappings.length > 0) {
+                for (const mapping of mappings) {
+                    let sides = [];
+                    if (mapping.from && mapping.to) {
+                        sides = [mapping.from, mapping.to];
+                    } else {
+                        const w = mapping.windows || mapping.win || '';
+                        const m = mapping.mac || mapping.macos || '';
+                        const l = mapping.linux || '';
+                        sides = [w, m, l].filter(Boolean);
+                    }
+                    if (sides.length < 2) continue;
 
-        for (const mapping of mappings) {
-            let sides = [];
-            if (mapping.from && mapping.to) {
-                sides = [mapping.from, mapping.to];
-            } else {
-                const w = mapping.windows || mapping.win || '';
-                const m = mapping.mac || mapping.macos || '';
-                const l = mapping.linux || '';
-                sides = [w, m, l].filter(Boolean);
-            }
-            if (sides.length < 2) continue;
+                    for (let i = 0; i < sides.length; i++) {
+                        const src = sides[i].replace(/\\/g, '/').replace(/\/+$/, '');
+                        if (!src) continue;
 
-            for (let i = 0; i < sides.length; i++) {
-                const src = sides[i].replace(/\\/g, '/').replace(/\/+$/, '');
-                if (!src) continue;
-
-                if (normalized.toLowerCase().startsWith(src.toLowerCase() + '/') ||
-                    normalized.toLowerCase() === src.toLowerCase()) {
-                    const remainder = normalized.substring(src.length);
-                    // Add variants for ALL other sides (cross-platform paths)
-                    for (let j = 0; j < sides.length; j++) {
-                        if (j === i) continue;
-                        const target = sides[j].replace(/\\/g, '/').replace(/\/+$/, '');
-                        if (target) {
-                            variants.add(target + remainder);
+                        if (normalized.toLowerCase().startsWith(src.toLowerCase() + '/') ||
+                            normalized.toLowerCase() === src.toLowerCase()) {
+                            const remainder = normalized.substring(src.length);
+                            // Add variants for ALL other sides (cross-platform paths)
+                            for (let j = 0; j < sides.length; j++) {
+                                if (j === i) continue;
+                                const target = sides[j].replace(/\\/g, '/').replace(/\/+$/, '');
+                                if (target) {
+                                    variants.add(target + remainder);
+                                }
+                            }
                         }
                     }
                 }
             }
         }
     } catch {
-        // If mappings can't be parsed, return what we have
+        // If mappings can't be parsed, continue with what we have
     }
+
+    // Also include backslash versions of every variant so that DB
+    // lookups match paths stored with Windows separators (Z:\... vs Z:/...)
+    const withBackslashes = [];
+    for (const v of variants) {
+        const bs = v.replace(/\//g, '\\');
+        if (!variants.has(bs)) withBackslashes.push(bs);
+    }
+    for (const bs of withBackslashes) variants.add(bs);
 
     return [...variants];
 }

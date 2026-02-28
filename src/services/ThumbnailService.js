@@ -61,7 +61,7 @@ class ThumbnailService {
 
         try {
             const videoExts = ['.mov', '.mp4', '.avi', '.mkv', '.wmv', '.webm', '.m4v', '.mpg', '.mpeg', '.ts', '.mts'];
-            const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp', '.heic'];
+            const imageExts = ['.jpg', '.jpeg', '.png', '.gif', '.bmp', '.tiff', '.tif', '.webp', '.heic', '.exr'];
 
             if (videoExts.includes(ext)) {
                 await this.generateVideoThumb(filePath, thumbPath, thumbSize);
@@ -132,12 +132,21 @@ class ThumbnailService {
      * Generate thumbnail from image using sharp (or FFmpeg fallback)
      */
     static async generateImageThumb(imagePath, thumbPath, size) {
+        let sharpSuccess = false;
         if (sharp) {
-            await sharp(imagePath)
-                .resize(size, size, { fit: 'inside', withoutEnlargement: true })
-                .jpeg({ quality: 80 })
-                .toFile(thumbPath);
-        } else {
+            try {
+                await sharp(imagePath)
+                    .resize(size, size, { fit: 'inside', withoutEnlargement: true })
+                    .jpeg({ quality: 80 })
+                    .toFile(thumbPath);
+                sharpSuccess = true;
+            } catch (err) {
+                // Silently fall back to FFmpeg for formats sharp doesn't support (like .bmp, .exr)
+                sharpSuccess = false;
+            }
+        }
+        
+        if (!sharpSuccess) {
             // FFmpeg fallback
             return new Promise((resolve, reject) => {
                 const ffmpegPath = this.findFFmpeg();

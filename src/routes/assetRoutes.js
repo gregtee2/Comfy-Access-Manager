@@ -184,7 +184,7 @@ router.post('/create-folder', (req, res) => {
 // ═══════════════════════════════════════════
 
 router.post('/preview-name', (req, res) => {
-    const { originalName, projectCode, sequenceCode, shotCode, roleCode, takeNumber, customName, template } = req.body;
+    const { originalName, projectCode, sequenceCode, sequenceName, shotCode, shotName, roleCode, takeNumber, customName, template } = req.body;
 
     if (!originalName || !projectCode) {
         return res.status(400).json({ error: 'originalName and projectCode required' });
@@ -196,7 +196,9 @@ router.post('/preview-name', (req, res) => {
         originalName,
         projectCode,
         sequenceCode,
+        sequenceName,
         shotCode,
+        shotName,
         roleCode,
         takeNumber,
         mediaType,
@@ -603,7 +605,9 @@ router.post('/import', async (req, res) => {
                         originalName: seqOriginalName,
                         projectCode: project.code,
                         sequenceCode: sequence?.code,
+                        sequenceName: sequence?.name,
                         shotCode: shot?.code,
+                        shotName: shot?.name,
                         roleCode: role?.code,
                         takeNumber: take_number || 1,
                         mediaType,
@@ -619,7 +623,9 @@ router.post('/import', async (req, res) => {
                     originalName: seqOriginalName,
                     projectCode: project.code,
                     sequenceCode: sequence?.code,
+                    sequenceName: sequence?.name,
                     shotCode: shot?.code,
+                    shotName: shot?.name,
                     roleCode: role?.code,
                     takeNumber: take_number || 1,
                     mediaType,
@@ -838,7 +844,9 @@ router.post('/import', async (req, res) => {
                         originalName,
                         projectCode: project.code,
                         sequenceCode: sequence?.code,
+                        sequenceName: sequence?.name,
                         shotCode: shot?.code,
+                        shotName: shot?.name,
                         roleCode: role?.code,
                         takeNumber: take_number || (i + 1),
                         customName: singles.length === 1 && !detectedSeqs.length ? custom_name : null,
@@ -872,7 +880,9 @@ router.post('/import', async (req, res) => {
                 const imported = FileService.importFile(filePath, {
                     projectCode: project.code,
                     sequenceCode: sequence?.code,
+                    sequenceName: sequence?.name,
                     shotCode: shot?.code,
+                    shotName: shot?.name,
                     roleCode: role?.code,
                     takeNumber: take_number || (i + 1),
                     customName: singles.length === 1 && !detectedSeqs.length ? custom_name : null,

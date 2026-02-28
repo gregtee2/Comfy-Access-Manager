@@ -33,10 +33,11 @@ try:
         glMatrixMode, glPushMatrix, glPopMatrix, glLoadIdentity,
         glEnable, glDisable, glBlendFunc, glColor4f,
         glBegin, glEnd, glVertex2f, glRasterPos2f, glLineWidth,
-        glBitmap, glPixelStorei,
+        glBitmap, glPixelStorei, glPixelZoom,
+        glDrawPixels,
         GL_PROJECTION, GL_MODELVIEW, GL_BLEND,
         GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_QUADS, GL_LINE_LOOP,
-        GL_UNPACK_ALIGNMENT,
+        GL_UNPACK_ALIGNMENT, GL_RGBA, GL_UNSIGNED_BYTE,
     )
     from OpenGL.GLU import gluOrtho2D
     _HAS_GL = True
@@ -51,7 +52,8 @@ try:
         QSplitter, QWidget, QMenu, QAction, QApplication,
         QListWidget, QListWidgetItem
     )
-    from PySide2.QtGui import QCursor, QFont, QColor, QBrush, QIcon
+    from PySide2.QtGui import (QCursor, QFont, QColor, QBrush, QIcon,
+                                QImage, QPainter, QFontMetrics)
     from PySide2.QtCore import Qt, QSize
     HAS_QT = True
 except ImportError:
@@ -63,7 +65,8 @@ except ImportError:
             QSplitter, QWidget, QMenu, QApplication,
             QListWidget, QListWidgetItem
         )
-        from PySide6.QtGui import QCursor, QAction, QFont, QColor, QBrush, QIcon
+        from PySide6.QtGui import (QCursor, QAction, QFont, QColor, QBrush, QIcon,
+                                    QImage, QPainter, QFontMetrics)
         from PySide6.QtCore import Qt, QSize
         HAS_QT = True
     except ImportError:
@@ -339,6 +342,159 @@ def _def_glyphs():
         _FONT_DATA[ord(ch)] = bytes(reversed(rows))
 
 _def_glyphs()
+
+# ── Scaled glyph cache for _glTextScaled ─────────────────────────
+# glPixelZoom does NOT affect glBitmap — only glDrawPixels/glCopyPixels.
+# So we must manually upscale each glyph's bitmap data before passing
+# it to glBitmap.  Cache avoids rebuilding on every frame.
+_SCALED_GLYPH_CACHE = {}   # (ord, scale) -> (bytes, width, height)
+
+def _scale_glyph(glyph, scale):
+    """Upscale a 8x7 bitmap glyph by integer factor for glBitmap.
+
+    Each source pixel becomes a scale x scale block in the output.
+    Returns (scaled_bytes, dst_width, dst_height).
+    """
+    src_w, src_h = 8, 7
+    dst_w = src_w * scale
+    dst_h = src_h * scale
+    row_bytes = (dst_w + 7) // 8          # bytes per row (alignment=1)
+    buf = bytearray(row_bytes * dst_h)
+
+    for src_row in range(src_h):
+        src_byte = glyph[src_row]          # 8 bits, MSB-left
+        # Expand bits horizontally: each bit -> 'scale' consecutive bits
+        expanded = bytearray(row_bytes)
+        for bit in range(src_w):
+            if src_byte & (0x80 >> bit):
+                for s in range(scale):
+                    dst_bit = bit * scale + s
+                    expanded[dst_bit >> 3] |= 0x80 >> (dst_bit & 7)
+        # Duplicate the expanded row 'scale' times vertically
+        for dup in range(scale):
+            dst_row = src_row * scale + dup
+            off = dst_row * row_bytes
+            buf[off:off + row_bytes] = expanded
+
+    return bytes(buf), dst_w, dst_h
+
+def _get_scaled_glyph(code, scale):
+    """Get a pre-scaled glyph, with caching."""
+    key = (code, scale)
+    cached = _SCALED_GLYPH_CACHE.get(key)
+    if cached is not None:
+        return cached
+    glyph = _FONT_DATA.get(code, _FONT_DATA.get(ord(' '), b'\x00' * 7))
+    result = _scale_glyph(glyph, scale)
+    _SCALED_GLYPH_CACHE[key] = result
+    return result
+
+
+# ── Qt-based TrueType text rendering for overlay ────────────────
+# Renders anti-aliased text to RGBA pixel bytes using QPainter,
+# then blits to screen via glDrawPixels. Falls back to bitmap font
+# if Qt is unavailable.
+_TEXT_RENDER_CACHE = {}      # (text, family, size, color_hex, opacity) -> (bytes, w, h)
+_TEXT_RENDER_CACHE_MAX = 200  # Max cached entries
+
+# Map CSS-like font family names to actual font names Qt understands
+_FONT_FAMILY_MAP = {
+    "monospace": "Consolas",
+    "sans-serif": "Arial",
+    "serif": "Times New Roman",
+}
+
+_HAS_QT_RENDER = False
+try:
+    # Verify we can actually create QImage (only works inside RV process)
+    _test_img = QImage(1, 1, QImage.Format_ARGB32)
+    _HAS_QT_RENDER = (_test_img.width() == 1)
+    del _test_img
+except Exception:
+    _HAS_QT_RENDER = False
+
+
+def _render_text_qt(text, font_family, font_size, color_hex, opacity):
+    """Render text to RGBA bytes using Qt QPainter.
+
+    Returns (pixel_bytes, width, height) or None on failure.
+    The pixel data is bottom-row-first (OpenGL convention).
+    """
+    if not _HAS_QT_RENDER:
+        return None
+    cache_key = (text, font_family, font_size, color_hex, opacity)
+    cached = _TEXT_RENDER_CACHE.get(cache_key)
+    if cached is not None:
+        return cached
+
+    try:
+        # Resolve font family
+        family = _FONT_FAMILY_MAP.get(font_family, font_family)
+        qfont = QFont(family, font_size)
+        qfont.setBold(True)
+        qfont.setStyleStrategy(QFont.PreferAntialias)
+
+        # Measure text
+        fm = QFontMetrics(qfont)
+        rect = fm.boundingRect(text)
+        # Add some padding to avoid clipping
+        tw = fm.horizontalAdvance(text) + 4
+        th = fm.height() + 4
+
+        if tw < 1 or th < 1:
+            return None
+
+        # Create transparent ARGB32 image
+        img = QImage(tw, th, QImage.Format_ARGB32)
+        img.fill(QColor(0, 0, 0, 0))
+
+        # Parse color
+        c = color_hex.lstrip("#")
+        r = int(c[0:2], 16)
+        g = int(c[2:4], 16)
+        b = int(c[4:6], 16)
+        a = int(float(opacity) * 255)
+        text_color = QColor(r, g, b, a)
+
+        # Paint text
+        painter = QPainter(img)
+        painter.setFont(qfont)
+        painter.setPen(text_color)
+        painter.drawText(2, fm.ascent() + 2, text)
+        painter.end()
+
+        # Convert QImage (top-down ARGB) to OpenGL (bottom-up RGBA)
+        # QImage format is ARGB32: each pixel = 0xAARRGGBB
+        ptr = img.constBits()
+        raw = bytes(ptr)
+        # Convert ARGB -> RGBA and flip vertically
+        rgba = bytearray(tw * th * 4)
+        for row in range(th):
+            src_row = row
+            dst_row = th - 1 - row  # flip
+            for col in range(tw):
+                si = (src_row * tw + col) * 4
+                di = (dst_row * tw + col) * 4
+                # ARGB -> RGBA: QImage stores as BGRA in memory on little-endian
+                rgba[di + 0] = raw[si + 2]  # R (from B position)
+                rgba[di + 1] = raw[si + 1]  # G
+                rgba[di + 2] = raw[si + 0]  # B (from R position)
+                rgba[di + 3] = raw[si + 3]  # A
+        result = (bytes(rgba), tw, th)
+
+        # Cache management
+        if len(_TEXT_RENDER_CACHE) >= _TEXT_RENDER_CACHE_MAX:
+            # Clear oldest half
+            keys = list(_TEXT_RENDER_CACHE.keys())
+            for k in keys[:len(keys) // 2]:
+                del _TEXT_RENDER_CACHE[k]
+        _TEXT_RENDER_CACHE[cache_key] = result
+        return result
+    except Exception as exc:
+        if not hasattr(_render_text_qt, '_warned'):
+            print("[MediaVault] Qt text render failed: %s" % exc)
+            _render_text_qt._warned = True
+        return None
 
 
 class AssetPickerDialog(QDialog):
@@ -664,12 +820,15 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         self._show_status      = True
         self._show_watermark   = False  # off by default (opt-in)
         self._show_comfyui     = False  # ComfyUI generation metadata
+        self._show_cam_overlay = False  # CAM overlay preset burn-in
         self._overlay_meta     = None   # cached API response
         self._overlay_path     = None   # path the cache belongs to
         self._overlay_tick     = 0      # frame counter for lazy refresh
         self._comfyui_meta     = None   # cached ComfyUI prompt data
         self._comfyui_path     = None   # path the ComfyUI cache belongs to
         self._comfyui_cache    = {}     # {norm_key: meta_dict | False}
+        self._cam_overlay_data = None   # cached preset-for-path response
+        self._cam_overlay_path = None   # path the CAM overlay cache belongs to
 
         # ── Compare / version cache ──────────────────────────────
         self._cached_data = None
@@ -780,6 +939,10 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 ("  Watermark", self._toggleWatermark, None,
                  lambda *args, **kwargs: rvc.CheckedMenuState if self._show_watermark
                          else rvc.UncheckedMenuState),
+                ("  CAM Overlay Preset", self._toggleCAMOverlay, None,
+                 lambda *args, **kwargs: rvc.CheckedMenuState if self._show_cam_overlay
+                         else rvc.UncheckedMenuState),
+                ("  Refresh CAM Overlay", self._refreshCAMOverlay, None, None),
                 ("_", None),
                 ("ComfyUI Metadata", self._toggleComfyUI, "shift+c",
                  lambda *args, **kwargs: rvc.CheckedMenuState if self._show_comfyui
@@ -1001,6 +1164,16 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                                            % normed)
                                 self._writeDiagLog(LOG)
                                 return normed
+                            # Check for RV sequence notation
+                            # (e.g. v2-20,22-35@@@.bmp)
+                            seq_resolved = self._resolveRVSequencePath(
+                                name, source_frame=frame)
+                            if seq_resolved:
+                                LOG.append(
+                                    "Strategy3 (seq notation): %s"
+                                    % seq_resolved)
+                                self._writeDiagLog(LOG)
+                                return seq_resolved
                         # Otherwise treat as node name (legacy)
                         media_path = self._readMediaMovie(name, LOG)
                         if media_path:
@@ -1083,10 +1256,12 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         LOG.append("  resolve: media='%s' frame=%d" % (media_path, frame))
 
         # --- Case A: RV sequence notation (@@@ or ###) ---
-        seq_m = re.search(r'(\d+)-(\d+)(@+|#+)(\.[\w]+)$', media_path)
-        if seq_m:
+        # Handles both simple (v025-62@@@.png) and complex
+        # (v2-20,22-35,37-40,42-49,51@@@.bmp) notation.
+        parsed = self._parseSeqNotation(media_path)
+        if parsed:
             resolved = self._resolveSequenceNotation(
-                media_path, seq_m, frame, source_node, fs, LOG)
+                media_path, parsed, frame, source_node, fs, LOG)
             if resolved:
                 return resolved
 
@@ -1128,10 +1303,14 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         return None
 
     @staticmethod
-    def _resolveSequenceNotation(media_path, match, frame, source_node,
+    def _resolveSequenceNotation(media_path, parsed, frame, source_node,
                                  global_start, LOG):
-        """Resolve RV sequence notation like prefix_v025-62@@@.png to a
-        specific file using frame range mapping.
+        """Resolve RV sequence notation to a specific file using frame
+        range mapping.
+
+        Accepts both simple (v025-62@@@.png) and complex
+        (v2-20,22-35,37-40,42-49,51@@@.bmp) notation via the
+        parsed tuple from _parseSeqNotation().
 
         CRITICAL INSIGHT (from diagnostic 2026-02-26):
           nodeRangeInfo(source) returns FILE-NATIVE numbers (e.g. [46,62])
@@ -1139,11 +1318,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
           We must use the global frameStart() (passed as global_start)
           to compute the offset: file_num = file_start + (frame - global_start)
         """
-        prefix = media_path[:match.start()]
-        file_start = int(match.group(1))
-        file_end = int(match.group(2))
-        padding = len(match.group(3))
-        ext = match.group(4)
+        prefix, file_start, file_end, padding, ext = parsed
 
         # Map global playback frame → file number
         # Global frame 1 → file_start, global frame 2 → file_start+1, etc.
@@ -1252,20 +1427,70 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         return None
 
     @staticmethod
+    def _parseSeqNotation(raw_path):
+        """Parse RV sequence notation into components.
+
+        Handles both simple and complex notations:
+          Simple:  prefix_v025-62@@@.png
+          Complex: prefix_v2-20,22-35,37-40,42-49,51@@@.bmp
+
+        Returns (prefix, file_start, file_end, padding, ext) or None.
+        """
+        # Find padding marker (@@@ or ###) and extension at end
+        pad_m = re.search(r'(@+|#+)(\.[\w]+)$', raw_path)
+        if not pad_m:
+            return None
+
+        padding = len(pad_m.group(1))
+        ext = pad_m.group(2)
+        before_padding = raw_path[:pad_m.start()]
+
+        # Split prefix from range spec by walking backwards.
+        # The range spec is the trailing block of digits, commas, and
+        # hyphens (e.g. "2-20,22-35,37-40,42-49,51").  The greedy
+        # regex approach fails because commas/hyphens in the range get
+        # consumed by the prefix group.
+        i = len(before_padding)
+        while i > 0 and before_padding[i - 1] in '0123456789,-':
+            i -= 1
+        if i == 0 or i == len(before_padding):
+            return None
+        prefix = before_padding[:i]
+        range_spec = before_padding[i:]
+
+        # Parse range bounds from spec like "2-20,22-35,51"
+        nums = []
+        for part in range_spec.split(','):
+            part = part.strip()
+            if '-' in part:
+                a, b = part.split('-', 1)
+                try:
+                    nums.extend([int(a), int(b)])
+                except ValueError:
+                    pass
+            elif part:
+                try:
+                    nums.append(int(part))
+                except ValueError:
+                    pass
+        if not nums:
+            return None
+        return (prefix, min(nums), max(nums), padding, ext)
+
+    @staticmethod
     def _resolveRVSequencePath(raw_path, source_frame=None):
         """Resolve RV sequence notation (@@@ or ###) to a file path.
+
+        Handles both simple (v025-62@@@.png) and complex
+        (v2-20,22-35,37-40,42-49,51@@@.bmp) notation.
 
         Kept as a utility for _pathFromSourceGroup and other callers.
         The main resolution path now goes through _resolveMediaPath.
         """
-        m = re.search(r'(\d+)-(\d+)(@+|#+)(\.[\w]+)$', raw_path)
-        if not m:
+        parsed = MediaVaultMode._parseSeqNotation(raw_path)
+        if not parsed:
             return None
-        prefix = raw_path[:m.start()]
-        start_frame = int(m.group(1))
-        end_frame = int(m.group(2))
-        padding = len(m.group(3))
-        ext = m.group(4)
+        prefix, start_frame, end_frame, padding, ext = parsed
 
         frames_to_try = []
         if source_frame is not None:
@@ -2140,6 +2365,29 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             self._overlay_enabled = True
         rve.displayFeedback(
             "Watermark: %s" % ("ON" if self._show_watermark else "OFF"), 1.5)
+
+    def _toggleCAMOverlay(self, event):
+        self._show_cam_overlay = not self._show_cam_overlay
+        print("[MediaVault] CAM Overlay toggled: %s" % self._show_cam_overlay)
+        if self._show_cam_overlay and not self._overlay_enabled:
+            self._overlay_enabled = True
+            self._refreshOverlayMeta()
+        if self._show_cam_overlay:
+            # Always force re-fetch so preset edits in CAM UI are picked up
+            print("[MediaVault] CAM Overlay: force-fetching latest preset...")
+            self._cam_draw_logged = False   # reset one-time log
+            self._cam_draw_warn  = False
+            self._fetchCAMOverlay(force=True)
+        rve.displayFeedback(
+            "CAM Overlay: %s" % ("ON" if self._show_cam_overlay else "OFF"), 1.5)
+
+    def _refreshCAMOverlay(self, event):
+        """Force re-fetch CAM overlay preset from server (picks up UI edits)."""
+        print("[MediaVault] CAM Overlay: manual refresh requested")
+        self._cam_draw_logged = False
+        self._cam_draw_warn  = False
+        self._fetchCAMOverlay(force=True)
+        rve.displayFeedback("CAM Overlay refreshed", 1.5)
 
     def _toggleComfyUI(self, event):
         self._show_comfyui = not self._show_comfyui
@@ -3097,6 +3345,64 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         else:
             print("[MediaVault] ComfyUI: no metadata extracted")
 
+    # ── CAM overlay preset fetch ───────────────────────────────
+
+    def _fetchCAMOverlay(self, filepath=None, force=False):
+        """Fetch the overlay preset config + hierarchy data from CAM server.
+
+        Args:
+            filepath: Source file path (None = auto-detect current source)
+            force: If True, bypass cache and always re-fetch from server
+        """
+        if filepath is None:
+            filepath = self._getCurrentSourcePath()
+        if not filepath:
+            print("[MediaVault] CAM Overlay fetch: no source path available")
+            self._cam_overlay_data = None
+            return
+
+        # Already cached for this path (skip if force=True)
+        if (not force
+                and self._normKey(filepath) == self._normKey(self._cam_overlay_path)
+                and self._cam_overlay_data):
+            print("[MediaVault] CAM Overlay fetch: using cache for %s" %
+                  os.path.basename(filepath))
+            return
+
+        if urllib is None:
+            print("[MediaVault] CAM Overlay fetch: urllib not available")
+            self._cam_overlay_data = None
+            self._cam_overlay_path = filepath
+            return
+
+        try:
+            encoded = urllib.parse.quote(filepath, safe="")
+            url = "%s/api/overlay/preset-for-path?path=%s" % (DMV_URL, encoded)
+            print("[MediaVault] CAM Overlay fetch: GET %s" %
+                  url[:120])
+            req = urllib.request.Request(url, headers={"Accept": "application/json"})
+            with urllib.request.urlopen(req, timeout=3) as resp:
+                raw = resp.read().decode("utf-8")
+                data = json.loads(raw)
+                if data.get("found") and data.get("preset"):
+                    preset = data["preset"]
+                    elems = preset.get("config", {}).get("elements", [])
+                    print("[MediaVault] CAM Overlay fetch: OK — preset '%s' "
+                          "with %d element(s)" %
+                          (preset.get("name", "?"), len(elems)))
+                    self._cam_overlay_data = data
+                else:
+                    print("[MediaVault] CAM Overlay fetch: asset %s — "
+                          "found=%s, preset=%s" %
+                          ("found" if data.get("found") else "NOT found",
+                           data.get("found"), data.get("preset") is not None))
+                    self._cam_overlay_data = None
+                self._cam_overlay_path = filepath
+        except Exception as e:
+            print("[MediaVault] CAM Overlay fetch error: %s" % e)
+            self._cam_overlay_data = None
+            self._cam_overlay_path = filepath
+
     # ── overlay metadata fetch ───────────────────────────────────
 
     def _refreshOverlayMeta(self, filepath=None):
@@ -3130,6 +3436,9 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             print("[MediaVault] Overlay fetch error: %s" % e)
             self._overlay_meta = {"vault_name": os.path.basename(filepath)}
             self._overlay_path = filepath
+
+        # Also pre-fetch CAM overlay preset for this source
+        self._fetchCAMOverlay(filepath)
 
     # ── overlay GL rendering ─────────────────────────────────────
 
@@ -3174,6 +3483,8 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 self._drawStatusStamp(w, h)
             if self._show_watermark:
                 self._drawWatermarkText(w, h)
+            if self._show_cam_overlay:
+                self._drawCAMOverlay(w, h)
             if self._show_comfyui:
                 self._drawComfyUIOverlay(w, h)
 
@@ -3316,6 +3627,223 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         tw2 = self._textW(text2)
         tx2 = (w - tw2) // 2
         self._glText(tx2, ty - 20, text2)
+
+    # ── CAM Overlay Preset (user-defined burn-in) ────────────────
+
+    def _drawCAMOverlay(self, w, h):
+        """Render overlay elements from a CAM overlay preset.
+
+        Each element has: type, anchor, offsetX, offsetY, fontSize,
+        fontColor, fontOpacity, bgEnabled, bgColor, bgOpacity, bgPadding.
+        """
+        data = self._cam_overlay_data
+        if not data:
+            if not hasattr(self, '_cam_draw_warn'):
+                print("[MediaVault] _drawCAMOverlay: no data — skipping")
+                self._cam_draw_warn = True
+            return
+        preset = data.get("preset")
+        hierarchy = data.get("hierarchy", {})
+        if not preset:
+            return
+        config = preset.get("config", {})
+        elements = config.get("elements", [])
+        if not elements:
+            return
+
+        if not hasattr(self, '_cam_draw_logged'):
+            print("[MediaVault] _drawCAMOverlay: drawing %d element(s) "
+                  "at %dx%d" % (len(elements), w, h))
+            self._cam_draw_logged = True
+
+        # Current frame for dynamic elements
+        frame_str = "0001"
+        try:
+            frame_str = "%04d" % rvc.frame()
+        except Exception:
+            pass
+
+        # ── viewport-relative scaling ──
+        # All sizes are authored for a 1080p reference viewport.
+        # Scale proportionally so the overlay looks identical regardless
+        # of whether the RV window is 540px or 2160px tall.
+        REF_HEIGHT = 1080.0
+        vp_scale = h / REF_HEIGHT
+
+        for elem in elements:
+            if not elem.get("enabled", True):
+                continue
+
+            # ── resolve text ──
+            etype = elem.get("type", "custom")
+            text = self._resolveOverlayText(etype, elem, hierarchy, frame_str)
+            if not text:
+                continue
+
+            # ── font properties ──
+            font_size = elem.get("fontSize", 16)
+            font_family = elem.get("fontFamily", "monospace")
+            font_color_hex = elem.get("fontColor", "#ffffff")
+            font_opacity = elem.get("fontOpacity", 1.0)
+            font_color = self._hexToGL(font_color_hex, font_opacity)
+            bg_color = self._hexToGL(elem.get("bgColor", "#000000"),
+                                      elem.get("bgOpacity", 0.55))
+            bg_enabled = elem.get("bgEnabled", True)
+
+            # Compute actual pixel size for this viewport
+            font_size_px = max(8, int(round(font_size * vp_scale)))
+
+            # Try Qt TrueType rendering first (anti-aliased, real fonts)
+            qt_result = _render_text_qt(text, font_family, font_size_px,
+                                        font_color_hex, font_opacity)
+            if qt_result:
+                qt_bytes, tw, th = qt_result
+                use_qt = True
+                scale = 1  # not used, but define for bg_padding
+            else:
+                # Fall back to bitmap font
+                scale = max(1, int(round((font_size / 14.0) * vp_scale)))
+                char_w = _GLYPH_W * scale
+                char_h = _GLYPH_H * scale
+                tw = len(text) * char_w
+                th = char_h
+                use_qt = False
+
+            bg_padding = max(2, int(elem.get("bgPadding", 8) * vp_scale))
+
+            # ── anchor → pixel position (offsets scaled to viewport) ──
+            anchor = elem.get("anchor", "bottom-left")
+            ox = int(elem.get("offsetX", 0) * vp_scale)
+            oy = int(elem.get("offsetY", 0) * vp_scale)
+
+            tx, ty = self._anchorToGL(anchor, w, h, tw, th,
+                                       bg_padding, ox, oy,
+                                       vp_scale=vp_scale)
+
+            # ── draw background ──
+            if bg_enabled:
+                bw = tw + bg_padding * 2
+                bh = th + bg_padding * 2
+                self._box(tx - bg_padding, ty - bg_padding, bw, bh, bg_color)
+
+            # ── draw text ──
+            if use_qt:
+                # Blit pre-rendered RGBA text via glDrawPixels
+                glRasterPos2f(float(int(tx)), float(int(ty)))
+                glDrawPixels(tw, th, GL_RGBA, GL_UNSIGNED_BYTE, qt_bytes)
+            else:
+                glColor4f(*font_color)
+                if scale <= 1:
+                    self._glText(int(tx), int(ty), text)
+                else:
+                    self._glTextScaled(int(tx), int(ty), text, scale)
+
+    @staticmethod
+    def _resolveOverlayText(etype, elem, hierarchy, frame_str):
+        """Convert element type to display text using hierarchy data."""
+        if etype == "shot_name":
+            return hierarchy.get("shot_name", "")
+        elif etype == "sequence_name":
+            return hierarchy.get("sequence_name", "")
+        elif etype == "project_name":
+            return hierarchy.get("project_name", "")
+        elif etype == "role":
+            return hierarchy.get("role", "")
+        elif etype == "frame_number":
+            return frame_str
+        elif etype == "timecode":
+            # Approximate timecode from frame at 24fps
+            try:
+                f = int(frame_str)
+                fps = 24
+                hh = f // (fps * 3600)
+                mm = (f % (fps * 3600)) // (fps * 60)
+                ss = (f % (fps * 60)) // fps
+                ff = f % fps
+                return "%02d:%02d:%02d:%02d" % (hh, mm, ss, ff)
+            except Exception:
+                return "00:00:00:00"
+        elif etype == "date":
+            return hierarchy.get("date", "")
+        elif etype == "filename":
+            return hierarchy.get("filename", "")
+        elif etype == "shot_and_frame":
+            shot = hierarchy.get("shot_name", "")
+            return "%s  %s" % (shot, frame_str) if shot else frame_str
+        elif etype == "custom":
+            return elem.get("text", "")
+        else:
+            return elem.get("text", etype)
+
+    @staticmethod
+    def _anchorToGL(anchor, w, h, tw, th, padding, ox, oy, vp_scale=1.0):
+        """Convert anchor name + offsets to OpenGL pixel coords.
+
+        OpenGL origin is bottom-left. Canvas editor origin is top-left.
+        oy from the editor means distance from edge inward, so we invert
+        for top anchors.  margin + transport bar offset are scaled by
+        vp_scale so spacing stays proportional to the viewport.
+        """
+        margin = int(15 * vp_scale)          # base margin from viewport edge
+        transport = int(40 * vp_scale)       # clear RV transport bar
+
+        if anchor == "top-left":
+            x = margin + ox
+            y = h - margin - th - oy
+        elif anchor == "top-center":
+            x = (w - tw) // 2 + ox
+            y = h - margin - th - oy
+        elif anchor == "top-right":
+            x = w - margin - tw - ox
+            y = h - margin - th - oy
+        elif anchor == "bottom-left":
+            x = margin + ox
+            y = margin + oy + transport
+        elif anchor == "bottom-center":
+            x = (w - tw) // 2 + ox
+            y = margin + oy + transport
+        elif anchor == "bottom-right":
+            x = w - margin - tw - ox
+            y = margin + oy + transport
+        elif anchor == "center":
+            x = (w - tw) // 2 + ox
+            y = (h - th) // 2 - oy
+        else:
+            x = margin + ox
+            y = margin + oy + transport
+
+        return x, y
+
+    @staticmethod
+    def _hexToGL(hex_str, opacity=1.0):
+        """Convert '#RRGGBB' hex string to OpenGL (r, g, b, a) tuple."""
+        try:
+            c = hex_str.lstrip("#")
+            r = int(c[0:2], 16) / 255.0
+            g = int(c[2:4], 16) / 255.0
+            b = int(c[4:6], 16) / 255.0
+            return (r, g, b, float(opacity))
+        except Exception:
+            return (1.0, 1.0, 1.0, float(opacity))
+
+    @staticmethod
+    def _glTextScaled(x, y, text, scale):
+        """Render text using pre-scaled bitmap glyphs.
+
+        glPixelZoom does NOT affect glBitmap (only glDrawPixels/
+        glCopyPixels), so we manually expand each glyph's bitmap
+        data to (8*scale) x (7*scale) pixels before rendering."""
+        if not _HAS_GL or not text:
+            return
+        try:
+            glPixelStorei(GL_UNPACK_ALIGNMENT, 1)
+            glRasterPos2f(float(x), float(y))
+            advance = float(_GLYPH_W * scale)
+            for ch in text:
+                data, gw, gh = _get_scaled_glyph(ord(ch), scale)
+                glBitmap(gw, gh, 0.0, 0.0, advance, 0.0, data)
+        except Exception:
+            pass
 
     # ── ComfyUI metadata overlay (top-left) ──────────────────────
 

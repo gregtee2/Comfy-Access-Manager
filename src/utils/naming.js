@@ -65,7 +65,9 @@ function generateVaultName(params) {
         originalName,
         projectCode,
         sequenceCode,
+        sequenceName,
         shotCode,
+        shotName,
         roleCode,
         takeNumber = 1,
         version = 1,
@@ -105,8 +107,8 @@ function generateVaultName(params) {
 
     const tokens = {
         project: projectCode || 'UNSET',
-        sequence: sequenceCode || '',
-        shot: shotCode || '',
+        sequence: sequenceName || sequenceCode || '',
+        shot: shotName || shotCode || '',
         step: roleCode ? roleCode.toLowerCase() : '',
         role: roleCode ? roleCode.toLowerCase() : '',   // alias for {step}
         take: `T${String(takeNumber).padStart(2, '0')}`,

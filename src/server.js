@@ -75,6 +75,7 @@ const updateRoutes = require('./routes/updateRoutes');
 const serverRoutes = require('./routes/serverRoutes');
 const userRoutes = require('./routes/userRoutes');
 const crateRoutes = require('./routes/crateRoutes');
+const overlayRoutes = require('./routes/overlayRoutes');
 const DiscoveryService = require('./services/DiscoveryService');
 
 app.use('/api/projects', projectRoutes);
@@ -87,6 +88,7 @@ app.use('/api/update', updateRoutes);
 app.use('/api/servers', serverRoutes);
 app.use('/api/users', userRoutes);
 app.use('/api/crates', crateRoutes);
+app.use('/api/overlay', overlayRoutes);
 
 // ─── Load Plugins + SPA Fallback (registered inside start() to ensure order) ───
 // Plugin loader, SPA fallback, and error handler are registered in start()

@@ -42,7 +42,9 @@ class FileService {
      * @param {object} opts
      * @param {string} opts.projectCode - Project code
      * @param {string} [opts.sequenceCode] - Sequence code
+     * @param {string} [opts.sequenceName] - Sequence name (user-facing)
      * @param {string} [opts.shotCode] - Shot code
+     * @param {string} [opts.shotName] - Shot name (user-facing)
      * @param {number} [opts.takeNumber] - Take number
      * @param {string} [opts.customName] - Custom name override
      * @param {string} [opts.template] - Naming template
@@ -75,11 +77,14 @@ class FileService {
             // SHOTGRID_FULL  = {shot}_{step}_v{version}  → pattern: "EDA1500_ai_v"
             // SHOTGRID_SEQ   = {sequence}_{step}_v{version} → pattern: "EDA_ai_v"
             // SHOTGRID_PROJ  = {project}_{step}_v{version} → pattern: "AP1_ai_v"
+            // Use the same shot/sequence identifier that will appear in the filename
+            const shotToken = opts.shotName || opts.shotCode;
+            const seqToken = opts.sequenceName || opts.sequenceCode;
             let basePattern;
             if (opts.sequenceCode && opts.shotCode) {
-                basePattern = `${opts.shotCode}_${opts.roleCode.toLowerCase()}_v`;
+                basePattern = `${shotToken}_${opts.roleCode.toLowerCase()}_v`;
             } else if (opts.sequenceCode) {
-                basePattern = `${opts.sequenceCode}_${opts.roleCode.toLowerCase()}_v`;
+                basePattern = `${seqToken}_${opts.roleCode.toLowerCase()}_v`;
             } else {
                 basePattern = `${opts.projectCode}_${opts.roleCode.toLowerCase()}_v`;
             }
@@ -101,7 +106,9 @@ class FileService {
                 originalName,
                 projectCode: opts.projectCode,
                 sequenceCode: opts.sequenceCode,
+                sequenceName: opts.sequenceName,
                 shotCode: opts.shotCode,
+                shotName: opts.shotName,
                 roleCode: opts.roleCode,
                 takeNumber: opts.takeNumber,
                 version,
@@ -172,12 +179,15 @@ class FileService {
         this.ensureDir(vaultDir);
 
         // Build basePattern matching the actual filename template (same logic as importFile)
+        // Use names (not codes) since filenames use names
+        const shotToken = opts.shotName || opts.shotCode;
+        const seqToken = opts.sequenceName || opts.sequenceCode;
         let basePattern = '';
         if (opts.roleCode) {
             if (opts.sequenceCode && opts.shotCode) {
-                basePattern = `${opts.shotCode}_${opts.roleCode.toLowerCase()}_v`;
+                basePattern = `${shotToken}_${opts.roleCode.toLowerCase()}_v`;
             } else if (opts.sequenceCode) {
-                basePattern = `${opts.sequenceCode}_${opts.roleCode.toLowerCase()}_v`;
+                basePattern = `${seqToken}_${opts.roleCode.toLowerCase()}_v`;
             } else {
                 basePattern = `${opts.projectCode}_${opts.roleCode.toLowerCase()}_v`;
             }
@@ -188,7 +198,9 @@ class FileService {
             originalName,
             projectCode: opts.projectCode,
             sequenceCode: opts.sequenceCode,
+            sequenceName: opts.sequenceName,
             shotCode: opts.shotCode,
+            shotName: opts.shotName,
             roleCode: opts.roleCode,
             takeNumber: opts.takeNumber,
             version,

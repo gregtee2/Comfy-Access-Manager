@@ -491,6 +491,45 @@ label {
     flex-direction: column;
     gap: 3px;
 }
+
+/* ── Overlay Presets (Edit-Project modal) ── */
+.ep-overlay-list {
+    display: flex;
+    flex-direction: column;
+    gap: 3px;
+}
+.ep-overlay-item {
+    display: flex;
+    align-items: center;
+    gap: 8px;
+    padding: 5px 8px;
+    background: var(--bg-card);
+    border-radius: 3px;
+    font-size: 0.8rem;
+}
+.ep-overlay-name { flex: 1; font-weight: 500; }
+.ep-overlay-count { color: var(--text-muted); font-size: 0.72rem; margin-right: 4px; }
+.ep-overlay-empty { color: var(--text-muted); font-size: 0.78rem; padding: 4px 0; }
+.ep-badge {
+    display: inline-block;
+    font-size: 0.62rem;
+    padding: 1px 5px;
+    border-radius: 3px;
+    background: #444;
+    color: #ccc;
+    vertical-align: middle;
+    margin-left: 4px;
+}
+.btn-danger-sm {
+    background: transparent;
+    color: #d44;
+    border: 1px solid #d44;
+    font-size: 0.7rem;
+    padding: 1px 6px;
+    border-radius: 3px;
+    cursor: pointer;
+}
+.btn-danger-sm:hover { background: #d44; color: #fff; }
 .ep-seq-item {
     display: flex;
     align-items: center;
@@ -2594,6 +2633,281 @@ label:has(input[type="checkbox"]) {
     white-space: nowrap;
     overflow: hidden;
     text-overflow: ellipsis;
+}
+
+/* ===========================================
+   OVERLAY EDITOR MODAL
+   =========================================== */
+
+.overlay-editor-backdrop {
+    position: fixed;
+    inset: 0;
+    background: rgba(0, 0, 0, 0.8);
+    z-index: 11000;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    opacity: 0;
+    transition: opacity 0.25s ease;
+}
+.overlay-editor-backdrop.visible { opacity: 1; }
+
+.overlay-editor-modal {
+    background: var(--bg-dark, #1a1a1a);
+    border: 1px solid var(--border, #333);
+    border-radius: 8px;
+    width: 90vw;
+    max-width: 1200px;
+    height: 85vh;
+    max-height: 800px;
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+    box-shadow: 0 12px 48px rgba(0,0,0,0.6);
+}
+
+.overlay-editor-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 12px 18px;
+    border-bottom: 1px solid var(--border, #333);
+}
+.overlay-editor-header h3 {
+    margin: 0;
+    font-size: 1.05rem;
+    color: var(--text-primary, #ddd);
+}
+.overlay-editor-close {
+    background: none;
+    border: none;
+    color: var(--text-muted, #888);
+    font-size: 1.5rem;
+    cursor: pointer;
+    padding: 0 6px;
+    line-height: 1;
+}
+.overlay-editor-close:hover { color: #fff; }
+
+.overlay-editor-body {
+    display: flex;
+    flex: 1;
+    overflow: hidden;
+}
+
+/* Preview panel (left) */
+.overlay-editor-preview {
+    flex: 1;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    padding: 18px;
+    background: #111;
+    min-width: 0;
+}
+.overlay-canvas-wrap {
+    position: relative;
+    max-width: 100%;
+}
+.overlay-canvas-wrap canvas {
+    display: block;
+    border: 1px solid #444;
+    border-radius: 4px;
+    max-width: 100%;
+    height: auto;
+}
+.overlay-canvas-res {
+    position: absolute;
+    bottom: 8px;
+    left: 8px;
+    font-size: 0.7rem;
+    color: #999;
+    background: rgba(0,0,0,0.6);
+    padding: 2px 6px;
+    border-radius: 3px;
+    pointer-events: none;
+}
+
+/* Controls panel (right) */
+.overlay-editor-controls {
+    width: 320px;
+    min-width: 280px;
+    border-left: 1px solid var(--border, #333);
+    display: flex;
+    flex-direction: column;
+    overflow: hidden;
+}
+
+.overlay-preset-bar {
+    display: flex;
+    align-items: center;
+    gap: 4px;
+    padding: 10px 12px;
+    border-bottom: 1px solid var(--border, #333);
+    flex-wrap: wrap;
+}
+.overlay-preset-bar label {
+    font-size: 0.78rem;
+    color: var(--text-muted, #888);
+    margin-right: 2px;
+}
+.overlay-preset-bar select {
+    flex: 1;
+    min-width: 80px;
+    background: var(--bg-input, #2a2a2a);
+    color: var(--text-primary, #ddd);
+    border: 1px solid var(--border, #444);
+    border-radius: 4px;
+    padding: 4px 6px;
+    font-size: 0.8rem;
+}
+
+.overlay-btn-sm {
+    background: var(--bg-hover, #333);
+    color: var(--text-primary, #ccc);
+    border: 1px solid var(--border, #444);
+    border-radius: 4px;
+    padding: 3px 8px;
+    font-size: 0.75rem;
+    cursor: pointer;
+    white-space: nowrap;
+}
+.overlay-btn-sm:hover { background: #444; color: #fff; }
+.overlay-btn-danger { color: #e57373; }
+.overlay-btn-danger:hover { background: #4a2020; color: #ff8a8a; }
+.overlay-btn-add { color: #81c784; }
+.overlay-btn-add:hover { background: #1b3a1b; color: #a5d6a7; }
+
+.overlay-elements-header {
+    display: flex;
+    align-items: center;
+    justify-content: space-between;
+    padding: 8px 12px;
+    font-size: 0.82rem;
+    color: var(--text-muted, #999);
+    border-bottom: 1px solid var(--border, #333);
+}
+
+.overlay-elements-list {
+    flex: 1;
+    overflow-y: auto;
+    padding: 8px;
+}
+
+.overlay-empty {
+    text-align: center;
+    padding: 30px 10px;
+    color: var(--text-muted, #666);
+    font-size: 0.82rem;
+}
+
+/* Element card */
+.overlay-element-card {
+    background: var(--bg-card, #222);
+    border: 1px solid var(--border, #333);
+    border-radius: 6px;
+    margin-bottom: 8px;
+    overflow: hidden;
+}
+.overlay-element-card.disabled {
+    opacity: 0.5;
+}
+
+.overlay-element-header {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    padding: 6px 8px;
+    background: var(--bg-hover, #2a2a2a);
+    border-bottom: 1px solid var(--border, #333);
+}
+.overlay-element-toggle input[type="checkbox"] {
+    margin: 0;
+    cursor: pointer;
+}
+.overlay-element-title {
+    flex: 1;
+    font-size: 0.8rem;
+    font-weight: 500;
+    color: var(--text-primary, #ddd);
+}
+
+.overlay-element-body {
+    padding: 8px;
+}
+.overlay-ctrl-row {
+    margin-bottom: 6px;
+}
+.overlay-ctrl-row > label {
+    display: block;
+    font-size: 0.72rem;
+    color: var(--text-muted, #888);
+    margin-bottom: 2px;
+}
+.overlay-ctrl-row select,
+.overlay-ctrl-row input[type="text"],
+.overlay-ctrl-row input[type="number"] {
+    width: 100%;
+    background: var(--bg-input, #1e1e1e);
+    color: var(--text-primary, #ddd);
+    border: 1px solid var(--border, #444);
+    border-radius: 3px;
+    padding: 4px 6px;
+    font-size: 0.78rem;
+    box-sizing: border-box;
+}
+.overlay-ctrl-row input[type="range"] {
+    width: calc(100% - 36px);
+    vertical-align: middle;
+}
+.overlay-range-val {
+    display: inline-block;
+    width: 28px;
+    text-align: right;
+    font-size: 0.72rem;
+    color: var(--text-muted, #999);
+    margin-left: 4px;
+}
+.overlay-ctrl-row input[type="color"] {
+    width: 32px;
+    height: 24px;
+    border: 1px solid var(--border, #444);
+    border-radius: 3px;
+    padding: 0;
+    cursor: pointer;
+    background: none;
+}
+.overlay-ctrl-inline {
+    display: flex;
+    gap: 8px;
+}
+.overlay-ctrl-inline > div {
+    flex: 1;
+}
+.overlay-ctrl-inline > div input[type="number"] {
+    width: 100%;
+}
+
+.overlay-bg-section label {
+    display: flex;
+    align-items: center;
+    gap: 6px;
+    font-size: 0.78rem;
+    color: var(--text-primary, #ccc);
+    cursor: pointer;
+}
+.overlay-bg-controls {
+    margin-top: 4px;
+}
+
+/* Footer */
+.overlay-editor-footer {
+    display: flex;
+    align-items: center;
+    justify-content: flex-end;
+    gap: 8px;
+    padding: 10px 18px;
+    border-top: 1px solid var(--border, #333);
 }
 
 /* ===========================================

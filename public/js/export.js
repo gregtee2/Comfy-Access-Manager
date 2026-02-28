@@ -14,6 +14,7 @@
 import { state } from './state.js';
 import { api } from './api.js';
 import { esc, showToast, closeModal } from './utils.js';
+import { showOverlayEditor } from './overlayEditor.js';
 
 // Cache presets after first load
 let presetCache = null;
@@ -145,6 +146,24 @@ export async function showExportModal(singleId = null) {
                 <input type="text" id="exportDest" placeholder="Leave empty -> vault/exports/ folder" value="">
                 <button class="btn-browse" onclick="browseExportDest()" title="Browse..."></button>
             </div>
+
+            <div class="export-overlay-section">
+                <label style="display:flex;align-items:center;gap:8px;cursor:pointer">
+                    <input type="checkbox" id="exportOverlayEnabled" onchange="toggleOverlaySection()">
+                    Text Overlay (Burn-in)
+                </label>
+                <div id="exportOverlayControls" style="display:none;margin-top:8px">
+                    <div style="display:flex;align-items:center;gap:8px">
+                        <select id="exportOverlayPreset" style="flex:1">
+                            <option value="">-- No preset --</option>
+                        </select>
+                        <button class="btn-browse" onclick="editOverlayPreset()" title="Edit Overlay" style="padding:4px 10px;font-size:12px">Edit</button>
+                    </div>
+                    <div class="export-overlay-hint" style="font-size:11px;color:#888;margin-top:4px">
+                        Select a preset or click Edit to create one. Overlays burn text (shot name, frame number, timecode, etc.) onto exported frames.
+                    </div>
+                </div>
+            </div>
         </div>
 
         <div class="form-actions" style="margin-top:20px">
@@ -161,6 +180,7 @@ export async function showExportModal(singleId = null) {
 
     document.getElementById('modal').style.display = 'flex';
     updateExportPreview();
+    loadOverlayPresets();
 }
 
 // ===========================================
@@ -235,6 +255,60 @@ function browseExportDest() {
 }
 
 // ===========================================
+//  OVERLAY HELPERS
+// ===========================================
+
+async function loadOverlayPresets() {
+    try {
+        const presets = await api('/api/overlay/presets');
+        const sel = document.getElementById('exportOverlayPreset');
+        if (!sel) return;
+        sel.innerHTML = '<option value="">-- No preset --</option>';
+        presets.forEach(p => {
+            const opt = document.createElement('option');
+            opt.value = p.id;
+            opt.textContent = p.name;
+            sel.appendChild(opt);
+        });
+    } catch (e) {
+        console.warn('Failed to load overlay presets:', e.message);
+    }
+}
+
+function toggleOverlaySection() {
+    const enabled = document.getElementById('exportOverlayEnabled')?.checked;
+    const controls = document.getElementById('exportOverlayControls');
+    if (controls) controls.style.display = enabled ? 'block' : 'none';
+}
+
+function editOverlayPreset() {
+    const btn = document.getElementById('exportStartBtn');
+    const ids = JSON.parse(btn?.dataset.assetIds || '[]');
+    const assetId = ids[0];
+    if (!assetId) return;
+
+    const sel = document.getElementById('exportOverlayPreset');
+    const currentPresetId = sel?.value ? parseInt(sel.value, 10) : null;
+
+    showOverlayEditor(assetId, currentPresetId, (resultPresetId) => {
+        // Reload presets and select the one returned
+        loadOverlayPresets().then(() => {
+            if (resultPresetId && sel) {
+                sel.value = String(resultPresetId);
+            }
+        });
+        // Auto-check the overlay toggle if a preset was selected
+        if (resultPresetId) {
+            const cb = document.getElementById('exportOverlayEnabled');
+            if (cb && !cb.checked) {
+                cb.checked = true;
+                toggleOverlaySection();
+            }
+        }
+    });
+}
+
+// ===========================================
 //  EXECUTE EXPORT
 // ===========================================
 
@@ -246,6 +320,11 @@ async function executeExport() {
     const outputName = document.getElementById('exportName').value.trim();
     const destination = document.getElementById('exportDest').value.trim() || undefined;
 
+    // Overlay preset (only if enabled and selected)
+    const overlayEnabled = document.getElementById('exportOverlayEnabled')?.checked;
+    const overlayPresetSel = document.getElementById('exportOverlayPreset');
+    const overlayPresetId = (overlayEnabled && overlayPresetSel?.value) ? parseInt(overlayPresetSel.value, 10) : undefined;
+
     if (ids.length === 0) return;
 
     // Disable button during export
@@ -255,7 +334,7 @@ async function executeExport() {
     try {
         const result = await api('/api/export/start', {
             method: 'POST',
-            body: { assetIds: ids, resolution, codec, outputName, destination },
+            body: { assetIds: ids, resolution, codec, outputName, destination, overlayPresetId },
         });
 
         closeModal();
@@ -367,4 +446,6 @@ window.executeExport = executeExport;
 window.updateExportPreview = updateExportPreview;
 window.insertExportToken = insertExportToken;
 window.browseExportDest = browseExportDest;
+window.toggleOverlaySection = toggleOverlaySection;
+window.editOverlayPreset = editOverlayPreset;
 

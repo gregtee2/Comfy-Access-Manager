@@ -2,6 +2,26 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.5.5] - 2026-02-28
+
+### Added
+- **Overlay Burn-in System** — Full WYSIWYG overlay editor for creating text burn-in presets. Place elements (shot name, frame number, timecode, date, sequence, role, custom text) anywhere on a live canvas preview with configurable font size, color, and opacity. Presets are saved to the database and reusable across exports.
+  - New files: `overlayEditor.js` (673 lines), `overlayRoutes.js` (473 lines)
+  - New `overlay_presets` table in database
+  - Overlay preset management section in Edit Project modal
+- **Export with overlay burn-in** — Export modal now has a "Text Overlay (Burn-in)" checkbox. Select a saved preset or launch the editor to create one. Backend generates FFmpeg drawtext filter chains and combines them with scale filters for both video and image sequence outputs. GPU and CPU codec paths both support overlays.
+- **RV plugin: CAM Overlay rendering** — The OpenRV plugin can now fetch and render overlay presets from the CAM server directly in the RV viewport using OpenGL. New menu items: "CAM Overlay Preset" (toggle) and "Refresh CAM Overlay". Matches export burn-in appearance during live review.
+- **RV plugin: Qt TrueType text rendering** — Replaced the old 5x7 bitmap font with anti-aliased TrueType text via QPainter for overlay rendering. Supports configurable font family, size, color, and opacity. Falls back to scaled bitmap glyphs when Qt is unavailable.
+- **EXR thumbnail support** — `.exr` files now generate thumbnails via sharp with automatic FFmpeg fallback for unsupported formats.
+- **Retroactive shot name migration** — New `scripts/fix_shot_names.js` utility renames existing assets from shot-code-based names (e.g., `SH010_comfyui_v001.mp4`) to shot-name-based names (e.g., `Risque_comfyui_v001.mp4`). Updates vault_name, file_path, and relative_path in the database and renames files on disk. Supports dry-run mode.
+
+### Fixed
+- **Shot names in vault filenames** — `generateVaultName()` now uses the user-given shot name (e.g., "Risque", "2003_Photo_Shoot") instead of the auto-generated code (e.g., "SH010", "2003PHOT") when building asset filenames. Same fix applied to sequence names. Affects all import paths: normal import, ComfyUI save, and copy operations.
+  - Files changed: `naming.js`, `FileService.js`, `assetRoutes.js`, `import.js`
+- **Import preview names** — The rename preview in the Import tab now correctly shows shot/sequence names (not codes) by reading `data-name` attributes on dropdown options instead of parsing text content.
+- **Cross-platform path lookups** — `getAllPathVariants()` now generates backslash (`\`) versions of every path variant, fixing DB lookups on Windows where assets may be stored with either separator style.
+- **Sharp thumbnail fallback** — Image thumbnail generation now catches sharp errors (e.g., unsupported BMP/EXR variants) and silently falls back to FFmpeg instead of failing.
+
 ## [1.5.4] - 2026-02-27
 
 ### Added

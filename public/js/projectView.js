@@ -14,6 +14,7 @@ import { state } from './state.js';
 import { api } from './api.js';
 import { esc, escAttr, showToast, closeModal } from './utils.js';
 import { renderShotBuilder, getConvention } from './shotBuilder.js';
+import { showOverlayEditor } from './overlayEditor.js';
 
 // ===========================================
 //  MODULE STATE
@@ -254,6 +255,16 @@ async function showEditProjectModal(projectId) {
 
         <div id="editShotBuilderContainer"></div>
 
+        <div class="ep-section" id="epOverlaySection">
+            <div class="ep-section-hdr">
+                <span>Overlay Presets</span>
+                <button class="btn-sm" id="epAddOverlayBtn">+ New Preset</button>
+            </div>
+            <div id="epOverlayList" class="ep-overlay-list">
+                <span class="ep-overlay-empty">Loading...</span>
+            </div>
+        </div>
+
         <div class="ep-section" id="epTeamAccessSection" style="display:none;">
             <div class="ep-section-hdr">
                 <span> Hide from Users</span>
@@ -290,6 +301,67 @@ async function showEditProjectModal(projectId) {
     // Live-update preview when episode field changes
     document.getElementById('editProjectEpisode').addEventListener('input', () => {
         window._sbSetEpisode(document.getElementById('editProjectEpisode').value.trim());
+    });
+
+    // ── Overlay Presets ──
+    const _overlayProjectId = proj.id;
+    const _overlayProjectInfo = { code: proj.code, name: proj.name };
+
+    async function _loadOverlayPresets() {
+        const listEl = document.getElementById('epOverlayList');
+        if (!listEl) return;
+        try {
+            const presets = await api('/api/overlay/presets');
+            if (!presets?.length) {
+                listEl.innerHTML = '<span class="ep-overlay-empty">No presets yet. Click "+ New Preset" to create one.</span>';
+                return;
+            }
+            listEl.innerHTML = presets.map(p => {
+                const elems = (p.config && p.config.elements) || [];
+                return `
+                <div class="ep-overlay-item">
+                    <span class="ep-overlay-name">${esc(p.name)}${p.is_default ? ' <span class="ep-badge">DEFAULT</span>' : ''}</span>
+                    <span class="ep-overlay-count">${elems.length} elements</span>
+                    <button class="btn-sm ep-overlay-edit" data-id="${p.id}">Edit</button>
+                    <button class="btn-sm btn-danger-sm ep-overlay-del" data-id="${p.id}">Del</button>
+                </div>
+            `}).join('');
+
+            // Wire edit buttons
+            listEl.querySelectorAll('.ep-overlay-edit').forEach(btn => {
+                btn.addEventListener('click', () => {
+                    showOverlayEditor(null, parseInt(btn.dataset.id, 10), () => _loadOverlayPresets(), {
+                        projectId: _overlayProjectId,
+                        projectInfo: _overlayProjectInfo
+                    });
+                });
+            });
+
+            // Wire delete buttons
+            listEl.querySelectorAll('.ep-overlay-del').forEach(btn => {
+                btn.addEventListener('click', async () => {
+                    if (!confirm('Delete this overlay preset?')) return;
+                    try {
+                        await api(`/api/overlay/presets/${btn.dataset.id}`, { method: 'DELETE' });
+                        showToast('Preset deleted');
+                        _loadOverlayPresets();
+                    } catch (e) {
+                        showToast('Delete failed: ' + e.message, 3000);
+                    }
+                });
+            });
+        } catch (err) {
+            listEl.innerHTML = '<span class="ep-overlay-empty">Could not load presets.</span>';
+        }
+    }
+
+    _loadOverlayPresets();
+
+    document.getElementById('epAddOverlayBtn').addEventListener('click', () => {
+        showOverlayEditor(null, null, () => _loadOverlayPresets(), {
+            projectId: _overlayProjectId,
+            projectInfo: _overlayProjectInfo
+        });
     });
 
     // Populate "Hide from Users" checkboxes (admin only)

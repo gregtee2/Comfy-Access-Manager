@@ -156,7 +156,7 @@ router.get('/probe/:id', (req, res) => {
 
 router.post('/start', (req, res) => {
     const db = getDb();
-    const { assetIds, resolution, codec, outputName, destination } = req.body;
+    const { assetIds, resolution, codec, outputName, destination, overlayPresetId } = req.body;
 
     if (!Array.isArray(assetIds) || assetIds.length === 0) {
         return res.status(400).json({ error: 'assetIds array required' });
@@ -218,7 +218,7 @@ router.post('/start', (req, res) => {
         for (const asset of assets) {
             try {
                 job.current = asset.vault_name;
-                const result = await exportSingleAsset(asset, { resolution, codec, outputName, destDir });
+                const result = await exportSingleAsset(asset, { resolution, codec, outputName, destDir, overlayPresetId });
                 job.results.push({ id: asset.id, name: asset.vault_name, success: true, outputPath: result.outputPath, outputName: result.outputName, newAssetId: result.newAssetId || null });
                 job.completed++;
             } catch (err) {
@@ -312,7 +312,22 @@ function buildHierarchyPath(hierarchy) {
 
 function exportSingleAsset(asset, opts) {
     return new Promise((resolve, reject) => {
-        const { resolution, codec, outputName, destDir } = opts;
+        const { resolution, codec, outputName, destDir, overlayPresetId } = opts;
+
+        // Load overlay preset if requested
+        let overlayFilters = '';
+        if (overlayPresetId) {
+            try {
+                const presetRow = getDb().prepare('SELECT config FROM overlay_presets WHERE id = ?').get(overlayPresetId);
+                if (presetRow) {
+                    const { buildDrawtextFilters } = require('./overlayRoutes');
+                    const config = JSON.parse(presetRow.config || '{}');
+                    overlayFilters = buildDrawtextFilters(config, asset.hierarchy || {}, asset.vault_name);
+                }
+            } catch (err) {
+                console.error('[Export] Failed to load overlay preset:', err.message);
+            }
+        }
 
         // Resolve codec args — if "match_source", probe first then pick
         let codecKey = codec;
@@ -388,7 +403,11 @@ function exportSingleAsset(asset, opts) {
             const framePattern = path.join(seqDir, `${path.basename(safePath, path.extname(safePath))}.%04d${ext}`);
 
             const args = ['-y', '-i', asset.file_path];
-            if (resPreset.scale) args.push('-vf', `scale=${resPreset.scale}`);
+            // Combine scale + overlay filters
+            const vfParts = [];
+            if (resPreset.scale) vfParts.push(`scale=${resPreset.scale}`);
+            if (overlayFilters) vfParts.push(overlayFilters);
+            if (vfParts.length > 0) args.push('-vf', vfParts.join(','));
             args.push(...preset.args);
             args.push(framePattern);
 
@@ -421,9 +440,12 @@ function exportSingleAsset(asset, opts) {
             '-i', asset.file_path,
         ];
 
-        // Scale filter
-        if (resPreset.scale) {
-            args.push('-vf', `scale=${resPreset.scale}`);
+        // Scale + overlay filters
+        const vfParts = [];
+        if (resPreset.scale) vfParts.push(`scale=${resPreset.scale}`);
+        if (overlayFilters) vfParts.push(overlayFilters);
+        if (vfParts.length > 0) {
+            args.push('-vf', vfParts.join(','));
         }
 
         // Codec args
@@ -469,7 +491,10 @@ function exportSingleAsset(asset, opts) {
                     console.log(`[Export] GPU encoder (${codecKey}) failed, retrying with CPU (${cpuCodec})...`);
 
                     const cpuArgs = ['-y', '-i', asset.file_path];
-                    if (resPreset.scale) cpuArgs.push('-vf', `scale=${resPreset.scale}`);
+                    const cpuVfParts = [];
+                    if (resPreset.scale) cpuVfParts.push(`scale=${resPreset.scale}`);
+                    if (overlayFilters) cpuVfParts.push(overlayFilters);
+                    if (cpuVfParts.length > 0) cpuArgs.push('-vf', cpuVfParts.join(','));
                     cpuArgs.push(...cpuPreset.args);
                     if (ext === '.mp4') cpuArgs.push('-movflags', '+faststart');
                     cpuArgs.push(safePath);
