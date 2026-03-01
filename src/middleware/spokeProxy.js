@@ -35,6 +35,8 @@ const LOCAL_ONLY_PATTERNS = [
     '/api/review/join',            // Launch RV sync client (local process)
     '/api/review/end',             // End review session (local)
     '/api/review/leave',           // Leave review session (kills local RV)
+    '/api/update/apply',           // Auto-update — must run locally (git pull on THIS machine)
+    '/api/update/apply-rv',        // RV binary update — local download + install
 ];
 // Regex patterns for parameterised routes that must run locally
 const LOCAL_ONLY_REGEX = [
@@ -44,6 +46,7 @@ const LOCAL_ONLY_REGEX = [
     /^\/api\/export/,                       // FFmpeg transcode — runs locally
     /^\/api\/review\/notes(\/\d+)?$/,       // Review notes — saved locally + forwarded to hub in route handler
     /^\/api\/review\/notes\/annotated-frame$/,  // Annotated frame from RV — saved locally
+    /^\/api\/update\//,                     // ALL update routes — must execute on THIS machine
 ];
 
 /**
