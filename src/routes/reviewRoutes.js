@@ -890,13 +890,30 @@ router.post('/notes/annotated-frame', (req, res) => {
         } catch { /* non-critical */ }
     }
 
-    // Copy the rendered frame to review-snapshots
+    // ─── Organize by project code + date ───
     const DATA_DIR = process.env.CAM_DATA_DIR || path.join(__dirname, '..', '..', 'data');
-    const snapshotsDir = path.join(DATA_DIR, 'review-snapshots');
+    const snapshotsBase = path.join(DATA_DIR, 'review-snapshots');
+
+    // Determine project code for folder structure
+    let projectCode = 'GENERAL';
+    if (session.project_id) {
+        try {
+            const proj = db.prepare('SELECT code, name FROM projects WHERE id = ?').get(session.project_id);
+            if (proj) projectCode = (proj.code || proj.name || 'GENERAL').replace(/[^a-zA-Z0-9_-]/g, '_');
+        } catch { /* use default */ }
+    }
+
+    // Date-based subdirectory (YYYY-MM-DD)
+    const today = new Date();
+    const dateFolder = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    const snapshotsDir = path.join(snapshotsBase, projectCode, dateFolder);
     if (!fs.existsSync(snapshotsDir)) fs.mkdirSync(snapshotsDir, { recursive: true });
 
     const timestamp = Date.now();
     const filename = `review_${session.id}_f${frameNumber}_${timestamp}.png`;
+    // Relative path includes project/date folders (e.g. COMFYUIT/2026-03-01/review_26_f1042_123.png)
+    const relativePath = path.join(projectCode, dateFolder, filename).replace(/\\/g, '/');
     const destPath = path.join(snapshotsDir, filename);
 
     try {
@@ -906,9 +923,9 @@ router.post('/notes/annotated-frame', (req, res) => {
         return res.status(500).json({ error: 'Failed to save annotated frame' });
     }
 
-    // Create the note with the annotation image path
+    // Create the note with the organized annotation image path
     const text = (noteText && noteText.trim()) || `Annotated frame ${frameNumber}`;
-    const annotationImage = filename; // Relative to review-snapshots dir
+    const annotationImage = relativePath; // e.g. COMFYUIT/2026-03-01/review_26_f1042_123.png
 
     const result = db.prepare(`
         INSERT INTO review_notes (session_id, asset_id, frame_number, note_text, author, annotation_image)
@@ -935,31 +952,57 @@ router.post('/notes/annotated-frame', (req, res) => {
     // Clean up temp file (RV created it in a temp dir)
     try { fs.unlinkSync(renderedFramePath); } catch { /* already cleaned or still needed */ }
 
-    // In spoke mode, forward the note text to hub (not the image — hub can't access local files)
+    // In spoke mode, upload the annotation image + note to the hub
     const spokeService = req.app.locals.spokeService;
     if (spokeService) {
-        spokeService.forwardRequest('POST', '/api/sync/write', {
-            method: 'POST',
-            path: '/api/review/hub-note',
-            body: {
-                session_key: session.session_key,
-                asset_id: assetId,
-                frame_number: frameNumber,
-                note_text: text + ' [annotated frame attached on spoke]',
-                author,
-            },
-            spokeName: spokeService.localName,
-        }).catch(err => {
-            console.error('[SyncReview] Failed to forward annotated note to hub:', err.message);
-        });
+        // Read the saved file and base64-encode it for hub upload
+        try {
+            const imageBuffer = fs.readFileSync(destPath);
+            const imageBase64 = imageBuffer.toString('base64');
+
+            spokeService.forwardRequest('POST', '/api/sync/write', {
+                method: 'POST',
+                path: '/api/review/hub-annotation',
+                body: {
+                    session_key: session.session_key,
+                    asset_id: assetId,
+                    frame_number: frameNumber,
+                    note_text: text,
+                    author,
+                    image_base64: imageBase64,
+                    project_code: projectCode,
+                    filename,
+                },
+                spokeName: spokeService.localName,
+            }).then(() => {
+                console.log(`[SyncReview] Annotation image uploaded to hub: ${relativePath}`);
+            }).catch(err => {
+                console.error('[SyncReview] Failed to upload annotation to hub:', err.message);
+            });
+        } catch (readErr) {
+            console.error('[SyncReview] Failed to read annotation for hub upload:', readErr.message);
+            // Still forward just the note text as fallback
+            spokeService.forwardRequest('POST', '/api/sync/write', {
+                method: 'POST',
+                path: '/api/review/hub-note',
+                body: {
+                    session_key: session.session_key,
+                    asset_id: assetId,
+                    frame_number: frameNumber,
+                    note_text: text + ' [annotation image failed to upload]',
+                    author,
+                },
+                spokeName: spokeService.localName,
+            }).catch(() => {});
+        }
     }
 
-    console.log(`[SyncReview] Annotated frame saved: ${filename} (session ${session.id}, frame ${frameNumber})`);
+    console.log(`[SyncReview] Annotated frame saved: ${relativePath} (session ${session.id}, frame ${frameNumber})`);
 
     res.json({
         success: true,
         note,
-        snapshotUrl: `/review-snapshots/${filename}`,
+        snapshotUrl: `/review-snapshots/${relativePath}`,
     });
 });
 
@@ -1161,7 +1204,7 @@ router.post('/hub-end', (req, res) => {
  * Called by the spoke's /notes handler via forwardRequest.
  */
 router.post('/hub-note', (req, res) => {
-    const { session_key, asset_id, frame_number, timecode, note_text, author } = req.body || {};
+    const { session_key, asset_id, frame_number, timecode, note_text, author, annotation_image } = req.body || {};
 
     if (!session_key || !note_text) {
         return res.status(400).json({ error: 'Missing session_key or note_text' });
@@ -1177,9 +1220,9 @@ router.post('/hub-note', (req, res) => {
     }
 
     const result = db.prepare(`
-        INSERT INTO review_notes (session_id, asset_id, frame_number, timecode, note_text, author)
-        VALUES (?, ?, ?, ?, ?, ?)
-    `).run(session.id, asset_id || null, frame_number || null, timecode || null, note_text, author || 'Unknown');
+        INSERT INTO review_notes (session_id, asset_id, frame_number, timecode, note_text, author, annotation_image)
+        VALUES (?, ?, ?, ?, ?, ?, ?)
+    `).run(session.id, asset_id || null, frame_number || null, timecode || null, note_text, author || 'Unknown', annotation_image || null);
 
     const noteId = Number(result.lastInsertRowid);
     const note = db.prepare('SELECT * FROM review_notes WHERE id = ?').get(noteId);
@@ -1189,6 +1232,71 @@ router.post('/hub-note', (req, res) => {
 
     console.log(`[SyncReview] Hub stored spoke note for "${session.title}" by ${author}`);
     res.json({ success: true, id: noteId });
+});
+
+/**
+ * POST /api/review/hub-annotation — Receive annotated frame image from spoke.
+ *
+ * The spoke captures a frame with RV annotations, saves it locally, then
+ * base64-encodes the PNG and sends it here so the hub has a copy too.
+ * Images are stored in: data/review-snapshots/{PROJECT_CODE}/{YYYY-MM-DD}/
+ *
+ * Body: { session_key, asset_id?, frame_number, note_text, author,
+ *         image_base64, project_code, filename }
+ */
+router.post('/hub-annotation', (req, res) => {
+    const { session_key, asset_id, frame_number, note_text, author,
+            image_base64, project_code, filename } = req.body || {};
+
+    if (!session_key || !image_base64 || !filename) {
+        return res.status(400).json({ error: 'Missing session_key, image_base64, or filename' });
+    }
+
+    const db = getDb();
+    const session = db.prepare(
+        `SELECT * FROM review_sessions WHERE session_key = ?`
+    ).get(session_key);
+
+    if (!session) {
+        return res.status(404).json({ error: 'Session not found on hub' });
+    }
+
+    // ─── Save image to organized directory structure ───
+    const DATA_DIR = process.env.CAM_DATA_DIR || path.join(__dirname, '..', '..', 'data');
+    const projFolder = (project_code || 'GENERAL').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const today = new Date();
+    const dateFolder = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+
+    const snapshotsDir = path.join(DATA_DIR, 'review-snapshots', projFolder, dateFolder);
+    if (!fs.existsSync(snapshotsDir)) fs.mkdirSync(snapshotsDir, { recursive: true });
+
+    const destPath = path.join(snapshotsDir, filename);
+    const relativePath = `${projFolder}/${dateFolder}/${filename}`;
+
+    try {
+        const imageBuffer = Buffer.from(image_base64, 'base64');
+        fs.writeFileSync(destPath, imageBuffer);
+    } catch (err) {
+        console.error('[SyncReview] Hub failed to save annotation image:', err.message);
+        return res.status(500).json({ error: 'Failed to save annotation image' });
+    }
+
+    // Create the note with annotation_image reference
+    const text = (note_text && note_text.trim()) || `Annotated frame ${frame_number}`;
+
+    const result = db.prepare(`
+        INSERT INTO review_notes (session_id, asset_id, frame_number, note_text, author, annotation_image)
+        VALUES (?, ?, ?, ?, ?, ?)
+    `).run(session.id, asset_id || null, frame_number || null, text, author || 'Unknown', relativePath);
+
+    const noteId = Number(result.lastInsertRowid);
+    const note = db.prepare('SELECT * FROM review_notes WHERE id = ?').get(noteId);
+
+    // Broadcast to all spokes
+    req.app.locals.broadcastChange?.('review_notes', 'insert', { record: note });
+
+    console.log(`[SyncReview] Hub saved annotation: ${relativePath} (session ${session.id}, frame ${frame_number})`);
+    res.json({ success: true, id: noteId, annotation_image: relativePath });
 });
 
 

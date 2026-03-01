@@ -18,6 +18,7 @@ let historyLoaded = false;
 let historySessions = [];
 let currentNotesSessionId = null;  // which session's notes are being viewed
 let currentNotes = [];
+let _hubUrl = null;  // cached hub URL for annotation image resolution
 const POLL_INTERVAL = 10000; // 10 seconds
 
 // ─── API ───
@@ -131,6 +132,58 @@ async function leaveReview(sessionId) {
 }
 
 // ─── Notes API ───
+
+/**
+ * Resolve the URL for an annotation image.
+ * If the image exists locally (same spoke that captured it), use the local path.
+ * Otherwise, try the hub URL so all machines can view the annotation.
+ */
+async function getAnnotationUrl(relativePath) {
+    if (!relativePath) return null;
+    const localUrl = `/review-snapshots/${relativePath}`;
+    try {
+        // Quick HEAD check to see if the file exists locally
+        const resp = await fetch(localUrl, { method: 'HEAD' });
+        if (resp.ok) return localUrl;
+    } catch { /* not local */ }
+
+    // Fall back to hub URL
+    if (!_hubUrl) {
+        try {
+            const cfg = await api('/api/settings/sync-config');
+            _hubUrl = cfg?.hub_url || null;
+        } catch { /* standalone mode, no hub */ }
+    }
+    if (_hubUrl) return `${_hubUrl}/review-snapshots/${relativePath}`;
+    return localUrl; // best effort
+}
+
+/**
+ * Build annotation image URL — synchronous best-guess (local first, hub fallback).
+ * For immediate rendering. The actual image tag handles 404 gracefully via onerror.
+ */
+function annotationImgUrl(relativePath) {
+    return `/review-snapshots/${relativePath}`;
+}
+
+/**
+ * Hub fallback URL for annotation images (used in onerror handler).
+ */
+function annotationHubFallback(imgEl) {
+    if (imgEl.dataset.triedHub) return; // prevent infinite loop
+    imgEl.dataset.triedHub = '1';
+    // Fetch hub URL and retry
+    if (_hubUrl) {
+        imgEl.src = `${_hubUrl}/review-snapshots/${imgEl.dataset.annotationPath}`;
+        return;
+    }
+    api('/api/settings/sync-config').then(cfg => {
+        _hubUrl = cfg?.hub_url || null;
+        if (_hubUrl) {
+            imgEl.src = `${_hubUrl}/review-snapshots/${imgEl.dataset.annotationPath}`;
+        }
+    }).catch(() => {});
+}
 
 /**
  * Fetch notes for a specific review session.
@@ -522,7 +575,9 @@ function renderNoteCard(note) {
                <img src="/review-snapshots/${escHtml(note.annotation_image)}" 
                     alt="Annotated frame ${note.frame_number || ''}" 
                     class="review-note-annotation-img"
+                    data-annotation-path="${escHtml(note.annotation_image)}"
                     onclick="openAnnotationFullscreen(this.src)"
+                    onerror="annotationHubFallback(this)"
                     title="Click to view full size">
                <span class="review-note-annotation-badge">\uD83C\uDFA8 Annotated Frame</span>
            </div>`
@@ -782,6 +837,7 @@ window.updateNoteStatus = updateNoteStatus;
 window.deleteReviewNote = deleteReviewNote;
 window.openAnnotationFullscreen = openAnnotationFullscreen;
 window.closeAnnotationFullscreen = closeAnnotationFullscreen;
+window.annotationHubFallback = annotationHubFallback;
 
 // ─── Init ───
 // Start polling when module loads

@@ -79,11 +79,15 @@ app.use('/thumbnails', (req, res, next) => {
     next();
 }, express.static(path.join(__dirname, '..', 'thumbnails')));
 
-// Serve review annotation snapshots
+// Serve review annotation snapshots (supports project/date subdirectories)
+const REVIEW_SNAPSHOTS_DIR = path.join(
+    process.env.CAM_DATA_DIR || path.join(__dirname, '..', 'data'),
+    'review-snapshots'
+);
 app.use('/review-snapshots', (req, res, next) => {
     res.setHeader('Cache-Control', 'public, max-age=3600');
     next();
-}, express.static(path.join(__dirname, '..', 'data', 'review-snapshots')));
+}, express.static(REVIEW_SNAPSHOTS_DIR));
 
 // Ensure key folders exist on startup
 const { getSetting } = require('./database');
