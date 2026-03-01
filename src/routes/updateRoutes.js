@@ -260,30 +260,59 @@ router.get('/version', (req, res) => {
 // ─── POST /api/update/apply ───
 router.post('/apply', async (req, res) => {
     try {
-        // 1. Stash any local changes
-        try {
-            execSync('git stash', { cwd: ROOT, stdio: 'pipe' });
-        } catch { /* no changes to stash */ }
-
-        // 2. Configure git remote with PAT if available (for private repos)
-        const token = getGitHubToken();
-        if (token) {
-            const authUrl = `https://${token}@github.com/${GITHUB_REPO}.git`;
-            try {
-                execSync(`git remote set-url origin ${authUrl}`, { cwd: ROOT, stdio: 'pipe' });
-            } catch (e) {
-                console.warn('[Update] Could not set authenticated remote:', e.message);
+        // 0. Ensure we have a git repo — non-git installs (zip/copy) won't have .git
+        const gitDir = path.join(ROOT, '.git');
+        if (!fs.existsSync(gitDir)) {
+            console.log('[Update] No .git directory found — initializing git repo for updates...');
+            const token = getGitHubToken();
+            const repoUrl = token
+                ? `https://${token}@github.com/${GITHUB_REPO}.git`
+                : `https://github.com/${GITHUB_REPO}.git`;
+            execSync('git init', { cwd: ROOT, stdio: 'pipe' });
+            execSync(`git remote add origin ${repoUrl}`, { cwd: ROOT, stdio: 'pipe' });
+            // Strip token from persisted url immediately
+            if (token) {
+                try {
+                    execSync(`git remote set-url origin https://github.com/${GITHUB_REPO}.git`, { cwd: ROOT, stdio: 'pipe' });
+                    // Re-add with token just for the fetch
+                    execSync(`git remote set-url origin ${repoUrl}`, { cwd: ROOT, stdio: 'pipe' });
+                } catch { /* non-critical */ }
             }
+            execSync('git fetch origin stable', { cwd: ROOT, stdio: 'pipe', timeout: 60000 });
+            execSync('git reset --hard origin/stable', { cwd: ROOT, stdio: 'pipe' });
+            // Restore clean remote URL
+            try {
+                execSync(`git remote set-url origin https://github.com/${GITHUB_REPO}.git`, { cwd: ROOT, stdio: 'pipe' });
+            } catch { /* non-critical */ }
+
+            // Skip to npm install (we just fetched everything fresh)
+        } else {
+            // Normal git-based update flow
+            // 1. Stash any local changes
+            try {
+                execSync('git stash', { cwd: ROOT, stdio: 'pipe' });
+            } catch { /* no changes to stash */ }
+
+            // 2. Configure git remote with PAT if available (for private repos)
+            const token = getGitHubToken();
+            if (token) {
+                const authUrl = `https://${token}@github.com/${GITHUB_REPO}.git`;
+                try {
+                    execSync(`git remote set-url origin ${authUrl}`, { cwd: ROOT, stdio: 'pipe' });
+                } catch (e) {
+                    console.warn('[Update] Could not set authenticated remote:', e.message);
+                }
+            }
+
+            // 3. Fetch + reset to stable
+            execSync('git fetch origin stable', { cwd: ROOT, stdio: 'pipe', timeout: 30000 });
+            execSync('git reset --hard origin/stable', { cwd: ROOT, stdio: 'pipe' });
+
+            // 4. Restore remote URL to HTTPS (strip token from persisted git config)
+            try {
+                execSync(`git remote set-url origin https://github.com/${GITHUB_REPO}.git`, { cwd: ROOT, stdio: 'pipe' });
+            } catch { /* non-critical */ }
         }
-
-        // 3. Fetch + reset to stable
-        execSync('git fetch origin stable', { cwd: ROOT, stdio: 'pipe', timeout: 30000 });
-        execSync('git reset --hard origin/stable', { cwd: ROOT, stdio: 'pipe' });
-
-        // 4. Restore remote URL to HTTPS (strip token from persisted git config)
-        try {
-            execSync(`git remote set-url origin https://github.com/${GITHUB_REPO}.git`, { cwd: ROOT, stdio: 'pipe' });
-        } catch { /* non-critical */ }
 
         // 5. Install any new dependencies
         execSync('npm install --omit=dev', { cwd: ROOT, stdio: 'pipe', timeout: 120000 });
