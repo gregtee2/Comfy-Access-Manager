@@ -417,17 +417,61 @@ router.post('/end', (req, res) => {
 // ═══════════════════════════════════════════
 
 /**
+ * Build environment variables for RV cross-platform path remapping.
+ * Uses RV's built-in RV_OS_PATH_WINDOWS_<N> / RV_OS_PATH_OSX_<N> mechanism.
+ * When RV receives a synced session from another OS, it swaps the path prefix
+ * from the sender's OS to the local OS automatically.
+ *
+ * Reads CAM's path_mappings setting: [{"windows":"Z:\\","mac":"/Volumes/home/AI Projects"}]
+ */
+function buildRVPathSwapEnv() {
+    const envVars = {};   // Only the RV_OS_PATH vars (for --env flags)
+    const fullEnv = { ...process.env };  // Full env (for spawn on Win/Linux)
+    try {
+        const raw = getSetting('path_mappings');
+        if (!raw) return { envVars, fullEnv };
+        const mappings = typeof raw === 'string' ? JSON.parse(raw) : raw;
+        if (!Array.isArray(mappings)) return { envVars, fullEnv };
+
+        mappings.forEach((m, i) => {
+            const winPath = m.windows || m.win;
+            const macPath = m.mac || m.osx;
+            if (!winPath || !macPath) return;
+
+            // RV uses forward slashes internally; strip trailing separators
+            const winClean = winPath.replace(/\\/g, '/').replace(/\/$/, '');
+            const macClean = macPath.replace(/\/$/, '');
+
+            const winKey = `RV_OS_PATH_WINDOWS_${i}`;
+            const osxKey = `RV_OS_PATH_OSX_${i}`;
+            envVars[winKey] = winClean;
+            envVars[osxKey] = macClean;
+            fullEnv[winKey] = winClean;
+            fullEnv[osxKey] = macClean;
+
+            console.log(`[RV Sync] Path swap env: ${winKey}=${winClean} ↔ ${osxKey}=${macClean}`);
+        });
+    } catch (err) {
+        console.error('[RV Sync] Failed to build path swap env:', err.message);
+    }
+    return { envVars, fullEnv };
+}
+
+/**
  * Launch RV as the sync host (other RVs will connect to this one).
  * Uses `-networkPort` to open a sync server.
  */
 function launchRVAsHost(rvExe, filePaths, networkPort) {
     const { execFile, spawn } = require('child_process');
     const rvArgs = ['-network', '-networkPort', String(networkPort), ...filePaths];
+    const { envVars, fullEnv } = buildRVPathSwapEnv();
 
     if (process.platform === 'darwin') {
         // macOS: RV needs app-bundle context to run properly.
         // Use `open -n -a <bundle> --args ...` — the -n flag forces a new instance
         // and reliably passes all arguments (unlike plain `open -a`).
+        // IMPORTANT: macOS `open` uses LaunchServices which does NOT inherit
+        // the caller's env vars. Use `open --env KEY=VALUE` to inject them.
         let appBundle = null;
         let dir = rvExe;
         for (let i = 0; i < 5; i++) {
@@ -435,11 +479,16 @@ function launchRVAsHost(rvExe, filePaths, networkPort) {
             if (dir.endsWith('.app')) { appBundle = dir; break; }
         }
         if (appBundle) {
-            const args = ['-n', '-a', appBundle, '--args', ...rvArgs];
+            // Build: open --env K1=V1 --env K2=V2 -n -a <bundle> --args ...
+            const args = [];
+            for (const [k, v] of Object.entries(envVars)) {
+                args.push('--env', `${k}=${v}`);
+            }
+            args.push('-n', '-a', appBundle, '--args', ...rvArgs);
             execFile('/usr/bin/open', args, (err) => {
                 if (err) console.error(`[RV Sync Host] open error:`, err.message);
             });
-            console.log(`[RV Sync] Host launched via 'open -n -a' (macOS), port ${networkPort}, ${filePaths.length} file(s)`);
+            console.log(`[RV Sync] Host launched via 'open -n -a' (macOS), port ${networkPort}, ${filePaths.length} file(s), ${Object.keys(envVars).length} path swap vars`);
             return;
         }
     }
@@ -450,6 +499,7 @@ function launchRVAsHost(rvExe, filePaths, networkPort) {
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: false,
+        env: fullEnv,
     });
 
     child.stdout.on('data', d => {
@@ -475,11 +525,14 @@ function launchRVAsHost(rvExe, filePaths, networkPort) {
 function launchRVAsClient(rvExe, hostIp, hostPort, filePaths) {
     const { execFile, spawn } = require('child_process');
     const rvArgs = ['-network', '-networkConnect', hostIp, String(hostPort), ...filePaths];
+    const { envVars, fullEnv } = buildRVPathSwapEnv();
 
     if (process.platform === 'darwin') {
         // macOS: RV needs app-bundle context to run properly.
         // Use `open -n -a <bundle> --args ...` — the -n flag forces a new instance
         // and reliably passes all arguments (unlike plain `open -a`).
+        // IMPORTANT: macOS `open` uses LaunchServices which does NOT inherit
+        // the caller's env vars. Use `open --env KEY=VALUE` to inject them.
         let appBundle = null;
         let dir = rvExe;
         for (let i = 0; i < 5; i++) {
@@ -487,11 +540,16 @@ function launchRVAsClient(rvExe, hostIp, hostPort, filePaths) {
             if (dir.endsWith('.app')) { appBundle = dir; break; }
         }
         if (appBundle) {
-            const args = ['-n', '-a', appBundle, '--args', ...rvArgs];
+            // Build: open --env K1=V1 --env K2=V2 -n -a <bundle> --args ...
+            const args = [];
+            for (const [k, v] of Object.entries(envVars)) {
+                args.push('--env', `${k}=${v}`);
+            }
+            args.push('-n', '-a', appBundle, '--args', ...rvArgs);
             execFile('/usr/bin/open', args, (err) => {
                 if (err) console.error(`[RV Sync Client] open error:`, err.message);
             });
-            console.log(`[RV Sync] Client launched via 'open -n -a' (macOS), connecting to ${hostIp}:${hostPort}`);
+            console.log(`[RV Sync] Client launched via 'open -n -a' (macOS), connecting to ${hostIp}:${hostPort}, ${Object.keys(envVars).length} path swap vars`);
             return;
         }
     }
@@ -502,6 +560,7 @@ function launchRVAsClient(rvExe, hostIp, hostPort, filePaths) {
         detached: true,
         stdio: ['ignore', 'pipe', 'pipe'],
         windowsHide: false,
+        env: fullEnv,
     });
 
     child.stdout.on('data', d => {
