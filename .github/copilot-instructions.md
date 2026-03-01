@@ -1375,38 +1375,69 @@ Before launching a new RV sync session, `reviewRoutes.js` calls `killExistingRVS
 - macOS: `pkill -f 'MacOS/RV.*-network'` + 1.5s wait for TCP FIN propagation
 - Windows: `taskkill /F /FI "IMAGENAME eq RV.exe"` (kills all RV instances)
 
-**REQUIRED FIX — OpenRV sync.mu `syncFrameChanged` Bug (March 2026):**
-RV's built-in sync plugin (`sync.mu`) has a bug that prevents scrub/frame-step sync while allowing play/stop sync. The fix must be applied to the **installed** `sync.mu` on **every machine** participating in sync review.
+### WINDOWS AGENT: RV SYNC SCRUB FIX — ACTION REQUIRED (March 2026)
 
-Root cause: `syncFrameChanged()` (the handler that receives frame-change events during scrub) gates on `c neq nil` — a contact lookup that silently fails due to session-name mismatch. Other handlers like `syncPlayStart()` and `syncPlayStop()` do NOT have this guard, which is why play/stop sync works but scrubbing doesn't.
+**Problem:** RV scrub/frame-step sync is broken between Windows and Mac. Play/stop sync works, cursor sync works, but scrubbing (dragging timeline, arrow keys, mouse wheel, clicking timeline) does NOT sync in either direction.
 
-**The fix — in the installed `sync.mu`, find the `syncFrameChanged` method and change:**
+**Root Cause:** Two bugs prevent `frame-changed` events from propagating through RV's sync system:
+1. `mediavault_mode.py` consumes `frame-changed` events without calling `event.reject()`, so the sync module never sees them
+2. `sync.mu` has an unnecessary `c neq nil` guard in `syncFrameChanged()` that can silently drop incoming frame-change events
+
+**STEP-BY-STEP — Execute these in order, then restart RV:**
+
+**Step 1: `git pull`**
+Pull the latest from `main` to get the fixed `rv-package/mediavault_mode.py` (commit `9be2ff7`).
+
+**Step 2: Deploy `mediavault_mode.py` to RV plugins**
+Copy the git version to the installed RV plugins directory:
+```powershell
+# Find the installed location first:
+Get-ChildItem -Path "C:\OpenRV" -Recurse -Filter "mediavault_mode.py" -ErrorAction SilentlyContinue | Select-Object FullName
+# Also check:
+Get-ChildItem -Path "C:\Program Files" -Recurse -Filter "mediavault_mode.py" -ErrorAction SilentlyContinue | Select-Object FullName
+
+# Then copy (adjust destination path based on what you find above):
+Copy-Item "rv-package\mediavault_mode.py" "C:\OpenRV\_build\stage\app\plugins\Python\mediavault_mode.py" -Force
+```
+The fix adds `event.reject()` as the first line in `_onSourceLoaded`, `_onViewChanged`, and `_onFrameChanged` — this lets events propagate to the sync module after mediavault_mode processes them.
+
+**Step 3: Patch `sync.mu` (NOT in git — must edit the installed file directly)**
+Find the installed `sync.mu`:
+```powershell
+Get-ChildItem -Path "C:\OpenRV" -Recurse -Filter "sync.mu" -ErrorAction SilentlyContinue | Select-Object FullName
+# Also check: C:\Program Files\RV\plugins\Mu\sync.mu
+```
+Back up the file, then find the `syncFrameChanged` method and change:
 ```mu
-// BEFORE (broken — drops all frame-change events when contact lookup returns nil):
+// BEFORE (broken):
 if (frame != frame() && c neq nil)
 
-// AFTER (fixed — matches behavior of syncPlayStart/syncPlayStop):
+// AFTER (fixed — matches syncPlayStart/syncPlayStop behavior):
 if (frame != frame())
 ```
+Search for `c neq nil` — it only appears once in `syncFrameChanged`. The variable `c` (SyncContact) is never used after the check, so removing the guard is safe.
 
-**File locations:**
-- macOS (OpenRV build): `~/OpenRV/_build/stage/app/RV.app/Contents/PlugIns/Mu/sync.mu`
-- Windows (OpenRV build): `C:\OpenRV\_build\stage\app\plugins\Mu\sync.mu`
-- Windows (installed RV): Check `C:\Program Files\RV\plugins\Mu\sync.mu` or similar
-- Source (reference only): `~/OpenRV/src/plugins/rv-packages/sync/sync.mu`
+**Step 4: Kill any running RV processes and restart**
+```powershell
+taskkill /F /FI "IMAGENAME eq RV.exe" 2>$null
+```
+Then relaunch RV via CAM "Start Sync Review" or "Join Review". The sync.mu and mediavault_mode.py are loaded on RV startup.
 
-Search for `c neq nil` in the `syncFrameChanged` method — it's the only sync handler with this unnecessary guard. The variable `c` (SyncContact) is never used in the method body after the check. Back up the file before editing (`cp sync.mu sync.mu.bak`). RV must be restarted after editing (sync.mu is interpreted on load).
+**Verification:** After both Windows and Mac RV are running and connected:
+- Scrub on Windows → Mac should follow
+- Scrub on Mac → Windows should follow  
+- Arrow keys, mouse wheel, timeline click should all sync
+- Play/stop should still work (regression check)
 
-**REQUIRED FIX — mediavault_mode.py `event.reject()` (March 2026):**
-The MediaVault RV plugin (`mediavault_mode.py`) was consuming `frame-changed`, `source-group-complete`, `after-progressive-loading`, and `graph-state-change` events without calling `event.reject()`. In RV's event system, if a handler does NOT reject the event, it is consumed — downstream handlers never see it. This prevented the sync module's `frameChanged()` handler from ever firing, so `remote-sync-frame-changed` was never sent during scrub.
+---
 
-**The fix — already applied in `rv-package/mediavault_mode.py` (in git):**
-Add `event.reject()` as the first line in these three handlers:
-- `_onSourceLoaded(self, event)` — handles `source-group-complete`, `after-progressive-loading`
-- `_onViewChanged(self, event)` — handles `graph-state-change`
-- `_onFrameChanged(self, event)` — handles `frame-changed`
+**Technical Details (for reference):**
 
-After `git pull`, run the RV package deploy (server auto-deploys on startup) or manually copy `rv-package/mediavault_mode.py` to the RV PlugIns directory. On Windows: `C:\OpenRV\_build\stage\app\plugins\Python\mediavault_mode.py` (or wherever the OpenRV PlugIns/Python dir is).
+**sync.mu fix:** `syncFrameChanged()` gates on `c neq nil` — a contact lookup that can fail due to session-name matching. Other handlers like `syncPlayStart()` and `syncPlayStop()` do NOT have this guard. File locations:
+- macOS: `~/OpenRV/_build/stage/app/RV.app/Contents/PlugIns/Mu/sync.mu`
+- Windows: `C:\OpenRV\_build\stage\app\plugins\Mu\sync.mu` or `C:\Program Files\RV\plugins\Mu\sync.mu`
+
+**mediavault_mode.py fix:** In RV's event system, handlers must call `event.reject()` to pass events downstream. Without it, the event is consumed. `mediavault_mode.py` bound to `frame-changed` (via `_onFrameChanged`), `source-group-complete`/`after-progressive-loading` (via `_onSourceLoaded`), and `graph-state-change` (via `_onViewChanged`) without rejecting. This blocked the sync module's `frameChanged()` from ever firing during scrub. Play/stop sync worked because those are separate events (`play-start`/`play-stop`) that mediavault_mode doesn't bind to.
 
 **Duplicate Session Prevention:**
 Both `/start` and `/hub-register` auto-end stale active sessions from the same `host_ip` before inserting a new one. After ending stale sessions, they broadcast SSE `update` events for each ended session so spokes remove them from the active list. Without this broadcast, spokes accumulate duplicate "active" sessions.
