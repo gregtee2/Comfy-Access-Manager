@@ -30,11 +30,14 @@ const LOCAL_ONLY_PATTERNS = [
     '/api/settings/db-config',     // Per-machine shared DB path (local config.json)
     '/api/assets/publish-frame',   // RV frame publish — reads local temp files, runs FFmpeg
     '/api/settings',               // Settings (vault_root, rv_path etc.) are per-machine
+    '/api/settings/sync-rv-plugin', // Deploy RV plugin locally
 ];
 // Regex patterns for parameterised routes that must run locally
 const LOCAL_ONLY_REGEX = [
     /^\/api\/assets\/\d+\/open-review$/,    // FFmpeg render + open in RV (local)
     /^\/api\/assets\/\d+\/open-external$/,  // Open in external player (local)
+    /^\/api\/settings(\/.*)?$/,             // ALL settings writes — vault_root, rv_path, ffmpeg_path, path_mappings, preferences are per-machine
+    /^\/api\/export/,                       // FFmpeg transcode — runs locally
 ];
 
 /**
