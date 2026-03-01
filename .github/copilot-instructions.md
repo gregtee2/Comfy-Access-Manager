@@ -4,7 +4,7 @@
 
 **Comfy Asset Manager (CAM)** — formerly Digital Media Vault (DMV) — is a local media asset manager for creative production. Organize, browse, import, export, and play media files with a project-based hierarchy following ShotGrid/Flow Production Tracking naming conventions.
 
-**Version**: 1.5.7
+**Version**: 1.6.0
 **Port**: 7700
 **Repo**: `github.com/gregtee2/Comfy-Access-Manager` (branches: `main`, `stable`)
 **Status**: Active development (February 2026)
@@ -1223,8 +1223,15 @@ Certain POST endpoints must run on the **local machine** even in spoke mode, bec
 | `/api/settings/sync-config` | Per-machine hub/spoke config (writes to local `config.json`) |
 | `/api/settings/db-config` | Per-machine shared DB path (writes to local `config.json`) |
 | `/api/assets/publish-frame` | RV frame publish — reads RV temp files + runs FFmpeg locally |
+| `/api/settings` | All settings writes — vault_root, rv_path, etc. are per-machine |
+| `/api/settings/sync-rv-plugin` | Deploy RV plugin locally |
+| `/api/review/start` | Launch RV as sync host (local process) |
+| `/api/review/join` | Launch RV as sync client (local process) |
+| `/api/review/end` | End review session (local) |
 | `/api/assets/:id/open-review` | FFmpeg render + open in RV (local, regex match) |
 | `/api/assets/:id/open-external` | Open in external player (local, regex match) |
+| `/api/settings(/.*)` | ALL settings writes (regex match) |
+| `/api/export` | FFmpeg transcode — runs locally (regex match) |
 
 **Important**: When adding new endpoints that launch local processes or read local files, add them to `LOCAL_ONLY_PATTERNS` (exact match) or `LOCAL_ONLY_REGEX` (parameterized routes) in `spokeProxy.js`.
 
@@ -1301,6 +1308,51 @@ When hub and spoke run on different OSes (e.g., Windows hub, Mac spoke), file pa
 - Stored in DB as `settings.path_mappings` (JSON array)
 - Used by `src/utils/pathResolver.js` (`resolveFilePath()`, `getAllPathVariants()`)
 - Preserved across spoke DB syncs via `SpokeService.LOCAL_SETTINGS`
+
+### RV Sync Review (Multi-User Synchronized Review)
+CAM orchestrates RV's built-in network sync so multiple users can review media together in real-time. RV handles all playback sync, scrubbing, annotations, and media loading natively — CAM provides session discovery and cross-platform path resolution.
+
+**Architecture:**
+- `src/routes/reviewRoutes.js` — all review session API endpoints
+- `public/js/syncReview.js` — frontend module (polling, UI rendering, global functions)
+- `review_sessions` DB table — tracks active sessions (host_ip, host_port, asset_ids, status)
+
+**Flow (Hub mode — session started on hub):**
+1. User clicks "Start Sync Review" on asset(s) → `POST /api/review/start`
+2. RV launches locally with `-network -networkPort 45128`
+3. Session inserted into hub DB, SSE `review_sessions.insert` broadcast to all spokes
+4. Spokes see session in Active Reviews panel (polled every 10s + SSE push)
+5. User clicks "Join Review" → `POST /api/review/join` → local RV launches with `-networkConnect <hostIp> <port>`
+6. RV sync handles everything from here (frame-accurate playback lock, annotations, etc.)
+7. Host clicks "End" → `POST /api/review/end` → DB updated, SSE broadcast
+
+**Flow (Spoke mode — session started on spoke):**
+1. Same as above, but after local DB insert, spoke also calls `POST /api/review/hub-register` on the hub via `spokeService.forwardRequest()` so all spokes see the session
+2. When ending, spoke calls `POST /api/review/hub-end` on the hub
+3. This mirrors the `publish-frame` → `spoke-register` pattern
+
+**Endpoints:**
+| Method | Path | Purpose |
+|--------|------|---------|
+| `GET` | `/api/review/sessions` | List active review sessions |
+| `GET` | `/api/review/sessions/:id` | Get session details + asset info |
+| `POST` | `/api/review/start` | Launch RV as sync host, register session (LOCAL_ONLY) |
+| `POST` | `/api/review/join` | Launch RV as sync client (LOCAL_ONLY) |
+| `POST` | `/api/review/end` | End a review session (LOCAL_ONLY) |
+| `POST` | `/api/review/hub-register` | Hub-side: register a spoke's review session |
+| `POST` | `/api/review/hub-end` | Hub-side: end a spoke's review session |
+
+**RV Network Flags:**
+- Host: `rv -network -networkPort 45128 <files...>`
+- Client: `rv -network -networkConnect <ip> <port> <files...>`
+- Both machines must have access to the same media files (NAS mount with path mappings)
+
+**UI:**
+- "RV" button in topbar header with badge showing active review count
+- Active Reviews floating panel with session cards (host, assets, Join/End buttons)
+- "Start Sync Review" in asset context menu and selection toolbar
+
+**Windows Hub Setup:** After `git pull`, the hub automatically gets the `review_sessions` table on next server start (DB migrations are auto-applied). The `hub-register` and `hub-end` endpoints handle spoke session forwarding. No manual configuration needed.
 
 ### Testing on One Machine
 Run hub + spoke on different ports with separate data dirs:
@@ -1431,6 +1483,16 @@ Port 7700 must be open between hub and spokes. On Windows, the first server star
 | — | feat: SSE broadcast integration — hub now broadcasts `db-change` SSE events after every database write in assetRoutes, projectRoutes, and roleRoutes |
 | — | feat: `app.locals.broadcastChange` exposed in server.js hub mode, pointing to `HubService.broadcast` |
 | — | fix: Hub→spoke sync was completely non-functional — `HubService.broadcast()` existed but was never called from any route handler |
+| `32e6329` | **v1.6.0 — RV Sync Review: Multi-User Synchronized Review Sessions** |
+| — | feat: `review_sessions` DB table — tracks active RV sync review sessions (host_ip, host_port, asset_ids, status) |
+| — | feat: `reviewRoutes.js` — full API: `/api/review/start`, `/join`, `/end`, `/sessions`, `/hub-register`, `/hub-end` |
+| — | feat: Host launches RV with `-networkPort 45128`, client launches with `-networkConnect <ip> <port>` |
+| — | feat: Spoke→hub session registration — spoke forwards session records to hub via `/api/review/hub-register` |
+| — | feat: SSE broadcast of session start/end events to all connected spokes |
+| — | feat: Active Reviews panel in header with live badge count, session cards with Join/End buttons |
+| — | feat: `syncReview.js` frontend module — polls for active sessions every 10s, global `startSyncReview()` / `joinReview()` / `endReview()` |
+| — | feat: "Start Sync Review" in asset context menu and selection toolbar |
+| — | feat: Review routes added to LOCAL_ONLY (RV is a local process) |
 
 ---
 
