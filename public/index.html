@@ -272,8 +272,8 @@ Import from Resolve</button>
                     <button class="btn-small" onclick="sendSelectedToRV('set')" title="Send selected clips to RV (replaces current media). If RV is running, clips load instantly without restarting." style="background:#334">Send to RV</button>
                     <button class="btn-small" onclick="sendSelectedToRV('merge')" title="Add selected clips to the running RV session (keeps existing sources)" style="background:#334">Add to RV</button>
                     <button class="btn-small" onclick="startSyncReviewFromSelection()" title="Start a synchronized RV review session that others can join" style="background:#2a4a3e"> Sync Review</button>
-                    <button class="btn-small btn-danger" onclick="bulkDeleteAssets()" title="Delete selected assets from the database AND remove files from disk">Delete Selected</button>
-                    <button class="btn-small" onclick="bulkDeleteAssets(true)" title="Remove from database only - files stay on disk">DB Only (keep files)</button>
+                    <button class="btn-small" onclick="bulkDeleteAssets(true)" title="Remove from database only — files stay on disk">Remove from DB</button>
+                    <button class="btn-small btn-danger" onclick="bulkDeleteAssets()" title="Delete from database AND remove files from disk — cannot be undone">Delete from Disk</button>
                 </div>
               </div><!-- /.project-sticky-header -->
 
@@ -397,27 +397,27 @@ Import from Resolve</button>
                     </div>
 
                     <div class="import-mode-group" style="margin:12px 0; display:flex; flex-direction:column; gap:8px;">
-                        <label style="font-size:0.85em; color:#aaa; margin-bottom:2px;">Import Mode <span class="help-icon" data-tip="Move = relocates files into the vault folder. Copy = duplicates files (originals stay). Register = just adds to database, files don't move.">?</span></label>
+                        <label style="font-size:0.85em; color:#aaa; margin-bottom:2px;">Import Mode <span class="help-icon" data-tip="Register = just adds to database, files don't move. Copy = duplicates files (originals stay). Move = relocates files into the vault folder.">?</span></label>
                         <div class="import-mode-option">
                             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                                <input type="radio" name="importMode" value="move" checked>
-                                <span>Move into vault (default)</span>
+                                <input type="radio" name="importMode" value="register" checked>
+                                <span>Register in place (default)</span>
                             </label>
-                            <div class="import-mode-desc">Files are <strong>moved and renamed</strong> using the ShotGrid naming convention. Originals are removed from their source location. Best for organizing raw deliveries.</div>
+                            <div class="import-mode-desc">Files stay exactly where they are &mdash; only a database reference is created. <strong>Nothing is moved, renamed, or deleted.</strong> Recommended for network drives and shared storage.</div>
                         </div>
                         <div class="import-mode-option">
                             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
                                 <input type="radio" name="importMode" value="copy">
                                 <span>Copy into vault (keep originals)</span>
                             </label>
-                            <div class="import-mode-desc">Files are <strong>copied and renamed</strong> into the vault. Originals stay untouched at their source location. Safest option if you want to keep your source files.</div>
+                            <div class="import-mode-desc">Files are <strong>copied and renamed</strong> into the vault. Originals stay untouched at their source location.</div>
                         </div>
                         <div class="import-mode-option">
                             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;">
-                                <input type="radio" name="importMode" value="register">
-                                <span>Register in place (files stay where they are)</span>
+                                <input type="radio" name="importMode" value="move">
+                                <span>Move into vault (relocates files)</span>
                             </label>
-                            <div class="import-mode-desc">Files stay exactly where they are - only a database reference is created. Good for network drives or files you can't move. No files are renamed or relocated.</div>
+                            <div class="import-mode-desc">Files are <strong>moved and renamed</strong> using the naming convention. Originals are removed from their source location. Use only when you want CAM to reorganize deliveries.</div>
                         </div>
                         <div id="registerWarning" style="display:none; font-size:0.8em; color:#ffaa00; margin-left:24px;"> Files remain on their current drive/network. If moved or deleted externally, MediaVault will show broken references.</div>
                     </div>

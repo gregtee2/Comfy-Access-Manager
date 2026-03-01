@@ -242,6 +242,12 @@ router.post('/rename-to-hierarchy', (req, res) => {
             const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(id);
             if (!asset) { errors.push({ id, error: 'Not found' }); continue; }
 
+            // Never rename linked/registered-in-place assets — their paths are externally managed
+            if (asset.is_linked) {
+                results.push({ id, oldName: asset.vault_name, newName: asset.vault_name, skipped: true, reason: 'linked' });
+                continue;
+            }
+
             // Look up current hierarchy
             const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(asset.project_id);
             if (!project) { errors.push({ id, error: 'No project' }); continue; }
@@ -1313,7 +1319,7 @@ router.delete('/:id', (req, res) => {
     const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(req.params.id);
     if (!asset) return res.status(404).json({ error: 'Asset not found' });
 
-    const deleteFile = req.query.delete_file !== 'false'; // Default: delete physical file
+    const deleteFile = req.query.delete_file === 'true'; // Default: DB only — file stays on disk
 
     // Never delete the physical file for linked/referenced assets
     if (deleteFile && !asset.is_linked && fs.existsSync(asset.file_path)) {
@@ -1465,7 +1471,7 @@ router.post('/bulk-role', (req, res) => {
 // POST /api/assets/bulk-delete — Delete multiple assets at once
 router.post('/bulk-delete', (req, res) => {
     const db = getDb();
-    const { ids, delete_files = true } = req.body;
+    const { ids, delete_files = false } = req.body;
 
     if (!Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ error: 'ids array required' });

@@ -178,8 +178,8 @@ async function showContextMenu(event, assetIdx) {
     // Hide destructive actions when inside a crate (user wants Remove, not Delete)
     if (!window.getActiveCrateId?.()) {
         html += `<div class="ctx-separator"></div>`;
-        html += `<div class="ctx-item ctx-danger" data-action="delete"> Delete${!isSingle ? ` (${count})` : ''}</div>`;
-        html += `<div class="ctx-item ctx-muted" data-action="removeDb"> Remove from DB only${!isSingle ? ` (${count})` : ''}</div>`;
+        html += `<div class="ctx-item" data-action="removeDb"> Remove from DB${!isSingle ? ` (${count})` : ''}</div>`;
+        html += `<div class="ctx-item ctx-danger" data-action="delete"> Delete files from disk${!isSingle ? ` (${count})` : ''}</div>`;
     }
 
     menu.innerHTML = html;

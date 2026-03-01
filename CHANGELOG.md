@@ -2,6 +2,15 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.6.8] - 2026-03-01
+
+### Changed — Safety Guardrails for Facility Deployment
+- **Default import mode is now "Register in Place"** — Files stay exactly where they are by default. Move and Copy are still available but require explicit selection. Register is now the first option in the import panel.
+- **Delete defaults to DB-only** — `DELETE /api/assets/:id` and `POST /api/assets/bulk-delete` now default to removing database records only. Physical file deletion requires an explicit `delete_file=true` parameter. Previously both defaulted to deleting files from disk.
+- **Rename-to-hierarchy skips linked assets** — The bulk rename operation now automatically skips any asset with `is_linked = 1` (registered in place). Externally managed files are never renamed.
+- **Context menu reordered** — "Remove from DB" is now the top (non-destructive) action. "Delete files from disk" is the secondary red/danger action, making accidental file deletion less likely.
+- **Selection toolbar reordered** — The safe "Remove from DB" button now appears before the destructive "Delete from Disk" button, with clearer labels on both.
+
 ## [1.6.7] - 2026-03-01
 
 ### Added — Path Matching & Bulk Scan-and-Register
