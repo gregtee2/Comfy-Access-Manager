@@ -2416,6 +2416,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         cache is already populated and the overlay appears instantly when
         toggled on, with zero ffprobe delay and zero playback impact.
         """
+        event.reject()
         all_paths = self._getAllSourcePaths()
         newly_probed = 0
         last_probed_path = None
@@ -2445,6 +2446,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         updates pointers from whatever is already cached.  No ffprobe,
         no HTTP calls unless the source truly changed.
         """
+        event.reject()
         self._syncCurrentSource()
 
     def _onFrameChanged(self, event):
@@ -2455,6 +2457,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         when there are 2+ cached sources, so single-clip viewing has
         zero overhead.
         """
+        event.reject()
         if len(self._comfyui_cache) > 1 or self._overlay_enabled:
             self._syncCurrentSource()
 

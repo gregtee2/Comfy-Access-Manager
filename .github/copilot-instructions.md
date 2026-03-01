@@ -1397,6 +1397,17 @@ if (frame != frame())
 
 Search for `c neq nil` in the `syncFrameChanged` method — it's the only sync handler with this unnecessary guard. The variable `c` (SyncContact) is never used in the method body after the check. Back up the file before editing (`cp sync.mu sync.mu.bak`). RV must be restarted after editing (sync.mu is interpreted on load).
 
+**REQUIRED FIX — mediavault_mode.py `event.reject()` (March 2026):**
+The MediaVault RV plugin (`mediavault_mode.py`) was consuming `frame-changed`, `source-group-complete`, `after-progressive-loading`, and `graph-state-change` events without calling `event.reject()`. In RV's event system, if a handler does NOT reject the event, it is consumed — downstream handlers never see it. This prevented the sync module's `frameChanged()` handler from ever firing, so `remote-sync-frame-changed` was never sent during scrub.
+
+**The fix — already applied in `rv-package/mediavault_mode.py` (in git):**
+Add `event.reject()` as the first line in these three handlers:
+- `_onSourceLoaded(self, event)` — handles `source-group-complete`, `after-progressive-loading`
+- `_onViewChanged(self, event)` — handles `graph-state-change`
+- `_onFrameChanged(self, event)` — handles `frame-changed`
+
+After `git pull`, run the RV package deploy (server auto-deploys on startup) or manually copy `rv-package/mediavault_mode.py` to the RV PlugIns directory. On Windows: `C:\OpenRV\_build\stage\app\plugins\Python\mediavault_mode.py` (or wherever the OpenRV PlugIns/Python dir is).
+
 **Duplicate Session Prevention:**
 Both `/start` and `/hub-register` auto-end stale active sessions from the same `host_ip` before inserting a new one. After ending stale sessions, they broadcast SSE `update` events for each ended session so spokes remove them from the active list. Without this broadcast, spokes accumulate duplicate "active" sessions.
 
