@@ -288,6 +288,23 @@ if exist "tools\rv\bin\rv.exe" (
 if not exist "data" mkdir data
 if not exist "thumbnails" mkdir thumbnails
 
+:: ─── Initialize git repo (needed for auto-updater) ───
+if not exist ".git" (
+    where git >nul 2>&1
+    if not errorlevel 1 (
+        echo.
+        echo  [Setup] Initializing git repo for auto-updates...
+        git init >nul 2>&1
+        git remote add origin https://github.com/gregtee2/Comfy-Access-Manager.git >nul 2>&1
+        git fetch origin stable >nul 2>&1
+        git reset --mixed origin/stable >nul 2>&1
+        echo         Git repo initialized — auto-updater will work.
+    ) else (
+        echo.
+        echo  NOTE: Git not available. Auto-updater will need Git to be installed.
+    )
+)
+
 echo.
 echo  =============================================
 echo    Installation Complete!
