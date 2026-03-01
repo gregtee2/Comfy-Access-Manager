@@ -394,8 +394,12 @@ function renderSessionCard(session) {
 
     // Action buttons: host sees "End", others see "Leave"
     let actionButtons;
+    // Voice chat button (available for both host and participants)
+    const voiceBtn = `<button class="btn-small btn-voice" onclick="joinVoiceChat(${session.id})" title="Join voice chat for this session">\uD83C\uDF99\uFE0F Voice</button>`;
+
     if (session.is_owner) {
         actionButtons = `
+            ${voiceBtn}
             <button class="btn-small btn-notes" onclick="viewSessionNotes(${session.id})" title="Add or view notes for this session">\uD83D\uDCDD Notes</button>
             <button class="btn-small btn-end" onclick="endReview(${session.id})" title="End this review session for all participants">\u2715 End Session</button>
         `;
@@ -404,6 +408,7 @@ function renderSessionCard(session) {
             <button class="btn-small btn-join" onclick="joinReview(${session.id})" title="Opens RV on your machine and connects to the host's synced session">
                 \u25B6 Join &amp; Launch RV
             </button>
+            ${voiceBtn}
             <button class="btn-small btn-notes" onclick="viewSessionNotes(${session.id})" title="Add or view notes for this session">\uD83D\uDCDD Notes</button>
             <button class="btn-small btn-leave" onclick="leaveReview(${session.id})" title="Disconnect your RV — the session stays active for others">\u21A9 Leave</button>
         `;

@@ -19,6 +19,7 @@ import pluginRegistry from './pluginRegistry.js';
 import './export.js';
 import './overlayEditor.js';
 import './syncReview.js';
+import './voiceChat.js';
 
 // ===========================================
 //  INIT
