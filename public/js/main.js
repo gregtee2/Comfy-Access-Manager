@@ -209,6 +209,9 @@ async function checkSetup() {
             if (state.settings?.auto_check_updates !== 'false') {
                 autoCheckForUpdates();
             }
+
+            // Check Flow Production Tracking connection status (non-blocking)
+            checkFlowStatus();
         }
     } catch (err) {
         console.error('Setup check failed:', err);
@@ -287,6 +290,44 @@ async function setupVault() {
 
 function browseForVault() {
     openFolderPicker('setupVaultPath');
+}
+
+// ===========================================
+//  FLOW STATUS CHECK
+// ===========================================
+
+/**
+ * Check Flow Production Tracking connection status and update topbar indicator.
+ * Runs once on startup, non-blocking. Shows the 🔀 button if Flow is configured.
+ */
+async function checkFlowStatus() {
+    const btn = document.getElementById('flowStatusBtn');
+    const dot = document.getElementById('flowStatusDot');
+    if (!btn || !dot) return;
+
+    try {
+        const result = await api('/api/flow/status');
+
+        if (!result.configured) {
+            // Not configured — hide the button
+            btn.style.display = 'none';
+            return;
+        }
+
+        // Show the button
+        btn.style.display = '';
+
+        if (result.connected) {
+            dot.className = 'flow-dot connected';
+            btn.title = 'Flow Production Tracking — connected';
+        } else {
+            dot.className = 'flow-dot configured';
+            btn.title = 'Flow Production Tracking — configured but not connected';
+        }
+    } catch {
+        // API not available (plugin not loaded) — hide button
+        btn.style.display = 'none';
+    }
 }
 
 // ===========================================

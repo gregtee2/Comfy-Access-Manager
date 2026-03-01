@@ -198,6 +198,95 @@ def cmd_sync_steps(sg, args):
     except Exception as e:
         error(f"Failed to fetch pipeline steps: {str(e)}")
 
+def cmd_sync_tasks(sg, args):
+    """Fetch tasks for a given project, including assignment and status."""
+    params = json.loads(args.json) if args.json else {}
+    project_id = params.get("project_id")
+    if not project_id:
+        error("project_id required in --json")
+
+    try:
+        filters = [["project", "is", {"type": "Project", "id": int(project_id)}]]
+
+        # Optionally filter by entity type (Shot, Asset, etc.)
+        entity_type = params.get("entity_type")
+        if entity_type:
+            filters.append(["entity", "type_is", entity_type])
+
+        tasks = sg.find("Task",
+            filters=filters,
+            fields=["content", "sg_status_list", "task_assignees", "step",
+                    "entity", "start_date", "due_date", "sg_description",
+                    "est_in_mins", "time_logs_sum", "id"],
+            order=[{"field_name": "content", "direction": "asc"}]
+        )
+
+        result = []
+        for task in tasks:
+            step = task.get("step")
+            entity = task.get("entity")
+            assignees = task.get("task_assignees") or []
+
+            result.append({
+                "flow_id": task["id"],
+                "content": task.get("content", ""),
+                "status": task.get("sg_status_list", ""),
+                "description": task.get("sg_description", "") or "",
+                "step_id": step["id"] if step else None,
+                "step_name": step.get("name", "") if step else None,
+                "entity_type": entity["type"] if entity else None,
+                "entity_id": entity["id"] if entity else None,
+                "entity_name": entity.get("name", "") if entity else None,
+                "assignees": [{"id": a["id"], "name": a.get("name", ""), "type": a["type"]} for a in assignees],
+                "start_date": task.get("start_date"),
+                "due_date": task.get("due_date"),
+                "est_minutes": task.get("est_in_mins"),
+                "logged_minutes": task.get("time_logs_sum"),
+            })
+
+        output({"success": True, "tasks": result, "count": len(result)})
+    except Exception as e:
+        error(f"Failed to fetch tasks: {str(e)}")
+
+def cmd_update_task_status(sg, args):
+    """Update a Task's status in Flow."""
+    params = json.loads(args.json) if args.json else {}
+    task_id = params.get("task_id")
+    status = params.get("status")
+    if not task_id or not status:
+        error("'task_id' and 'status' required in --json")
+
+    try:
+        sg.update("Task", int(task_id), {"sg_status_list": status})
+        output({
+            "success": True,
+            "message": f"Task {task_id} status updated to '{status}'"
+        })
+    except Exception as e:
+        error(f"Failed to update task status: {str(e)}")
+
+def cmd_upload_media(sg, args):
+    """Upload a movie or image to a Version for Screening Room playback."""
+    params = json.loads(args.json) if args.json else {}
+    version_id = params.get("version_id")
+    media_path = params.get("path")
+    field_name = params.get("field", "sg_uploaded_movie")
+
+    if not version_id or not media_path:
+        error("'version_id' and 'path' required in --json")
+
+    if not os.path.exists(media_path):
+        error(f"Media file not found: {media_path}")
+
+    try:
+        sg.upload("Version", int(version_id), media_path, field_name=field_name)
+        output({
+            "success": True,
+            "message": f"Media uploaded to Version {version_id} (field: {field_name})"
+        })
+    except Exception as e:
+        error(f"Failed to upload media: {str(e)}")
+
 def cmd_publish_version(sg, args):
     """Create a Version entity in Flow linked to a Shot."""
     params = json.loads(args.json) if args.json else {}
@@ -280,8 +369,11 @@ COMMANDS = {
     "sync_sequences": cmd_sync_sequences,
     "sync_shots": cmd_sync_shots,
     "sync_steps": cmd_sync_steps,
+    "sync_tasks": cmd_sync_tasks,
+    "update_task_status": cmd_update_task_status,
     "publish_version": cmd_publish_version,
     "upload_thumbnail": cmd_upload_thumbnail,
+    "upload_media": cmd_upload_media,
 }
 
 def main():

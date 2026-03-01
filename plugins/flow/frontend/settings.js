@@ -23,6 +23,7 @@ export function init() {
     const syncProjectsBtn = document.getElementById('flowSyncProjectsBtn');
     const syncStepsBtn = document.getElementById('flowSyncStepsBtn');
     const fullSyncBtn = document.getElementById('flowFullSyncBtn');
+    const syncTasksBtn = document.getElementById('flowSyncTasksBtn');
 
     if (testBtn) testBtn.addEventListener('click', testFlowConnection);
     if (syncBtn) syncBtn.addEventListener('click', showFlowSyncPanel);
@@ -30,6 +31,7 @@ export function init() {
     if (syncProjectsBtn) syncProjectsBtn.addEventListener('click', flowSyncProjects);
     if (syncStepsBtn) syncStepsBtn.addEventListener('click', flowSyncSteps);
     if (fullSyncBtn) fullSyncBtn.addEventListener('click', flowFullSync);
+    if (syncTasksBtn) syncTasksBtn.addEventListener('click', flowSyncTasks);
 }
 
 /**
@@ -153,9 +155,31 @@ async function flowFullSync() {
         if (result.steps)     _log(`  Steps: ${result.steps.created} created, ${result.steps.updated} updated`);
         if (result.sequences) _log(`  Sequences: ${result.sequences.created} created, ${result.sequences.updated} updated`);
         if (result.shots)     _log(`  Shots: ${result.shots.created} created, ${result.shots.updated} updated`);
+        if (result.tasks)     _log(`  Tasks: ${result.tasks.created} created, ${result.tasks.updated} updated`);
         _log('✅ Full sync complete');
     } catch (err) {
         _log(`❌ Full sync: ${err.message}`);
+    }
+}
+
+async function flowSyncTasks() {
+    const select = document.getElementById('flowProjectSelect');
+    if (!select || !select.value) {
+        _log('⚠️ Select a project first');
+        return;
+    }
+
+    const [flowId, localId] = select.value.split('|');
+    _log(`⏳ Syncing tasks for ${select.options[select.selectedIndex]?.text}…`);
+
+    try {
+        const result = await api('/api/flow/sync/tasks', {
+            method: 'POST',
+            body: { flowProjectId: Number(flowId), localProjectId: Number(localId) }
+        });
+        _log(`✅ Tasks — ${result.created || 0} created, ${result.updated || 0} updated (${result.total || 0} total)`);
+    } catch (err) {
+        _log(`❌ Tasks: ${err.message}`);
     }
 }
 

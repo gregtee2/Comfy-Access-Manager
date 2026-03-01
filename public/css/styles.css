@@ -2964,6 +2964,23 @@ label:has(input[type="checkbox"]) {
     border-radius: 50%;
 }
 
+/* Flow Production Tracking status indicator */
+.flow-status-btn {
+    font-size: 0.9rem;
+    position: relative;
+}
+.flow-dot {
+    display: inline-block;
+    width: 6px;
+    height: 6px;
+    border-radius: 50%;
+    margin-left: 2px;
+    vertical-align: middle;
+}
+.flow-dot.connected    { background: var(--success, #4caf50); }
+.flow-dot.configured   { background: var(--warning, #ff9800); }
+.flow-dot.disconnected { background: var(--text-dim, #666); }
+
 .server-panel {
     position: fixed;
     top: 44px;

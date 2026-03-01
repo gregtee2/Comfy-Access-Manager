@@ -80,6 +80,9 @@
             <button id="networkBtn" class="topbar-icon-btn" onclick="toggleServerPanel()" title="Network - find other MediaVault instances">
                 
             </button>
+            <button id="flowStatusBtn" class="topbar-icon-btn flow-status-btn" title="Flow Production Tracking — not configured" style="display:none;" onclick="switchTab('settings')">
+                🔀<span id="flowStatusDot" class="flow-dot disconnected"></span>
+            </button>
             <button id="reviewBtn" class="topbar-icon-btn review-btn-indicator" onclick="toggleReviewPanel()" title="Active sync reviews" style="display:none">
                 RV <span class="review-badge" id="reviewBadge">0</span>
             </button>

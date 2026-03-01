@@ -324,12 +324,51 @@ class FlowService {
             publishParams.shot_id = params.flowShotId;
         }
 
+        if (params.flowTaskId) {
+            publishParams.task_id = params.flowTaskId;
+        }
+
+        // Include movie path for review media
+        if (params.moviePath) {
+            publishParams.path_to_movie = params.moviePath;
+        }
+
         const result = await this.execute('publish_version', publishParams);
 
         if (result.version && result.version.flow_id) {
             db.prepare(
                 'UPDATE assets SET metadata = json_set(COALESCE(metadata, "{}"), "$.flow_version_id", ?) WHERE id = ?'
             ).run(result.version.flow_id, params.assetId);
+
+            // Auto-upload thumbnail if asset has one
+            if (params.uploadThumbnail !== false) {
+                try {
+                    const thumbPath = asset.thumbnail_path || asset.file_path;
+                    if (thumbPath) {
+                        await this.uploadThumbnail(result.version.flow_id, thumbPath);
+                    }
+                } catch (thumbErr) {
+                    console.warn(`[Flow] Auto-thumbnail upload failed: ${thumbErr.message}`);
+                }
+            }
+
+            // Auto-upload media for Screening Room if a movie file exists
+            if (params.uploadMedia && params.moviePath) {
+                try {
+                    await this.uploadMedia(result.version.flow_id, params.moviePath);
+                } catch (mediaErr) {
+                    console.warn(`[Flow] Media upload failed: ${mediaErr.message}`);
+                }
+            }
+
+            // Update linked task status to 'rev' (pending review) if specified
+            if (params.flowTaskId && params.updateTaskStatus !== false) {
+                try {
+                    await this.updateTaskStatus(params.flowTaskId, params.taskStatus || 'rev');
+                } catch (taskErr) {
+                    console.warn(`[Flow] Task status update failed: ${taskErr.message}`);
+                }
+            }
         }
 
         return result;
@@ -342,18 +381,88 @@ class FlowService {
         });
     }
 
+    static async uploadMedia(flowVersionId, mediaPath, field = 'sg_uploaded_movie') {
+        return this.execute('upload_media', {
+            version_id: flowVersionId,
+            path: mediaPath,
+            field,
+        });
+    }
+
+    static async updateTaskStatus(flowTaskId, status) {
+        return this.execute('update_task_status', {
+            task_id: flowTaskId,
+            status,
+        });
+    }
+
+    static async syncTasks(flowProjectId, localProjectId) {
+        const result = await this.execute('sync_tasks', { project_id: flowProjectId });
+        const db = this._getDb();
+        let created = 0, updated = 0;
+
+        for (const task of result.tasks) {
+            const existing = db.prepare(
+                'SELECT id FROM flow_tasks WHERE flow_id = ?'
+            ).get(task.flow_id);
+
+            const assigneesJson = JSON.stringify(task.assignees || []);
+
+            if (existing) {
+                db.prepare(`
+                    UPDATE flow_tasks SET
+                        content = ?, status = ?, description = ?,
+                        step_flow_id = ?, step_name = ?,
+                        entity_type = ?, entity_flow_id = ?, entity_name = ?,
+                        assignees = ?, start_date = ?, due_date = ?,
+                        est_minutes = ?, logged_minutes = ?,
+                        updated_at = datetime('now')
+                    WHERE id = ?
+                `).run(
+                    task.content, task.status, task.description,
+                    task.step_id, task.step_name,
+                    task.entity_type, task.entity_id, task.entity_name,
+                    assigneesJson, task.start_date, task.due_date,
+                    task.est_minutes, task.logged_minutes,
+                    existing.id
+                );
+                updated++;
+            } else {
+                db.prepare(`
+                    INSERT INTO flow_tasks (
+                        flow_id, project_id, content, status, description,
+                        step_flow_id, step_name, entity_type, entity_flow_id,
+                        entity_name, assignees, start_date, due_date,
+                        est_minutes, logged_minutes
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+                `).run(
+                    task.flow_id, localProjectId, task.content, task.status,
+                    task.description, task.step_id, task.step_name,
+                    task.entity_type, task.entity_id, task.entity_name,
+                    assigneesJson, task.start_date, task.due_date,
+                    task.est_minutes, task.logged_minutes
+                );
+                created++;
+            }
+        }
+
+        return { success: true, created, updated, total: result.count };
+    }
+
     static async fullSync(flowProjectId, localProjectId) {
         const results = {
             steps: await this.syncSteps(),
             sequences: await this.syncSequences(flowProjectId, localProjectId),
         };
         results.shots = await this.syncShots(flowProjectId, localProjectId);
+        results.tasks = await this.syncTasks(flowProjectId, localProjectId);
 
         return {
             success: true,
             steps: results.steps,
             sequences: results.sequences,
             shots: results.shots,
+            tasks: results.tasks,
         };
     }
 
@@ -362,6 +471,37 @@ class FlowService {
         return db.prepare(
             'SELECT id, name, code, flow_id FROM projects WHERE flow_id IS NOT NULL'
         ).all();
+    }
+
+    /**
+     * Get tasks for a project, optionally filtered by entity (shot/asset).
+     */
+    static getTasks(localProjectId, opts = {}) {
+        const db = this._getDb();
+        let sql = 'SELECT * FROM flow_tasks WHERE project_id = ?';
+        const params = [localProjectId];
+
+        if (opts.entityType) {
+            sql += ' AND entity_type = ?';
+            params.push(opts.entityType);
+        }
+        if (opts.entityFlowId) {
+            sql += ' AND entity_flow_id = ?';
+            params.push(opts.entityFlowId);
+        }
+        if (opts.status) {
+            sql += ' AND status = ?';
+            params.push(opts.status);
+        }
+
+        sql += ' ORDER BY step_name, content';
+
+        const tasks = db.prepare(sql).all(...params);
+        // Parse assignees JSON
+        return tasks.map(t => ({
+            ...t,
+            assignees: JSON.parse(t.assignees || '[]'),
+        }));
     }
 }
 

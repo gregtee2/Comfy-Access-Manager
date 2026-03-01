@@ -120,7 +120,7 @@ router.post('/sync/shots', async (req, res) => {
     }
 });
 
-// POST /api/flow/sync/full — Full sync: steps + sequences + shots for a project
+// POST /api/flow/sync/full — Full sync: steps + sequences + shots + tasks for a project
 // Body: { flowProjectId, localProjectId }
 router.post('/sync/full', async (req, res) => {
     const { flowProjectId, localProjectId } = req.body;
@@ -130,6 +130,58 @@ router.post('/sync/full', async (req, res) => {
 
     try {
         const result = await FlowService.fullSync(flowProjectId, localProjectId);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// ─── Tasks ───
+
+// POST /api/flow/sync/tasks — Fetch tasks for a project
+// Body: { flowProjectId, localProjectId }
+router.post('/sync/tasks', async (req, res) => {
+    const { flowProjectId, localProjectId } = req.body;
+    if (!flowProjectId || !localProjectId) {
+        return res.status(400).json({ error: 'flowProjectId and localProjectId required' });
+    }
+
+    try {
+        const result = await FlowService.syncTasks(flowProjectId, localProjectId);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// GET /api/flow/tasks/:projectId — Get locally synced tasks for a project
+router.get('/tasks/:projectId', (req, res) => {
+    const { projectId } = req.params;
+    const { entityType, entityFlowId, status } = req.query;
+
+    try {
+        const tasks = FlowService.getTasks(parseInt(projectId), {
+            entityType,
+            entityFlowId: entityFlowId ? parseInt(entityFlowId) : null,
+            status,
+        });
+        res.json(tasks);
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// POST /api/flow/tasks/:flowTaskId/status — Update a task's status in Flow
+// Body: { status }
+router.post('/tasks/:flowTaskId/status', async (req, res) => {
+    const { flowTaskId } = req.params;
+    const { status } = req.body;
+    if (!status) {
+        return res.status(400).json({ error: 'status required' });
+    }
+
+    try {
+        const result = await FlowService.updateTaskStatus(parseInt(flowTaskId), status);
         res.json(result);
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });
@@ -164,6 +216,22 @@ router.post('/publish/thumbnail', async (req, res) => {
 
     try {
         const result = await FlowService.uploadThumbnail(flowVersionId, thumbnailPath);
+        res.json(result);
+    } catch (err) {
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// POST /api/flow/publish/media — Upload review media (mov/mp4) to a Flow Version for Screening Room
+// Body: { flowVersionId, mediaPath, field? }
+router.post('/publish/media', async (req, res) => {
+    const { flowVersionId, mediaPath, field } = req.body;
+    if (!flowVersionId || !mediaPath) {
+        return res.status(400).json({ error: 'flowVersionId and mediaPath required' });
+    }
+
+    try {
+        const result = await FlowService.uploadMedia(flowVersionId, mediaPath, field || 'sg_uploaded_movie');
         res.json(result);
     } catch (err) {
         res.status(500).json({ success: false, error: err.message });

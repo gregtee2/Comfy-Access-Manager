@@ -15,6 +15,7 @@ import { state } from './state.js';
 import { api } from './api.js';
 import { esc, formatSize, showToast, closeModal, confirmDelete } from './utils.js';
 import { openPlayer } from './player.js';
+import pluginRegistry from './pluginRegistry.js';
 
 // Forward references to functions in other modules (accessed via window.*)
 // openProject, renderProjectDetail, selectSequence, selectShot, loadProjectAssets
@@ -160,6 +161,20 @@ async function showContextMenu(event, assetIdx) {
         html += `<div class="ctx-item" data-action="sendComfy">${sendLabel}</div>`;
     }
 
+    // ─── Plugin-contributed context menu items ───
+    const pluginItems = pluginRegistry.getContextMenuItems({ isSingle, count, asset, assets: state.selectedAssets, formats });
+    if (pluginItems.length > 0) {
+        let needsSep = true;
+        for (const pi of pluginItems) {
+            if (pi.separator && needsSep) {
+                html += `<div class="ctx-separator"></div>`;
+                needsSep = false;
+            }
+            const label = pi.label || pi.id;
+            html += `<div class="ctx-item" data-action="${esc(pi.action || pi.id)}">${label}${!isSingle ? ` (${count})` : ''}</div>`;
+        }
+    }
+
     // Hide destructive actions when inside a crate (user wants Remove, not Delete)
     if (!window.getActiveCrateId?.()) {
         html += `<div class="ctx-separator"></div>`;
@@ -225,6 +240,14 @@ async function showContextMenu(event, assetIdx) {
             }
             case 'delete': bulkDeleteAssets(); break;
             case 'removeDb': bulkDeleteAssets(true); break;
+            default: {
+                // Handle plugin-contributed actions
+                if (action && action.startsWith('flow-')) {
+                    const ids = state.selectedAssets.length > 0 ? [...state.selectedAssets] : [asset.id];
+                    handlePluginAction(action, ids);
+                }
+                break;
+            }
         }
     });
 
@@ -266,7 +289,25 @@ function onCtxKeydown(e) {
     if (e.key === 'Escape') dismissContextMenu();
 }
 
-// ===========================================
+/**
+ * Dispatch plugin-contributed context menu actions.
+ * Dynamically imports the plugin's frontend module to call the handler.
+ */
+async function handlePluginAction(action, assetIds) {
+    if (action === 'flow-publish') {
+        try {
+            const mod = await import('/plugins/flow/frontend/contextMenu.js');
+            if (mod.handlePublishToFlow) {
+                mod.handlePublishToFlow(assetIds);
+            }
+        } catch (err) {
+            console.warn('[ContextMenu] Flow publish handler failed:', err.message);
+            showToast('Flow publish not available', 'error');
+        }
+    }
+}
+
+// ==========================================
 //  HIERARCHY CONTEXT MENUS
 // ===========================================
 

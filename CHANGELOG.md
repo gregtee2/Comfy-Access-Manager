@@ -2,6 +2,17 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.6.6] - 2026-03-01
+
+### Added — Flow Production Tracking v2.0 (ShotGrid Integration)
+- **Task sync** — New `sync_tasks` bridge command + `flow_tasks` database table. Full sync now pulls Tasks from Flow including assignments, statuses, dates, and pipeline step links. "Sync Tasks Only" button added to settings.
+- **Task status writeback** — `update_task_status` bridge command + `/api/flow/tasks/:id/status` route. Publishing a Version can auto-update the linked Task status to "Pending Review" in Flow.
+- **Media upload for Screening Room** — `upload_media` bridge command + `/api/flow/publish/media` route. Upload MOV/MP4 review media directly to Flow Versions for remote review in Screening Room.
+- **Publish to Flow context menu** — Right-click any asset(s) → "🔀 Publish to Flow" opens a modal to select the Flow project, add a description, and publish. Auto-uploads thumbnails. Works with single or multi-select.
+- **Flow status indicator in topbar** — 🔀 icon appears when Flow is configured. Green dot = connected, amber = configured but can't reach server, hidden = not configured. Clicking opens Settings.
+- **Enhanced publish pipeline** — `publishVersion` now supports auto-thumbnail upload, media upload for Screening Room, task linking, and task status writeback in a single publish action.
+- **Plugin context menu system** — `contextMenus.js` now queries `pluginRegistry.getContextMenuItems()` for plugin-contributed right-click menu items. Other plugins can now add context menu actions via `plugin.json` declarations.
+
 ## [1.6.5] - 2026-03-01
 
 ### Fixed

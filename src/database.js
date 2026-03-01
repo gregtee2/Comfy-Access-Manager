@@ -308,6 +308,32 @@ function runMigrations(wrapper) {
         } catch (_) { /* column already exists */ }
     }
 
+    // ─── Create flow_tasks table for Flow Production Tracking task sync ───
+    wrapper.exec(`CREATE TABLE IF NOT EXISTS flow_tasks (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        flow_id INTEGER UNIQUE NOT NULL,
+        project_id INTEGER NOT NULL,
+        content TEXT NOT NULL,
+        status TEXT DEFAULT '',
+        description TEXT DEFAULT '',
+        step_flow_id INTEGER,
+        step_name TEXT,
+        entity_type TEXT,
+        entity_flow_id INTEGER,
+        entity_name TEXT,
+        assignees TEXT DEFAULT '[]',
+        start_date TEXT,
+        due_date TEXT,
+        est_minutes INTEGER,
+        logged_minutes INTEGER,
+        created_at DATETIME DEFAULT (datetime('now')),
+        updated_at DATETIME DEFAULT (datetime('now')),
+        FOREIGN KEY (project_id) REFERENCES projects(id)
+    )`);
+    wrapper.exec('CREATE INDEX IF NOT EXISTS idx_flow_tasks_project ON flow_tasks(project_id)');
+    wrapper.exec('CREATE INDEX IF NOT EXISTS idx_flow_tasks_flow_id ON flow_tasks(flow_id)');
+    wrapper.exec('CREATE INDEX IF NOT EXISTS idx_flow_tasks_entity ON flow_tasks(entity_type, entity_flow_id)');
+
     // ─── Add naming_convention column to projects (Shot Builder) ───
     try {
         const projCols = [];

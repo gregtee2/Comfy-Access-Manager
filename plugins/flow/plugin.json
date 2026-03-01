@@ -1,7 +1,7 @@
 {
     "id": "flow",
     "name": "Flow Production Tracking",
-    "version": "1.0.0",
+    "version": "2.0.0",
     "description": "Sync projects, sequences, shots, and pipeline steps from Autodesk Flow (ShotGrid)",
     "icon": "🔀",
     "author": "Greg Tee",
@@ -11,6 +11,7 @@
     },
     "frontend": {
         "settingsSection": "frontend/settings.html",
-        "settingsScript": "frontend/settings.js"
+        "settingsScript": "frontend/settings.js",
+        "contextMenu": "frontend/contextMenu.js"
     }
 }
