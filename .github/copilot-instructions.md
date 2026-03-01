@@ -1186,13 +1186,31 @@ Actions: `insert`, `update`, `delete`, `bulk-insert`. Spoke applies via `INSERT 
 
 **Thumbnail sync on insert**: When `table === 'assets'` and action is `insert` or `bulk-insert`, the spoke automatically calls `fetchSingleThumbnail(id)` to download the thumbnail for the new asset from the hub.
 
+### SSE Broadcast Integration (v1.5.9)
+
+Hub-side route handlers call `req.app.locals.broadcastChange?.(table, action, data)` after every database write. This function is set to `HubService.broadcast` in hub mode (in `server.js`). In standalone/spoke modes it's `undefined`, so the `?.` optional chaining makes it a safe no-op.
+
+**Route files with broadcast calls:**
+| Route File | Tables Broadcast | Write Operations Covered |
+|-----------|------------------|-------------------------|
+| `assetRoutes.js` | `assets` | import (single + sequence), upload, update metadata, rename, delete, bulk-delete, bulk-assign, bulk-role, publish-frame, spoke-register |
+| `projectRoutes.js` | `projects`, `sequences`, `shots` | create, update, delete for each entity |
+| `roleRoutes.js` | `roles` | create, update, delete, reorder |
+
+**Data format (must match what `SpokeService._applyChange()` expects):**
+- insert: `broadcastChange('assets', 'insert', { record: { ...fullRow } })`
+- update: `broadcastChange('assets', 'update', { id, record: { ...updatedRow } })`
+- delete: `broadcastChange('assets', 'delete', { id })`
+
+**Echo handling**: Spoke-originated writes are proxied to the hub, which broadcasts back to ALL spokes including the originator. This is harmless — `_applyChange` uses `INSERT OR REPLACE` (idempotent).
+
 ### Spoke Write Proxy Flow
 1. User on spoke makes a POST/PUT/DELETE to any `/api/*` endpoint
 2. `spokeProxy` middleware intercepts (before route handlers)
 3. Request is forwarded to hub's `/api/sync/write` with method, path, body, and user header
 4. Hub executes the write on its own routes (loopback HTTP to itself)
-5. Hub's response is forwarded back to the spoke's browser
-6. Hub broadcasts the change via SSE to all spokes (including the originator)
+5. Route handler broadcasts the change via SSE to all spokes (including the originator)
+6. Hub's response is forwarded back to the spoke's browser
 
 ### LOCAL_ONLY Endpoints (Bypass Proxy)
 Certain POST endpoints must run on the **local machine** even in spoke mode, because they launch local processes, access local temp files, or are per-machine read-only checks. These are defined in `src/middleware/spokeProxy.js` and skip forwarding to the hub:
@@ -1409,6 +1427,10 @@ Port 7700 must be open between hub and spokes. On Windows, the first server star
 | `11146c9` | fix: Preserve local settings (path_mappings, rv_path, vault_root) across spoke DB syncs |
 | `ece0a29` | feat: Sync Mode configuration in Settings UI (Standalone/Hub/Spoke with validation) |
 | `cc041d4` | fix: publish-frame 502 on spoke — run locally + forward asset records to hub via spoke-register |
+| — | **v1.5.9 — Hub-Spoke Bidirectional Sync (February 2026)** |
+| — | feat: SSE broadcast integration — hub now broadcasts `db-change` SSE events after every database write in assetRoutes, projectRoutes, and roleRoutes |
+| — | feat: `app.locals.broadcastChange` exposed in server.js hub mode, pointing to `HubService.broadcast` |
+| — | fix: Hub→spoke sync was completely non-functional — `HubService.broadcast()` existed but was never called from any route handler |
 
 ---
 

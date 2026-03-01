@@ -40,6 +40,7 @@ router.post('/', (req, res) => {
         logActivity('role_created', 'role', result.lastInsertRowid, { name, code: cleanCode });
 
         const role = db.prepare('SELECT * FROM roles WHERE id = ?').get(result.lastInsertRowid);
+        req.app.locals.broadcastChange?.('roles', 'insert', { record: role });
         res.status(201).json(role);
     } catch (err) {
         if (err.message?.includes('UNIQUE')) {
@@ -67,6 +68,7 @@ router.put('/:id', (req, res) => {
         logActivity('role_updated', 'role', role.id, { name: newName });
 
         const updated = db.prepare('SELECT * FROM roles WHERE id = ?').get(role.id);
+        req.app.locals.broadcastChange?.('roles', 'update', { id: role.id, record: updated });
         res.json(updated);
     } catch (err) {
         if (err.message?.includes('UNIQUE')) {
@@ -86,6 +88,7 @@ router.delete('/:id', (req, res) => {
     db.prepare('DELETE FROM roles WHERE id = ?').run(role.id);
 
     logActivity('role_deleted', 'role', role.id, { name: role.name, assetsAffected: assetCount.count });
+    req.app.locals.broadcastChange?.('roles', 'delete', { id: role.id });
 
     res.json({ success: true, assetsCleared: assetCount.count });
 });
@@ -101,6 +104,10 @@ router.put('/reorder', (req, res) => {
         for (const item of items) stmt.run(item.sort_order, item.id);
     });
     reorder(order);
+    for (const item of order) {
+        const updated = db.prepare('SELECT * FROM roles WHERE id = ?').get(item.id);
+        if (updated) req.app.locals.broadcastChange?.('roles', 'update', { id: item.id, record: updated });
+    }
     res.json({ success: true });
 });
 

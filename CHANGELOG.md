@@ -2,6 +2,14 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.5.9] - 2026-02-28
+
+### Added
+- **Hub-spoke bidirectional sync** — Hub now broadcasts SSE `db-change` events to all connected spokes after every database write. Previously `HubService.broadcast()` existed but was never called from any route handler, so changes made on the hub (PC) never pushed to spokes (Mac). Now all INSERT/UPDATE/DELETE operations in `assetRoutes.js`, `projectRoutes.js`, and `roleRoutes.js` call `req.app.locals.broadcastChange?.()` which triggers SSE broadcast in hub mode and is a safe no-op in standalone/spoke modes.
+
+### Fixed
+- **Hub→spoke sync was completely non-functional** — The SSE infrastructure was fully wired (hub has broadcast function, spoke subscribes and applies changes), but nothing ever triggered the broadcast. Imports, publishes, renames, deletes, and all other writes on the hub were invisible to spokes. Root cause: architectural gap where `HubService.broadcast()` was implemented but never integrated into route handlers.
+
 ## [1.5.8] - 2026-02-28
 
 ### Added

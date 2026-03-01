@@ -49,6 +49,9 @@ if (APP_MODE === 'spoke') {
     app.locals.spokeService = _spokeService;
     console.log(`[Mode] SPOKE — writes forwarded to ${_config.hub_url}`);
 } else if (APP_MODE === 'hub') {
+    const HubService = require('./services/HubService');
+    HubService.init(_config.hub_secret || '');
+    app.locals.broadcastChange = HubService.broadcast;
     console.log('[Mode] HUB — broadcasting changes to spokes');
 } else {
     console.log('[Mode] STANDALONE');

@@ -923,6 +923,9 @@ router.post('/import', async (req, res) => {
             const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId);
             results.push(asset);
 
+            // Broadcast to spokes (hub mode)
+            req.app.locals.broadcastChange?.('assets', 'insert', { record: asset });
+
             sendProgress(`${seqOriginalName} (${seq.frameCount} frames)`);
 
             // Queue derivatives for this sequence if requested
@@ -1102,6 +1105,9 @@ router.post('/import', async (req, res) => {
             const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId);
             results.push(asset);
 
+            // Broadcast to spokes (hub mode)
+            req.app.locals.broadcastChange?.('assets', 'insert', { record: asset });
+
             sendProgress(originalName);
 
             // Queue derivatives for video/exr single files if requested
@@ -1212,6 +1218,9 @@ router.post('/upload', upload.array('files', 50), async (req, res) => {
 
             const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId);
             results.push(asset);
+
+            // Broadcast to spokes (hub mode)
+            req.app.locals.broadcastChange?.('assets', 'insert', { record: asset });
         } catch (err) {
             console.error('[Upload] Error:', err.message);
         }
@@ -1251,6 +1260,10 @@ router.put('/:id', (req, res) => {
     );
 
     const updated = db.prepare('SELECT * FROM assets WHERE id = ?').get(asset.id);
+
+    // Broadcast to spokes (hub mode)
+    req.app.locals.broadcastChange?.('assets', 'update', { id: asset.id, record: updated });
+
     res.json(updated);
 });
 
@@ -1284,6 +1297,10 @@ router.post('/:id/rename', (req, res) => {
         });
 
         const updated = db.prepare('SELECT * FROM assets WHERE id = ?').get(asset.id);
+
+        // Broadcast to spokes (hub mode)
+        req.app.locals.broadcastChange?.('assets', 'update', { id: asset.id, record: updated });
+
         res.json(updated);
     } catch (err) {
         res.status(500).json({ error: err.message });
@@ -1308,6 +1325,9 @@ router.delete('/:id', (req, res) => {
 
     db.prepare('DELETE FROM assets WHERE id = ?').run(asset.id);
     logActivity('asset_deleted', 'asset', asset.id, { name: asset.vault_name });
+
+    // Broadcast to spokes (hub mode)
+    req.app.locals.broadcastChange?.('assets', 'delete', { id: asset.id });
 
     res.json({ success: true });
 });
@@ -1404,6 +1424,14 @@ router.post('/bulk-assign', (req, res) => {
         sequence_code: sequence?.code,
     });
 
+    // Broadcast updates to spokes (hub mode)
+    if (req.app.locals.broadcastChange && moved > 0) {
+        for (const id of ids) {
+            const updated = db.prepare('SELECT * FROM assets WHERE id = ?').get(id);
+            if (updated) req.app.locals.broadcastChange('assets', 'update', { id, record: updated });
+        }
+    }
+
     res.json({ moved, errors: errors.length, errors_detail: errors });
 });
 
@@ -1422,6 +1450,14 @@ router.post('/bulk-role', (req, res) => {
         for (const id of items) stmt.run(role_id || null, id);
     });
     assign(ids);
+
+    // Broadcast updates to spokes (hub mode)
+    if (req.app.locals.broadcastChange) {
+        for (const id of ids) {
+            const updated = db.prepare('SELECT * FROM assets WHERE id = ?').get(id);
+            if (updated) req.app.locals.broadcastChange('assets', 'update', { id, record: updated });
+        }
+    }
 
     res.json({ success: true, updated: ids.length });
 });
@@ -1450,6 +1486,10 @@ router.post('/bulk-delete', (req, res) => {
             ThumbnailService.deleteThumb(asset.id);
             db.prepare('DELETE FROM assets WHERE id = ?').run(asset.id);
             logActivity('asset_deleted', 'asset', asset.id, { name: asset.vault_name });
+
+            // Broadcast to spokes (hub mode)
+            req.app.locals.broadcastChange?.('assets', 'delete', { id: asset.id });
+
             deleted++;
         } catch (err) {
             errors.push({ id, error: err.message });
@@ -2600,6 +2640,14 @@ router.post('/publish-frame', async (req, res) => {
         // Clean up temp dir
         try { fs.rmSync(tempDir, { recursive: true }); } catch (_) {}
 
+        // Broadcast new assets to spokes (hub mode)
+        if (req.app.locals.broadcastChange && publishedAssets.length > 0) {
+            for (const pa of publishedAssets) {
+                const record = db.prepare('SELECT * FROM assets WHERE id = ?').get(pa.id);
+                if (record) req.app.locals.broadcastChange('assets', 'insert', { record });
+            }
+        }
+
         res.json({ success: true, assets: publishedAssets });
 
         // ── Forward new asset records to hub (spoke mode) ──
@@ -2712,6 +2760,12 @@ router.post('/spoke-register', (req, res) => {
             } else {
                 console.log(`[spoke-register] File not accessible locally, skipping thumbnail: ${a.file_path}`);
             }
+        }
+
+        // Broadcast to spokes (hub mode) — so other spokes get the new asset
+        const newAsset = db.prepare('SELECT * FROM assets WHERE id = ?').get(newId);
+        if (newAsset) {
+            req.app.locals.broadcastChange?.('assets', 'insert', { record: newAsset });
         }
 
         res.json({ success: true, id: newId });

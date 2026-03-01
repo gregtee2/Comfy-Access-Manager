@@ -288,6 +288,10 @@ router.post('/', (req, res) => {
         logActivity('project_created', 'project', result.lastInsertRowid, { name, code: cleanCode });
 
         const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(result.lastInsertRowid);
+
+        // Broadcast to spokes (hub mode)
+        req.app.locals.broadcastChange?.('projects', 'insert', { record: project });
+
         res.status(201).json(project);
     } catch (err) {
         if (err.message.includes('UNIQUE')) {
@@ -326,6 +330,11 @@ router.put('/:id', (req, res) => {
     if (updated.naming_convention) {
         try { updated.naming_convention = JSON.parse(updated.naming_convention); } catch (_) {}
     }
+
+    // Broadcast to spokes (hub mode) — send raw DB row (with JSON string, not parsed)
+    const rawUpdated = db.prepare('SELECT * FROM projects WHERE id = ?').get(project.id);
+    req.app.locals.broadcastChange?.('projects', 'update', { id: project.id, record: rawUpdated });
+
     res.json(updated);
 });
 
@@ -384,6 +393,9 @@ router.delete('/:id', (req, res) => {
 
     logActivity('project_deleted', 'project', project.id, { name: project.name, assetsDeleted: assetCount.count });
 
+    // Broadcast to spokes (hub mode)
+    req.app.locals.broadcastChange?.('projects', 'delete', { id: project.id });
+
     res.json({ success: true, assetsDeleted: assetCount.count });
 });
 
@@ -425,6 +437,10 @@ router.post('/:id/sequences', (req, res) => {
         logActivity('sequence_created', 'sequence', result.lastInsertRowid, { name, code });
 
         const seq = db.prepare('SELECT * FROM sequences WHERE id = ?').get(result.lastInsertRowid);
+
+        // Broadcast to spokes (hub mode)
+        req.app.locals.broadcastChange?.('sequences', 'insert', { record: seq });
+
         res.status(201).json(seq);
     } catch (err) {
         if (err.message.includes('UNIQUE')) {
@@ -447,6 +463,10 @@ router.put('/:projectId/sequences/:seqId', (req, res) => {
         .run(name || seq.name, description ?? seq.description, sort_order ?? seq.sort_order, seq.id);
 
     const updated = db.prepare('SELECT * FROM sequences WHERE id = ?').get(seq.id);
+
+    // Broadcast to spokes (hub mode)
+    req.app.locals.broadcastChange?.('sequences', 'update', { id: seq.id, record: updated });
+
     res.json(updated);
 });
 
@@ -467,6 +487,10 @@ router.delete('/:projectId/sequences/:seqId', (req, res) => {
     db.prepare('DELETE FROM sequences WHERE id = ?').run(seq.id);
 
     logActivity('sequence_deleted', 'sequence', seq.id, { name: seq.name, code: seq.code, shotsDeleted: shotIds.length });
+
+    // Broadcast to spokes (hub mode)
+    req.app.locals.broadcastChange?.('sequences', 'delete', { id: seq.id });
+
     res.json({ success: true });
 });
 
@@ -508,6 +532,10 @@ router.post('/:projectId/sequences/:seqId/shots', (req, res) => {
         logActivity('shot_created', 'shot', result.lastInsertRowid, { name, code });
 
         const shot = db.prepare('SELECT * FROM shots WHERE id = ?').get(result.lastInsertRowid);
+
+        // Broadcast to spokes (hub mode)
+        req.app.locals.broadcastChange?.('shots', 'insert', { record: shot });
+
         res.status(201).json(shot);
     } catch (err) {
         if (err.message.includes('UNIQUE')) {
@@ -529,6 +557,10 @@ router.put('/:projectId/sequences/:seqId/shots/:shotId', (req, res) => {
         .run(name || shot.name, description ?? shot.description, sort_order ?? shot.sort_order, shot.id);
 
     const updated = db.prepare('SELECT * FROM shots WHERE id = ?').get(shot.id);
+
+    // Broadcast to spokes (hub mode)
+    req.app.locals.broadcastChange?.('shots', 'update', { id: shot.id, record: updated });
+
     res.json(updated);
 });
 
@@ -544,6 +576,10 @@ router.delete('/:projectId/sequences/:seqId/shots/:shotId', (req, res) => {
     db.prepare('DELETE FROM shots WHERE id = ?').run(shot.id);
 
     logActivity('shot_deleted', 'shot', shot.id, { name: shot.name, code: shot.code });
+
+    // Broadcast to spokes (hub mode)
+    req.app.locals.broadcastChange?.('shots', 'delete', { id: shot.id });
+
     res.json({ success: true });
 });
 
