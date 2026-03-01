@@ -234,8 +234,17 @@ router.post('/start', (req, res) => {
     const db = getDb();
 
     // Auto-end any existing active sessions from this host (prevents duplicates)
-    db.prepare(`UPDATE review_sessions SET status = 'ended', ended_at = datetime('now') WHERE status = 'active' AND host_ip = ?`)
-        .run(hostIp);
+    // First, find them so we can broadcast the status change to spokes
+    const staleSessions = db.prepare(`SELECT * FROM review_sessions WHERE status = 'active' AND host_ip = ?`).all(hostIp);
+    if (staleSessions.length > 0) {
+        db.prepare(`UPDATE review_sessions SET status = 'ended', ended_at = datetime('now') WHERE status = 'active' AND host_ip = ?`)
+            .run(hostIp);
+        for (const s of staleSessions) {
+            const ended = db.prepare('SELECT * FROM review_sessions WHERE id = ?').get(s.id);
+            req.app.locals.broadcastChange?.('review_sessions', 'update', { record: ended });
+        }
+        console.log(`[SyncReview] Auto-ended ${staleSessions.length} stale session(s) from ${hostIp}`);
+    }
 
     // Resolve asset file paths for RV
     const filePaths = resolveAssetPaths(assetIds);
@@ -598,8 +607,17 @@ router.post('/hub-register', (req, res) => {
     const db = getDb();
 
     // Auto-end any existing active sessions from this host (prevents duplicates)
-    db.prepare(`UPDATE review_sessions SET status = 'ended', ended_at = datetime('now') WHERE status = 'active' AND host_ip = ?`)
-        .run(host_ip);
+    // First, find them so we can broadcast the status change to spokes
+    const staleSessions = db.prepare(`SELECT * FROM review_sessions WHERE status = 'active' AND host_ip = ?`).all(host_ip);
+    if (staleSessions.length > 0) {
+        db.prepare(`UPDATE review_sessions SET status = 'ended', ended_at = datetime('now') WHERE status = 'active' AND host_ip = ?`)
+            .run(host_ip);
+        for (const s of staleSessions) {
+            const ended = db.prepare('SELECT * FROM review_sessions WHERE id = ?').get(s.id);
+            req.app.locals.broadcastChange?.('review_sessions', 'update', { record: ended });
+        }
+        console.log(`[SyncReview] Hub auto-ended ${staleSessions.length} stale session(s) from ${host_ip}`);
+    }
 
     const result = db.prepare(`
         INSERT OR REPLACE INTO review_sessions (session_key, host_name, host_ip, host_port, status, asset_ids, title, started_by)
