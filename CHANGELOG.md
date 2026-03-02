@@ -2,6 +2,13 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.7.0] - 2026-03-01
+
+### Added — Direct RV-to-ShotGrid Annotation Export
+- **"Send Annotation to ShotGrid" RV menu item** — New `MediaVault → Send Annotation to ShotGrid` action (`Alt+Shift+N`) captures the current frame with all paint-overs and annotations, resolves the asset's project/shot/sequence Flow IDs automatically from the source path, and publishes a ShotGrid Note with the annotated PNG attached — all in one step, no manual export needed.
+- **`POST /api/flow/publish/annotated-frame`** — New server route receives the rendered frame from RV, resolves Flow mappings from the asset's source path, saves the PNG locally for review history, creates a local review note, and publishes to ShotGrid in a single call.
+- **Auto-resolved Flow context** — The route queries the asset's linked project, shot, and sequence `flow_id` columns so the artist doesn't need to manually pick a ShotGrid project or shot. If the asset is already synced with Flow, everything is automatic.
+
 ## [1.6.9] - 2026-03-01
 
 ### Added — Export Annotated Frames to ShotGrid/Flow

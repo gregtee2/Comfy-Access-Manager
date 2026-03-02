@@ -301,6 +301,153 @@ router.post('/publish/note', async (req, res) => {
     }
 });
 
+// POST /api/flow/publish/annotated-frame — Direct RV-to-ShotGrid annotated frame export.
+// Called by the RV plugin to send an annotated frame directly to ShotGrid in one step.
+// Saves the frame locally as a review note AND creates a ShotGrid Note with attachment.
+// Body: { renderedFramePath, sourcePath?, frameNumber, noteText? }
+router.post('/publish/annotated-frame', async (req, res) => {
+    const { renderedFramePath, sourcePath, frameNumber, noteText } = req.body || {};
+
+    if (!renderedFramePath) {
+        return res.status(400).json({ error: 'renderedFramePath is required' });
+    }
+    if (frameNumber == null) {
+        return res.status(400).json({ error: 'frameNumber is required' });
+    }
+
+    const database = require('../../src/database');
+    const db = database.getDb();
+    const path = require('path');
+    const fs = require('fs');
+
+    // Verify the rendered file exists
+    if (!fs.existsSync(renderedFramePath)) {
+        return res.status(400).json({ error: 'Rendered frame file not found: ' + renderedFramePath });
+    }
+
+    // ─── Resolve asset from sourcePath ───
+    let asset = null;
+    if (sourcePath) {
+        try {
+            const normalizedPath = sourcePath.replace(/\\/g, '/');
+            asset = db.prepare(
+                `SELECT a.*, p.code AS project_code, p.name AS project_name, p.flow_id AS project_flow_id,
+                        s.flow_id AS shot_flow_id, s.code AS shot_code,
+                        seq.flow_id AS sequence_flow_id, seq.code AS sequence_code
+                 FROM assets a
+                 LEFT JOIN projects p ON a.project_id = p.id
+                 LEFT JOIN shots s ON a.shot_id = s.id
+                 LEFT JOIN sequences seq ON a.sequence_id = seq.id
+                 WHERE replace(a.file_path, '\\', '/') = ?
+                 LIMIT 1`
+            ).get(normalizedPath);
+        } catch { /* non-critical */ }
+    }
+
+    // ─── Check Flow is configured and we have project mapping ───
+    const configured = FlowService.isConfigured();
+    if (!configured) {
+        return res.status(400).json({ error: 'Flow Production Tracking is not configured. Add credentials in Settings.' });
+    }
+
+    const flowProjectId = asset?.project_flow_id;
+    if (!flowProjectId) {
+        return res.status(400).json({
+            error: 'Cannot resolve Flow project. Ensure the asset\'s project is synced with Flow.',
+            hint: sourcePath ? `Asset not found or project not linked: ${sourcePath}` : 'No sourcePath provided',
+        });
+    }
+
+    // ─── Save the frame locally (same logic as review notes) ───
+    const DATA_DIR = process.env.CAM_DATA_DIR || path.join(__dirname, '..', '..', 'data');
+    const snapshotsBase = path.join(DATA_DIR, 'review-snapshots');
+
+    const projectCode = (asset.project_code || asset.project_name || 'GENERAL').replace(/[^a-zA-Z0-9_-]/g, '_');
+    const today = new Date();
+    const dateFolder = `${today.getFullYear()}-${String(today.getMonth() + 1).padStart(2, '0')}-${String(today.getDate()).padStart(2, '0')}`;
+    const snapshotsDir = path.join(snapshotsBase, projectCode, dateFolder);
+    if (!fs.existsSync(snapshotsDir)) fs.mkdirSync(snapshotsDir, { recursive: true });
+
+    const timestamp = Date.now();
+    const filename = `flow_annot_f${frameNumber}_${timestamp}.png`;
+    const relativePath = path.join(projectCode, dateFolder, filename).replace(/\\/g, '/');
+    const destPath = path.join(snapshotsDir, filename);
+
+    try {
+        fs.copyFileSync(renderedFramePath, destPath);
+    } catch (err) {
+        console.error('[Flow] Failed to copy annotated frame:', err.message);
+        return res.status(500).json({ error: 'Failed to save annotated frame' });
+    }
+
+    // ─── Create a local review note (so it also shows in the Notes UI) ───
+    const author = req.headers['x-cam-user'] || 'Unknown';
+    const text = (noteText && noteText.trim()) || `Annotated frame ${frameNumber}`;
+
+    // Find the most recent active session (if any) for the local note
+    let sessionId = null;
+    try {
+        const session = db.prepare(
+            `SELECT id FROM review_sessions WHERE status = 'active' ORDER BY started_at DESC LIMIT 1`
+        ).get();
+        if (session) sessionId = session.id;
+    } catch { /* no session — OK, note will have null session_id */ }
+
+    let reviewNoteId = null;
+    try {
+        const result = db.prepare(`
+            INSERT INTO review_notes (session_id, asset_id, frame_number, note_text, author, annotation_image)
+            VALUES (?, ?, ?, ?, ?, ?)
+        `).run(sessionId, asset?.id || null, frameNumber, text, author, relativePath);
+        reviewNoteId = Number(result.lastInsertRowid);
+    } catch (err) {
+        console.error('[Flow] Failed to create local review note:', err.message);
+        // Non-fatal — continue with Flow publish
+    }
+
+    // ─── Build ShotGrid Note ───
+    const assetName = asset?.vault_name || 'Unknown';
+    const shotCode = asset?.shot_code || '';
+    const subject = `Review Note: ${shotCode ? shotCode + ' – ' : ''}${assetName} F${frameNumber}`;
+
+    try {
+        const result = await FlowService.createNote({
+            flowProjectId,
+            subject,
+            body: text,
+            flowShotId: asset?.shot_flow_id || null,
+            flowVersionId: null,
+            addresseeIds: null,
+            attachmentPath: destPath,
+            reviewNoteId,
+        });
+
+        // Clean up temp file from RV
+        try { fs.unlinkSync(renderedFramePath); } catch { /* already cleaned */ }
+
+        // Broadcast the note creation for the UI
+        if (reviewNoteId) {
+            const note = db.prepare('SELECT * FROM review_notes WHERE id = ?').get(reviewNoteId);
+            if (note) {
+                note.asset_name = assetName;
+                req.app.locals.broadcastChange?.('review_notes', 'insert', { record: note });
+            }
+        }
+
+        res.json({
+            success: true,
+            flowNote: result.note,
+            attachmentId: result.attachment_id,
+            reviewNoteId,
+            message: `Annotation sent to ShotGrid: ${subject}`,
+        });
+    } catch (err) {
+        // Clean up temp file even on failure
+        try { fs.unlinkSync(renderedFramePath); } catch { /* OK */ }
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
 // ─── Mappings ───
 
 // GET /api/flow/mappings/projects — Get local projects linked to Flow

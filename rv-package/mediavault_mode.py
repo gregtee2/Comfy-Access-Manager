@@ -926,6 +926,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 ("_", None),
                 ("Publish Frame", self.publishFrame, "alt+p", None),
                 ("Save Annotated Frame as Note", self.saveAnnotatedFrameAsNote, "alt+n", None),
+                ("Send Annotation to ShotGrid", self.sendAnnotationToShotGrid, "alt+shift+n", None),
                 ("Add to Crate ...", self.addToCrateMenu, "alt+c", None),
                 ("_", None),
                 ("Toggle Overlay", self._toggleOverlay, "shift+o",
@@ -2269,6 +2270,109 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         except Exception as e:
             print("[MediaVault] saveAnnotatedFrameAsNote error: %s" % e)
             rve.displayFeedback("Save error: %s" % e, 5.0)
+
+    # ── send annotation directly to ShotGrid ─────────────────
+
+    def sendAnnotationToShotGrid(self, event):
+        """MediaVault -> Send Annotation to ShotGrid — capture the current frame
+        (with annotations/paint-overs baked in) and send it directly to ShotGrid
+        as a Note with the annotated image attached.
+
+        Skips the intermediate "save to review notes then manually export" step.
+        The server resolves the asset's project, shot, and sequence Flow IDs
+        automatically from the source path, so no manual mapping is needed.
+        """
+        if urllib is None:
+            rve.displayFeedback("urllib not available", 4.0)
+            return
+
+        filepath = self._getCurrentSourcePath()
+        if not filepath:
+            rve.displayFeedback("No source loaded — cannot resolve ShotGrid mapping", 4.0)
+            return
+
+        frame = rvc.frame()
+        rve.displayFeedback("Sending annotated frame %d to ShotGrid ..." % frame, 2.0)
+
+        renderedPath = None
+        tempDir = None
+        try:
+            # Export the currently displayed frame (with all annotations)
+            tempDir = tempfile.mkdtemp(prefix="cam_rv_sg_annot_")
+            renderedPath = os.path.join(
+                tempDir, "sg_annotated_%04d.png" % frame
+            )
+            try:
+                rvc.exportCurrentFrame(renderedPath)
+                if (not os.path.exists(renderedPath)
+                        or os.path.getsize(renderedPath) < 100):
+                    print("[MediaVault] exportCurrentFrame produced no/tiny file")
+                    rve.displayFeedback("Failed to export frame", 4.0)
+                    return
+            except Exception as e:
+                print("[MediaVault] exportCurrentFrame failed: %s" % e)
+                rve.displayFeedback("Export failed: %s" % e, 4.0)
+                return
+
+            # Prompt for a note (optional)
+            noteText = ""
+            if HAS_QT:
+                try:
+                    from PySide2.QtWidgets import QInputDialog
+                except ImportError:
+                    try:
+                        from PySide6.QtWidgets import QInputDialog
+                    except ImportError:
+                        QInputDialog = None
+
+                if QInputDialog:
+                    text, ok = QInputDialog.getText(
+                        None,
+                        "ShotGrid Note",
+                        "Note for frame %d (optional):" % frame,
+                    )
+                    if not ok:
+                        rve.displayFeedback("Cancelled", 2.0)
+                        return
+                    if text:
+                        noteText = text.strip()
+
+            if not noteText:
+                noteText = "Annotated frame %d" % frame
+
+            # Send directly to ShotGrid via the Flow publish route
+            payload = json.dumps({
+                "renderedFramePath": renderedPath,
+                "sourcePath": filepath,
+                "frameNumber": frame,
+                "noteText": noteText,
+            }).encode("utf-8")
+
+            url = "%s/api/flow/publish/annotated-frame" % DMV_URL
+            req = urllib.request.Request(
+                url, data=payload,
+                headers={"Content-Type": "application/json"}
+            )
+            with urllib.request.urlopen(req, timeout=60) as resp:
+                result = json.loads(resp.read().decode("utf-8"))
+
+            if result.get("success"):
+                msg = result.get("message", "Sent to ShotGrid")
+                rve.displayFeedback(msg, 5.0)
+            else:
+                err = result.get("error", "Unknown error")
+                rve.displayFeedback("ShotGrid: %s" % err, 5.0)
+        except Exception as e:
+            print("[MediaVault] sendAnnotationToShotGrid error: %s" % e)
+            rve.displayFeedback("ShotGrid error: %s" % e, 5.0)
+        finally:
+            # Clean up temp directory (server also tries to delete the file)
+            if tempDir:
+                try:
+                    import shutil
+                    shutil.rmtree(tempDir, ignore_errors=True)
+                except Exception:
+                    pass
 
     # ── add to crate ──────────────────────────────────────────
 
