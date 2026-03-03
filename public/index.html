@@ -80,6 +80,10 @@
             <button id="networkBtn" class="topbar-icon-btn" onclick="toggleServerPanel()" title="Network - find other MediaVault instances">
                 
             </button>
+            <button id="flowRefreshBtn" class="topbar-icon-btn flow-sync-btn" onclick="triggerFlowSync()" title="Sync with ShotGrid" style="display:none;">
+                <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"><polyline points="23 4 23 10 17 10"></polyline><polyline points="1 20 1 14 7 14"></polyline><path d="M3.51 9a9 9 0 0 1 14.85-3.36L23 10"></path><path d="M20.49 15a9 9 0 0 1-14.85 3.36L1 14"></path></svg>
+                <span id="flowRefreshStatus" class="flow-sync-status" title=""></span>
+            </button>
             <button id="flowStatusBtn" class="topbar-icon-btn flow-status-btn" title="Flow Production Tracking — not configured" style="display:none;" onclick="switchTab('settings')">
                 🔀<span id="flowStatusDot" class="flow-dot disconnected"></span>
             </button>

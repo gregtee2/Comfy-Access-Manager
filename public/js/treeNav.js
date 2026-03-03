@@ -15,7 +15,7 @@ import { esc, icon } from './utils.js';
 import { isShowArchived } from './projectView.js';
 import { clearCrateState } from './crate.js';
 
-// ShotGrid status → muted color dot mapping
+// ShotGrid status → colored pill mapping (mirrors SG's style)
 const SG_STATUS = {
     ip:  { color: '#5b9bd5', label: 'In Progress' },
     rev: { color: '#8e7cc3', label: 'Pending Review' },
@@ -32,10 +32,12 @@ const SG_STATUS = {
     omt: { color: '#555555', label: 'Omitted' },
     'if': { color: '#555555', label: 'Internal Final' },
 };
-function sgDot(status) {
+
+/** Render a ShotGrid-style status pill: colored bg with short code text */
+function sgPill(status) {
     const s = SG_STATUS[status];
     if (!s) return '';
-    return `<span class="sg-status-dot" style="background:${s.color}" title="${s.label}"></span>`;
+    return `<span class="sg-status-pill" style="background:${s.color}" title="${s.label}">${status}</span>`;
 }
 
 // ===========================================
@@ -67,7 +69,7 @@ function refreshTree() { loadTree(); }
 
 const CHEVRON = `<svg viewBox="0 0 24 24"><polyline points="9 18 15 12 9 6"></polyline></svg>`;
 
-function renderTree() {
+export function renderTree() {
     const container = document.getElementById('treeContainer');
     if (!container) return;
 
@@ -118,7 +120,7 @@ function renderTree() {
                         const rActive = state.currentRole?.id === role.role_id && state.currentSequence?.id === seq.id && !state.currentShot;
                         html += `<div class="tree-node tree-indent-2 ${rActive ? 'tree-active' : ''}" onclick="treeSelectSeqRole(${project.id}, ${seq.id}, ${role.role_id})">
                             <span class="tree-toggle"></span>
-                            <span class="tree-icon">${role.task_status ? sgDot(role.task_status) : icon('role')}</span>
+                            <span class="tree-icon">${role.task_status ? sgPill(role.task_status) : icon('role')}</span>
                             <span class="tree-label">${esc(role.role_name)}</span>
                             <span class="tree-count">${role.asset_count}</span>
                         </div>`;
@@ -136,7 +138,7 @@ function renderTree() {
                             ondragover="onSeqDragOver(event)" ondragleave="onSeqDragLeave(event)"
                             ondrop="event.stopPropagation();onShotDrop(event, ${seq.id}, ${shot.id})">
                             <span class="tree-toggle ${shOpen ? 'open' : ''}" onclick="event.stopPropagation();treeToggle('${shKey}')">${shHasRoles ? CHEVRON : ''}</span>
-                            <span class="tree-icon">${icon('shot')}</span>
+                            <span class="tree-icon">${shot.flow_status ? sgPill(shot.flow_status) : icon('shot')}</span>
                             <span class="tree-label">${esc(shot.name)}</span>
                             <span class="tree-count">${shot.asset_count}</span>
                         </div>`;
@@ -146,7 +148,7 @@ function renderTree() {
                                 const rActive = state.currentRole?.id === role.role_id && state.currentShot?.id === shot.id;
                                 html += `<div class="tree-node tree-indent-3 ${rActive ? 'tree-active' : ''}" onclick="treeSelectRole(${project.id}, ${seq.id}, ${shot.id}, ${role.role_id})">
                                     <span class="tree-toggle"></span>
-                                    <span class="tree-icon">${role.task_status ? sgDot(role.task_status) : icon('role')}</span>
+                                    <span class="tree-icon">${role.task_status ? sgPill(role.task_status) : icon('role')}</span>
                                     <span class="tree-label">${esc(role.role_name)}</span>
                                     <span class="tree-count">${role.asset_count}</span>
                                 </div>`;

@@ -15,6 +15,7 @@ import { api } from './api.js';
 import { esc, formatSize, formatDuration, formatDateTime, typeIcon, showToast } from './utils.js';
 import { openPlayer } from './player.js';
 import { getActiveCrateId } from './crate.js';
+import { expandNode, renderTree } from './treeNav.js';
 
 // ═══════════════════════════════════════════
 //  PROJECT DETAIL / BROWSER
@@ -160,6 +161,7 @@ export async function selectSequence(seqId) {
 
     renderProjectDetail(state.currentProject);
     loadProjectAssets(state.currentProject.id);
+    _syncTreeToSelection();
 }
 
 export function selectShot(seqId, shotId) {
@@ -172,6 +174,27 @@ export function selectShot(seqId, shotId) {
 
     renderProjectDetail(state.currentProject);
     loadProjectAssets(state.currentProject.id);
+    _syncTreeToSelection();
+}
+
+/** Expand tree nodes to match the current sequence/shot selection and scroll into view */
+function _syncTreeToSelection() {
+    const projId = state.currentProject?.id;
+    if (!projId) return;
+
+    expandNode(`p_${projId}`);
+
+    if (state.currentSequence) {
+        expandNode(`seq_${state.currentSequence.id}`);
+    }
+
+    renderTree();
+
+    // Scroll the active tree node into view
+    requestAnimationFrame(() => {
+        const active = document.querySelector('#treeContainer .tree-active');
+        if (active) active.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
+    });
 }
 
 // ═══════════════════════════════════════════

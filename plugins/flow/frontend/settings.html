@@ -45,6 +45,31 @@
     <div id="flowSyncLog" style="margin-top:8px;font-size:0.82rem;color:var(--text-dim);max-height:150px;overflow-y:auto;"></div>
 </div>
 
+<div id="flowLiveSyncPanel" style="margin-top:14px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px;">
+    <h4 style="margin:0 0 6px 0;font-size:0.9rem;">Live Sync</h4>
+    <p class="hint" style="margin:0 0 8px 0;">Automatically poll ShotGrid for changes on a timer. Syncs shot statuses, tasks, new media, and thumbnails for all linked projects.</p>
+    <div style="display:flex; align-items:center; gap:10px; margin-bottom:8px;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin:0; font-size:0.85rem;">
+            <input type="checkbox" id="flowLiveSyncToggle" style="width:16px; height:16px; cursor:pointer;">
+            <span id="flowLiveSyncLabel">Enable Live Sync</span>
+        </label>
+    </div>
+    <div id="flowLiveSyncOptions" style="display:none;">
+        <label style="font-size:0.82rem;">Sync Interval</label>
+        <div class="input-row" style="gap:6px; align-items:center;">
+            <select id="flowLiveSyncInterval" class="setting-select" style="max-width:140px;">
+                <option value="1">Every 1 min</option>
+                <option value="2">Every 2 min</option>
+                <option value="5" selected>Every 5 min</option>
+                <option value="10">Every 10 min</option>
+                <option value="15">Every 15 min</option>
+                <option value="30">Every 30 min</option>
+            </select>
+            <span id="flowLiveSyncStatus" style="font-size:0.78rem; color:var(--text-dim);"></span>
+        </div>
+    </div>
+</div>
+
 <div id="flowPathMatchPanel" style="margin-top:14px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px;">
     <h4 style="margin:0 0 6px 0;font-size:0.9rem;">📂 Path Matching &amp; Bulk Scan</h4>
     <p class="hint" style="margin:0 0 8px 0;">Auto-assign assets to projects/sequences/shots by parsing file paths. Set your show root and a pattern that matches your directory structure.</p>

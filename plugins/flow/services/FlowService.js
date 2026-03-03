@@ -205,8 +205,10 @@ class FlowService {
         return { success: true, created, updated, total: result.count };
     }
 
-    static async syncShots(flowProjectId, localProjectId) {
-        const result = await this.execute('sync_shots', { project_id: flowProjectId });
+    static async syncShots(flowProjectId, localProjectId, opts = {}) {
+        const params = { project_id: flowProjectId };
+        if (opts.since) params.since = opts.since;
+        const result = await this.execute('sync_shots', params);
         const db = this._getDb();
         let created = 0, updated = 0;
 
@@ -225,8 +227,8 @@ class FlowService {
 
             if (existing) {
                 db.prepare(
-                    'UPDATE shots SET name = ?, code = ?, description = ?, sequence_id = ? WHERE id = ?'
-                ).run(shot.name, shot.code, shot.description, localSeqId, existing.id);
+                    'UPDATE shots SET name = ?, code = ?, description = ?, sequence_id = ?, flow_status = ? WHERE id = ?'
+                ).run(shot.name, shot.code, shot.description, localSeqId, shot.status || null, existing.id);
                 updated++;
             } else {
                 const byCode = db.prepare(
@@ -235,14 +237,14 @@ class FlowService {
 
                 if (byCode) {
                     db.prepare(
-                        'UPDATE shots SET flow_id = ?, description = ?, sequence_id = ? WHERE id = ?'
-                    ).run(shot.flow_id, shot.description, localSeqId, byCode.id);
+                        'UPDATE shots SET flow_id = ?, description = ?, sequence_id = ?, flow_status = ? WHERE id = ?'
+                    ).run(shot.flow_id, shot.description, localSeqId, shot.status || null, byCode.id);
                     updated++;
                 } else {
                     if (!localSeqId) continue;
                     db.prepare(
-                        'INSERT INTO shots (project_id, sequence_id, name, code, description, flow_id) VALUES (?, ?, ?, ?, ?, ?)'
-                    ).run(localProjectId, localSeqId, shot.name, shot.code, shot.description, shot.flow_id);
+                        'INSERT INTO shots (project_id, sequence_id, name, code, description, flow_id, flow_status) VALUES (?, ?, ?, ?, ?, ?, ?)'
+                    ).run(localProjectId, localSeqId, shot.name, shot.code, shot.description, shot.flow_id, shot.status || null);
                     created++;
                 }
             }
@@ -427,8 +429,10 @@ class FlowService {
         });
     }
 
-    static async syncTasks(flowProjectId, localProjectId) {
-        const result = await this.execute('sync_tasks', { project_id: flowProjectId });
+    static async syncTasks(flowProjectId, localProjectId, opts = {}) {
+        const params = { project_id: flowProjectId };
+        if (opts.since) params.since = opts.since;
+        const result = await this.execute('sync_tasks', params);
         const db = this._getDb();
         let created = 0, updated = 0;
 
@@ -438,6 +442,7 @@ class FlowService {
             ).get(task.flow_id);
 
             const assigneesJson = JSON.stringify(task.assignees || []);
+            const taskContent = task.content || '';
 
             if (existing) {
                 db.prepare(`
@@ -450,7 +455,7 @@ class FlowService {
                         updated_at = datetime('now')
                     WHERE id = ?
                 `).run(
-                    task.content, task.status, task.description,
+                    taskContent, task.status, task.description,
                     task.step_id, task.step_name,
                     task.entity_type, task.entity_id, task.entity_name,
                     assigneesJson, task.start_date, task.due_date,
@@ -467,7 +472,7 @@ class FlowService {
                         est_minutes, logged_minutes
                     ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
                 `).run(
-                    task.flow_id, localProjectId, task.content, task.status,
+                    task.flow_id, localProjectId, taskContent, task.status,
                     task.description, task.step_id, task.step_name,
                     task.entity_type, task.entity_id, task.entity_name,
                     assigneesJson, task.start_date, task.due_date,
@@ -526,6 +531,7 @@ class FlowService {
                 const vResult = await this.execute('sync_versions', {
                     project_id: flowProjectId,
                     statuses: opts.statuses || null,
+                    since: opts.since || null,
                 });
                 if (vResult.versions) {
                     items.push(...vResult.versions.map(v => ({ ...v, _source: 'version' })));
@@ -539,6 +545,7 @@ class FlowService {
             try {
                 const pfResult = await this.execute('sync_published_files', {
                     project_id: flowProjectId,
+                    since: opts.since || null,
                 });
                 if (pfResult.published_files) {
                     items.push(...pfResult.published_files.map(pf => ({ ...pf, _source: 'published_file' })));

@@ -54,6 +54,19 @@ def error(message, details=None):
     output(result)
     sys.exit(1)
 
+def sanitize_sg_datetime(iso_str):
+    """Convert ISO 8601 string to ShotGrid-accepted format (no milliseconds).
+    ShotGrid requires '2026-03-03T16:43:02Z' — not '2026-03-03T16:43:02.739Z'."""
+    if not iso_str:
+        return iso_str
+    from datetime import datetime
+    try:
+        # Parse ISO format (handles both with and without ms)
+        dt = datetime.fromisoformat(iso_str.replace('Z', '+00:00'))
+        return dt.strftime('%Y-%m-%dT%H:%M:%SZ')
+    except (ValueError, AttributeError):
+        return iso_str  # return as-is if unparseable
+
 # ─── Commands ───────────────────────────────────────────────
 
 def cmd_test_connection(sg, args):
@@ -130,8 +143,15 @@ def cmd_sync_shots(sg, args):
         error("project_id required in --json")
     
     try:
+        filters = [["project", "is", {"type": "Project", "id": int(project_id)}]]
+
+        # Optional: delta sync — only shots updated since a timestamp
+        since = sanitize_sg_datetime(params.get("since"))
+        if since:
+            filters.append(["updated_at", "greater_than", since])
+
         shots = sg.find("Shot",
-            filters=[["project", "is", {"type": "Project", "id": int(project_id)}]],
+            filters=filters,
             fields=["code", "description", "sg_status_list", "sg_sequence", 
                      "sg_cut_in", "sg_cut_out", "sg_cut_duration", "id"],
             order=[{"field_name": "code", "direction": "asc"}]
@@ -214,6 +234,11 @@ def cmd_sync_tasks(sg, args):
         entity_type = params.get("entity_type")
         if entity_type:
             filters.append(["entity", "type_is", entity_type])
+
+        # Optional: delta sync — only tasks updated since a timestamp
+        since = sanitize_sg_datetime(params.get("since"))
+        if since:
+            filters.append(["updated_at", "greater_than", since])
 
         tasks = sg.find("Task",
             filters=filters,
@@ -433,12 +458,19 @@ def cmd_sync_versions(sg, args):
         error("project_id required in --json")
 
     try:
-        filters = [["project", "is", {"type": "Project", "id": int(project_id)}]]
+        filters = [[
+            "project", "is", {"type": "Project", "id": int(project_id)}
+        ]]
 
         # Optional: filter by status
         statuses = params.get("statuses")
         if statuses:
             filters.append(["sg_status_list", "in", statuses])
+
+        # Optional: delta sync — only fetch versions updated since a timestamp
+        since = sanitize_sg_datetime(params.get("since"))
+        if since:
+            filters.append(["updated_at", "greater_than", since])
 
         versions = sg.find("Version",
             filters=filters,
@@ -516,6 +548,11 @@ def cmd_sync_published_files(sg, args):
 
     try:
         filters = [["project", "is", {"type": "Project", "id": int(project_id)}]]
+
+        # Optional: delta sync — only published files updated since a timestamp
+        since = sanitize_sg_datetime(params.get("since"))
+        if since:
+            filters.append(["updated_at", "greater_than", since])
 
         pfiles = sg.find("PublishedFile",
             filters=filters,

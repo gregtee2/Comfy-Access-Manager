@@ -103,7 +103,7 @@ router.get('/tree', (req, res) => {
     `).all();
 
     const shots = db.prepare(`
-        SELECT sh.id, sh.project_id, sh.sequence_id, sh.name, sh.code,
+        SELECT sh.id, sh.project_id, sh.sequence_id, sh.name, sh.code, sh.flow_status,
             (SELECT COUNT(*) FROM assets a WHERE a.shot_id = sh.id) as asset_count
         FROM shots sh ORDER BY sh.sort_order, sh.code
     `).all();

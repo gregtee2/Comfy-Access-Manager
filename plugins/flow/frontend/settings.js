@@ -50,8 +50,19 @@ export function init() {
     if (scanDryRunBtn) scanDryRunBtn.addEventListener('click', () => scanTree(true));
     if (scanTreeBtn) scanTreeBtn.addEventListener('click', () => scanTree(false));
 
+    // Live Sync toggle
+    const liveSyncToggle = document.getElementById('flowLiveSyncToggle');
+    if (liveSyncToggle) liveSyncToggle.addEventListener('change', onLiveSyncToggle);
+
+    // Live Sync interval selector
+    const liveSyncInterval = document.getElementById('flowLiveSyncInterval');
+    if (liveSyncInterval) liveSyncInterval.addEventListener('change', onLiveSyncIntervalChange);
+
     // Load path config on init
     loadPathConfig();
+
+    // Load live sync status
+    loadLiveSyncStatus();
 }
 
 /**
@@ -382,5 +393,73 @@ async function scanTree(dryRun) {
         }
     } catch (err) {
         _pathLog(`❌ Scan: ${err.message}`);
+    }
+}
+
+// ─── Live Sync ───────────────────────────────────────
+
+async function loadLiveSyncStatus() {
+    const toggle = document.getElementById('flowLiveSyncToggle');
+    const options = document.getElementById('flowLiveSyncOptions');
+    const interval = document.getElementById('flowLiveSyncInterval');
+    const statusEl = document.getElementById('flowLiveSyncStatus');
+    if (!toggle) return;
+
+    try {
+        const status = await api('/api/flow/live-sync/status');
+        toggle.checked = status.enabled;
+        if (options) options.style.display = status.enabled ? 'block' : 'none';
+        if (interval) interval.value = String(status.interval || 5);
+        if (statusEl) {
+            if (status.lastSync) {
+                statusEl.textContent = `Last synced: ${new Date(status.lastSync).toLocaleString()}`;
+            } else {
+                statusEl.textContent = 'Never synced';
+            }
+        }
+    } catch {
+        // Live sync endpoint not available
+        toggle.checked = false;
+    }
+}
+
+async function onLiveSyncToggle() {
+    const toggle = document.getElementById('flowLiveSyncToggle');
+    const options = document.getElementById('flowLiveSyncOptions');
+    if (!toggle) return;
+
+    const enabled = toggle.checked;
+
+    try {
+        if (enabled) {
+            const interval = document.getElementById('flowLiveSyncInterval');
+            const mins = interval ? Number(interval.value) : 5;
+            await api('/api/flow/live-sync/enable', { method: 'POST', body: { interval: mins } });
+            if (options) options.style.display = 'block';
+            _status('Live Sync enabled', 'var(--success)');
+        } else {
+            await api('/api/flow/live-sync/disable', { method: 'POST' });
+            if (options) options.style.display = 'none';
+            _status('Live Sync disabled', 'var(--text-dim)');
+        }
+    } catch (err) {
+        _status(`Live Sync error: ${err.message}`, 'var(--danger)');
+        toggle.checked = !enabled; // revert
+    }
+}
+
+async function onLiveSyncIntervalChange() {
+    const interval = document.getElementById('flowLiveSyncInterval');
+    const toggle = document.getElementById('flowLiveSyncToggle');
+    if (!interval || !toggle?.checked) return;
+
+    try {
+        await api('/api/flow/live-sync/enable', {
+            method: 'POST',
+            body: { interval: Number(interval.value) }
+        });
+        _status(`Sync interval updated to ${interval.value} min`, 'var(--success)');
+    } catch (err) {
+        _status(`Interval update failed: ${err.message}`, 'var(--danger)');
     }
 }

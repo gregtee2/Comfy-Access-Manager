@@ -14,6 +14,7 @@ const express = require('express');
 const router = express.Router();
 const FlowService = require('./services/FlowService');
 const PathMatchService = require('./services/PathMatchService');
+const LiveSyncService = require('./services/LiveSyncService');
 
 /**
  * Initialize plugin with core API (dependency injection).
@@ -23,6 +24,12 @@ const PathMatchService = require('./services/PathMatchService');
 function init(core) {
     FlowService.setDatabase(core.database);
     PathMatchService.setDatabase(core.database);
+    LiveSyncService.setDatabase(core.database);
+
+    // Auto-start live sync if it was previously enabled
+    if (LiveSyncService.isEnabled() && FlowService.isConfigured()) {
+        LiveSyncService.start();
+    }
 }
 
 // ─── Status / Config ───
@@ -622,6 +629,45 @@ router.post('/preview-match', (req, res) => {
     const tokens = PathMatchService.parsePath(filePath);
     const resolved = tokens ? PathMatchService.resolveTokens(tokens) : null;
     res.json({ tokens, resolved });
+});
+
+// ─── Live Sync ───
+
+// GET /api/flow/live-sync/status — Get live sync status
+router.get('/live-sync/status', (req, res) => {
+    res.json(LiveSyncService.getStatus());
+});
+
+// POST /api/flow/live-sync/enable — Enable live sync
+// Body: { interval?: number (minutes, default 5) }
+router.post('/live-sync/enable', (req, res) => {
+    const { interval } = req.body;
+    LiveSyncService.enable(interval);
+    res.json({ success: true, ...LiveSyncService.getStatus() });
+});
+
+// POST /api/flow/live-sync/disable — Disable live sync
+router.post('/live-sync/disable', (req, res) => {
+    LiveSyncService.disable();
+    res.json({ success: true, ...LiveSyncService.getStatus() });
+});
+
+// POST /api/flow/live-sync/trigger — Run a sync cycle immediately (on-demand refresh)
+// Body: { localProjectId?: number } — if provided, only syncs that project (toolbar refresh)
+router.post('/live-sync/trigger', async (req, res) => {
+    if (!FlowService.isConfigured()) {
+        return res.status(400).json({ error: 'Flow not configured' });
+    }
+    try {
+        const { localProjectId } = req.body || {};
+        const result = await LiveSyncService.runCycle(
+            localProjectId ? { localProjectId: Number(localProjectId) } : {}
+        );
+        res.json({ success: true, ...result });
+    } catch (err) {
+        console.error('[LiveSync] Manual trigger error:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
 });
 
 module.exports = router;

@@ -212,6 +212,9 @@ async function checkSetup() {
 
             // Check Flow Production Tracking connection status (non-blocking)
             checkFlowStatus();
+
+            // Periodically refresh the "time ago" text and check for background sync results
+            setInterval(updateFlowSyncStatus, 60000);
         }
     } catch (err) {
         console.error('Setup check failed:', err);
@@ -298,35 +301,130 @@ function browseForVault() {
 
 /**
  * Check Flow Production Tracking connection status and update topbar indicator.
- * Runs once on startup, non-blocking. Shows the 🔀 button if Flow is configured.
+ * Runs once on startup, non-blocking. Shows the Flow + Sync buttons if configured.
  */
 async function checkFlowStatus() {
     const btn = document.getElementById('flowStatusBtn');
     const dot = document.getElementById('flowStatusDot');
+    const syncBtn = document.getElementById('flowRefreshBtn');
     if (!btn || !dot) return;
 
     try {
         const result = await api('/api/flow/status');
 
         if (!result.configured) {
-            // Not configured — hide the button
+            // Not configured — hide the buttons
             btn.style.display = 'none';
+            if (syncBtn) syncBtn.style.display = 'none';
             return;
         }
 
-        // Show the button
+        // Show the buttons
         btn.style.display = '';
+        if (syncBtn) syncBtn.style.display = '';
 
         if (result.connected) {
             dot.className = 'flow-dot connected';
             btn.title = 'Flow Production Tracking — connected';
+            // Check live sync status and update the "last synced" indicator
+            updateFlowSyncStatus();
         } else {
             dot.className = 'flow-dot configured';
             btn.title = 'Flow Production Tracking — configured but not connected';
         }
     } catch {
-        // API not available (plugin not loaded) — hide button
+        // API not available (plugin not loaded) — hide buttons
         btn.style.display = 'none';
+        if (syncBtn) syncBtn.style.display = 'none';
+    }
+}
+
+/**
+ * Update the sync button's "last synced" indicator text.
+ * Also detects background sync completions and auto-refreshes the UI.
+ */
+let _lastKnownSync = null;
+async function updateFlowSyncStatus() {
+    const statusEl = document.getElementById('flowRefreshStatus');
+    const syncBtn = document.getElementById('flowRefreshBtn');
+    if (!statusEl || !syncBtn) return;
+
+    try {
+        const status = await api('/api/flow/live-sync/status');
+        if (status.lastSync) {
+            const ago = timeAgo(status.lastSync);
+            statusEl.textContent = ago;
+            statusEl.title = `Last synced: ${new Date(status.lastSync).toLocaleString()}`;
+
+            // Detect background sync completion and auto-refresh UI
+            if (_lastKnownSync && status.lastSync !== _lastKnownSync) {
+                window.loadTree?.();
+                window.loadProjectAssets?.(window.state?.currentProject?.id);
+            }
+            _lastKnownSync = status.lastSync;
+        } else {
+            statusEl.textContent = '';
+            statusEl.title = 'Never synced';
+        }
+        syncBtn.title = status.enabled
+            ? `Live Sync ON (every ${status.interval} min) — click to sync now`
+            : 'Click to sync with ShotGrid';
+    } catch {
+        // endpoints not available
+    }
+}
+
+/**
+ * Format an ISO timestamp as a human-readable "time ago" string.
+ */
+function timeAgo(isoStr) {
+    const diff = Date.now() - new Date(isoStr).getTime();
+    const mins = Math.floor(diff / 60000);
+    if (mins < 1) return 'just now';
+    if (mins < 60) return `${mins}m ago`;
+    const hrs = Math.floor(mins / 60);
+    if (hrs < 24) return `${hrs}h ago`;
+    return `${Math.floor(hrs / 24)}d ago`;
+}
+
+/**
+ * Trigger a manual Flow sync (called from the toolbar Refresh button).
+ */
+async function triggerFlowSync() {
+    const syncBtn = document.getElementById('flowRefreshBtn');
+    if (!syncBtn || syncBtn.classList.contains('syncing')) return;
+
+    syncBtn.classList.add('syncing');
+    syncBtn.title = 'Syncing with ShotGrid...';
+
+    try {
+        // Only sync the project the user is currently viewing (fast: ~1s)
+        const body = {};
+        const proj = window.state?.currentProject;
+        if (proj?.id && proj?.flow_id) {
+            body.localProjectId = proj.id;
+        }
+        const result = await api('/api/flow/live-sync/trigger', { method: 'POST', body });
+        if (result.success) {
+            const parts = [];
+            if (result.shots?.updated) parts.push(`${result.shots.updated} shot updates`);
+            if (result.tasks?.created) parts.push(`${result.tasks.created} new tasks`);
+            if (result.tasks?.updated) parts.push(`${result.tasks.updated} task updates`);
+            if (result.versions?.registered) parts.push(`${result.versions.registered} new versions`);
+            if (result.thumbnails?.downloaded) parts.push(`${result.thumbnails.downloaded} thumbnails`);
+
+            const msg = parts.length > 0 ? `Synced: ${parts.join(', ')}` : 'Sync complete — no changes';
+            window.showToast?.(msg, 4000);
+
+            // Refresh the tree and grid to show new data
+            window.loadTree?.();
+            window.loadProjectAssets?.(window.state?.currentProject?.id);
+        }
+    } catch (err) {
+        window.showToast?.('Sync failed: ' + (err.message || 'Unknown error'), 5000);
+    } finally {
+        syncBtn.classList.remove('syncing');
+        updateFlowSyncStatus();
     }
 }
 
@@ -343,6 +441,7 @@ window.selectUser = selectUser;
 window.promptPin = promptPin;
 window.hidePinPrompt = hidePinPrompt;
 window.submitPin = submitPin;
+window.triggerFlowSync = triggerFlowSync;
 
 
 

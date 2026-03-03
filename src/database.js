@@ -334,6 +334,16 @@ function runMigrations(wrapper) {
     wrapper.exec('CREATE INDEX IF NOT EXISTS idx_flow_tasks_flow_id ON flow_tasks(flow_id)');
     wrapper.exec('CREATE INDEX IF NOT EXISTS idx_flow_tasks_entity ON flow_tasks(entity_type, entity_flow_id)');
 
+    // ─── Add flow_status column to shots (ShotGrid shot-level status) ───
+    try {
+        const shotCols = [];
+        let stShot = wrapper.prepare('PRAGMA table_info(shots)');
+        for (const row of stShot.iterate()) shotCols.push(row.name);
+        if (!shotCols.includes('flow_status')) {
+            wrapper.exec("ALTER TABLE shots ADD COLUMN flow_status TEXT DEFAULT NULL");
+        }
+    } catch (_) { /* column already exists */ }
+
     // ─── Add naming_convention column to projects (Shot Builder) ───
     try {
         const projCols = [];

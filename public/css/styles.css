@@ -729,15 +729,23 @@ label {
     stroke-width: 2.5;
 }
 
-/* ShotGrid status dot — small muted circle */
-.sg-status-dot {
+/* ShotGrid status pill — short text code on colored background */
+.sg-status-pill {
     display: inline-block;
-    width: 8px;
-    height: 8px;
-    border-radius: 50%;
-    opacity: 0.75;
+    font-size: 8px;
+    font-weight: 700;
+    letter-spacing: 0.3px;
+    text-transform: uppercase;
+    color: #fff;
+    padding: 1px 4px;
+    border-radius: 3px;
+    line-height: 12px;
+    opacity: 0.85;
     vertical-align: middle;
     margin-top: -1px;
+    white-space: nowrap;
+    min-width: 14px;
+    text-align: center;
 }
 .tree-icon {
     flex-shrink: 0;
@@ -3017,6 +3025,29 @@ label:has(input[type="checkbox"]) {
 .flow-dot.connected    { background: var(--success, #4caf50); }
 .flow-dot.configured   { background: var(--warning, #ff9800); }
 .flow-dot.disconnected { background: var(--text-dim, #666); }
+
+/* Flow sync refresh button */
+.flow-sync-btn {
+    position: relative;
+    gap: 4px;
+}
+.flow-sync-btn svg {
+    vertical-align: middle;
+    margin-top: -1px;
+}
+.flow-sync-btn.syncing svg {
+    animation: flowSpin 1s linear infinite;
+}
+@keyframes flowSpin {
+    from { transform: rotate(0deg); }
+    to   { transform: rotate(360deg); }
+}
+.flow-sync-status {
+    font-size: 0.6rem;
+    color: var(--text-muted);
+    margin-left: 2px;
+    vertical-align: middle;
+}
 
 .server-panel {
     position: fixed;
