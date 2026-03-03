@@ -695,18 +695,28 @@ class FlowService {
 
         registerBatch(items);
 
-        // Queue thumbnail generation asynchronously
+        // Queue thumbnail generation sequentially with concurrency limit
+        // Avoids hammering network drives with dozens of simultaneous FFmpeg processes
         if (newAssetIds.length > 0) {
-            setTimeout(() => {
-                for (const assetId of newAssetIds) {
-                    try {
-                        const asset = db.prepare('SELECT id, file_path, media_type FROM assets WHERE id = ?').get(assetId);
-                        if (asset) {
-                            ThumbnailService.generateThumbnail(asset.file_path, asset.id);
-                        }
-                    } catch {}
+            const THUMB_CONCURRENCY = 2;
+            const generateSequential = async () => {
+                for (let i = 0; i < newAssetIds.length; i += THUMB_CONCURRENCY) {
+                    const batch = newAssetIds.slice(i, i + THUMB_CONCURRENCY);
+                    await Promise.allSettled(batch.map(async (assetId) => {
+                        try {
+                            const asset = db.prepare('SELECT id, file_path, media_type FROM assets WHERE id = ?').get(assetId);
+                            if (asset) {
+                                const thumbPath = await ThumbnailService.generate(asset.file_path, asset.id);
+                                if (thumbPath) {
+                                    db.prepare('UPDATE assets SET thumbnail_path = ? WHERE id = ?').run(thumbPath, asset.id);
+                                }
+                            }
+                        } catch {}
+                    }));
                 }
-            }, 100);
+                console.log(`[Flow] Thumbnail generation complete: ${newAssetIds.length} assets processed`);
+            };
+            setTimeout(generateSequential, 500);
         }
 
         // Broadcast to spokes if hub mode

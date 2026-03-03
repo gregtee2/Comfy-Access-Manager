@@ -359,20 +359,29 @@ class PathMatchService {
 
         registerBatch(mediaFiles);
 
-        // Queue thumbnail generation for newly registered assets (async, don't block)
+        // Queue thumbnail generation sequentially with concurrency limit
         if (registered > 0) {
             try {
                 const newAssets = db.prepare(
                     'SELECT id, file_path, media_type FROM assets WHERE thumbnail_path IS NULL AND is_linked = 1 ORDER BY id DESC LIMIT ?'
                 ).all(registered);
 
-                // Spawn thumbnail generation asynchronously
-                setTimeout(() => {
-                    for (const a of newAssets) {
-                        try {
-                            ThumbnailService.generateThumbnail(a.file_path, a.id);
-                        } catch {}
+                const THUMB_CONCURRENCY = 2;
+                const generateSequential = async () => {
+                    for (let i = 0; i < newAssets.length; i += THUMB_CONCURRENCY) {
+                        const batch = newAssets.slice(i, i + THUMB_CONCURRENCY);
+                        await Promise.allSettled(batch.map(async (a) => {
+                            try {
+                                const thumbPath = await ThumbnailService.generate(a.file_path, a.id);
+                                if (thumbPath) {
+                                    db.prepare('UPDATE assets SET thumbnail_path = ? WHERE id = ?').run(thumbPath, a.id);
+                                }
+                            } catch {}
+                        }));
                     }
+                    console.log(`[PathMatch] Thumbnail generation complete: ${newAssets.length} assets processed`);
+                };
+                setTimeout(generateSequential, 500);
                 }, 100);
             } catch {}
         }
