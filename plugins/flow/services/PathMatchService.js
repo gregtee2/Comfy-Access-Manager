@@ -382,7 +382,6 @@ class PathMatchService {
                     console.log(`[PathMatch] Thumbnail generation complete: ${newAssets.length} assets processed`);
                 };
                 setTimeout(generateSequential, 500);
-                }, 100);
             } catch {}
         }
 
