@@ -101,6 +101,9 @@ export async function loadSettings() {
         // Inject plugin settings HTML and populate their values
         pluginRegistry.injectSettingsSections();
         await pluginRegistry.loadPluginSettings(state.settings);
+
+        // Apply spoke mode restrictions (must run AFTER plugin sections are injected)
+        applySpokeRestrictions();
     } catch (err) {
         console.error('Settings load failed:', err);
     }
@@ -1603,6 +1606,44 @@ window.onSyncModeChange = onSyncModeChange;
 window.saveSyncConfig = saveSyncConfig;
 window.scanForHub = scanForHub;
 window.selectHub = selectHub;
+
+// ===========================================
+//  SPOKE MODE RESTRICTIONS
+// ===========================================
+
+/** IDs of settings sections that only the hub admin should modify */
+const HUB_ONLY_SECTIONS = [
+    'section-team',
+    'section-vault',
+    'section-shared-db',
+    'section-thumbnails',
+    'section-roles',
+    'section-watches',
+    'section-system',
+    'section-db-transfer',
+    'plugin-settings-flow',
+];
+
+/**
+ * If running in spoke mode, gray out hub-only settings sections
+ * and show the spoke banner. Spoke users can still access:
+ * Preferences, External Player, Local AI, ComfyUI, Sync Mode, Network.
+ */
+function applySpokeRestrictions() {
+    const isSpoke = state.serverMode === 'spoke';
+    const banner = document.getElementById('spokeBanner');
+    if (banner) banner.style.display = isSpoke ? 'flex' : 'none';
+
+    for (const id of HUB_ONLY_SECTIONS) {
+        const el = document.getElementById(id);
+        if (!el) continue;
+        if (isSpoke) {
+            el.classList.add('spoke-disabled');
+        } else {
+            el.classList.remove('spoke-disabled');
+        }
+    }
+}
 
 
 

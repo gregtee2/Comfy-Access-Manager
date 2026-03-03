@@ -470,8 +470,12 @@ Import from Resolve</button>
             <div class="section-header">
                 <h2>Settings</h2>
             </div>
+            <div id="spokeBanner" class="spoke-banner" style="display:none;">
+                <span class="spoke-banner-icon">&#x1f517;</span>
+                <span>Spoke Mode -- Some settings are managed by the hub and cannot be changed here.</span>
+            </div>
             <div class="settings-grid">
-                <div class="settings-section">
+                <div class="settings-section" id="section-preferences">
                     <h3>Preferences</h3>
 
                     <label>Start Tab <span class="help-icon" data-tip="Which tab the app opens to when you first launch it.">?</span></label>
@@ -499,7 +503,7 @@ Import from Resolve</button>
                     </label>
                 </div>
 
-                <div class="settings-section">
+                <div class="settings-section" id="section-team">
                     <h3>Team <span class="help-icon" data-tip="Manage who can access this CAM instance. Admins see all projects. Regular users see everything by default - admins can hide specific projects via Edit Project. Set a PIN to prevent profile impersonation.">?</span></h3>
                     <div id="teamUserList" class="team-user-list">
                         <!-- Populated by loadTeamSettings() -->
@@ -513,7 +517,7 @@ Import from Resolve</button>
                     <p class="hint">Users see all projects by default. Use Edit Project -> Hide from Users to restrict visibility. Set a PIN on accounts to prevent impersonation.</p>
                 </div>
 
-                <div class="settings-section">
+                <div class="settings-section" id="section-vault">
                     <h3>Vault</h3>
                     <label>Vault Root Path <span class="help-icon" data-tip="The root folder where all imported media is stored. Changing this will offer to migrate existing files to the new location.">?</span></label>
                     <div class="input-row">
@@ -538,7 +542,7 @@ Import from Resolve</button>
                     <p class="hint">Tokens: <code>{project}</code>, <code>{sequence}</code>, <code>{shot}</code>, <code>{step}</code> (role), <code>{version}</code>, <code>{take}</code>, <code>{type}</code>, <code>{date}</code>, <code>{original}</code>, <code>{counter}</code></p>
                 </div>
 
-                <div class="settings-section">
+                <div class="settings-section" id="section-shared-db">
                     <h3>Shared Database <span class="help-icon" data-tip="Point the database to a shared network folder so multiple machines (PC + Mac) share the same projects, assets, and roles. Each machine sees all entries - files that don't exist locally just show as unavailable.">?</span></h3>
                     <label>Shared Database Folder <span class="help-icon" data-tip="A folder on a network/NAS drive accessible by all machines. The database file (mediavault.db) will be stored here. Leave empty to use local database only.">?</span></label>
                     <div class="input-row">
@@ -550,7 +554,7 @@ Import from Resolve</button>
                     <p class="hint">Both PC and Mac point here. Assets imported on one machine show on the other. Files that don't exist locally appear as unavailable - that's normal.</p>
                 </div>
 
-                <div class="settings-section">
+                <div class="settings-section" id="section-player">
                     <h3>External Player</h3>
                     <label>Default Player <span class="help-icon" data-tip="Choose how media files open when clicked. 'Browser' uses the built-in player. RV supports EXR, ProRes, HDR, and professional formats.">?</span></label>
                     <select id="settingDefaultPlayer" class="setting-select" title="Player used when clicking an asset">
@@ -570,14 +574,14 @@ Import from Resolve</button>
                     <p class="hint">Files will open in this player when clicked. RV supports EXR, ProRes, and professional formats. RV also opens from right-click -> "RV".</p>
                 </div>
 
-                <div class="settings-section">
+                <div class="settings-section" id="section-thumbnails">
                     <h3>Thumbnails</h3>
                     <label>Thumbnail Size (px)</label>
                     <input type="number" id="settingThumbSize" value="320" min="100" max="800">
                     <label><input type="checkbox" id="settingAutoThumb" checked> Auto-generate thumbnails on import</label>
                 </div>
 
-                <div class="settings-section">
+                <div class="settings-section" id="section-ai">
                     <h3>Local AI Tools</h3>
                     <p class="hint">Configure connections to local LLM runners (like Ollama or LM Studio) for Magic Translation and other AI features.</p>
 
@@ -600,7 +604,7 @@ Import from Resolve</button>
                 <!-- Flow Production Tracking settings injected by plugin -->
                 <div id="plugin-settings-flow"></div>
 
-                <div class="settings-section">
+                <div class="settings-section" id="section-roles">
                     <h3>Roles <span class="help-icon" data-tip="Roles are pipeline steps (Comp, Light, Anim, FX, etc.) - they drive the '{step}' token in ShotGrid naming and help categorize assets within shots.">?</span></h3>
                     <p class="hint">Roles categorize assets under shots (e.g., Comp, Light, Anim, FX). Assign roles during import or in the browser.</p>
                     <div id="rolesList" class="roles-list"></div>
@@ -612,7 +616,7 @@ Import from Resolve</button>
                     </div>
                 </div>
 
-                <div class="settings-section">
+                <div class="settings-section" id="section-watches">
                     <h3> Watch Folders <span class="help-icon" data-tip="Set up inbox folders for content ingestion. Link a folder to a project, then use the Import tab to ingest files with proper naming conventions. Great for Grok/AI-generated content or render outputs.">?</span></h3>
                     <div id="watchFolderList" class="watch-list"></div>
                     <div class="input-row" style="flex-wrap:wrap;gap:6px;">
@@ -625,7 +629,7 @@ Import from Resolve</button>
                     </div>
                 </div>
 
-                <div class="settings-section">
+                <div class="settings-section" id="section-system">
                     <h3>System Info</h3>
                     <div id="systemInfo"></div>
 
@@ -652,7 +656,7 @@ Import from Resolve</button>
                     </div>
                 </div>
 
-                <div class="settings-section">
+                <div class="settings-section" id="section-db-transfer">
                     <h3> Database Transfer <span class="help-icon" data-tip="Export your database to a file, import one from another machine, or pull directly from a remote MediaVault instance on your network.">?</span></h3>
                     <div id="dbInfo" style="font-size:0.82rem;color:var(--text-dim);line-height:1.8;margin-bottom:10px;">Loading...</div>
                     <div style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px;">
@@ -673,7 +677,7 @@ Import from Resolve</button>
                     </div>
                 </div>
 
-                <div class="settings-section">
+                <div class="settings-section" id="section-sync-mode">
                     <h3>Sync Mode <span class="help-icon" data-tip="Configure how this instance syncs with others. Standalone runs independently. Hub is the central server that spokes connect to. Spoke syncs its database from a hub and forwards writes to it.">?</span></h3>
                     <div id="syncModeStatus" style="margin-bottom:8px;font-size:0.82rem;"></div>
                     <div class="setting-row">
@@ -716,7 +720,7 @@ Import from Resolve</button>
                     <p class="hint" style="margin-top:6px;">Changes require a server restart to take effect.</p>
                 </div>
 
-                <div class="settings-section">
+                <div class="settings-section" id="section-network">
                     <h3> Network &amp; Multi-Machine <span class="help-icon" data-tip="Access your MediaVault database from other machines on your network. Give this server a friendly name and configure path mappings for cross-platform file access.">?</span></h3>
                     <div class="setting-row">
                         <label>Server Name</label>

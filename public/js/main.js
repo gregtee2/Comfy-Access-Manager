@@ -178,6 +178,14 @@ async function checkSetup() {
         const status = await api('/api/settings/status');
         state.settings = await api('/api/settings');
 
+        // Fetch server mode (hub/spoke/standalone) for access control
+        try {
+            const info = await api('/api/servers/info');
+            state.serverMode = info.mode || 'standalone';
+        } catch (_) {
+            state.serverMode = 'standalone';
+        }
+
         document.getElementById('assetCount').textContent = `${status.assets} assets`;
         document.getElementById('appVersion').textContent = status.version ? `v${status.version}` : '';
         document.getElementById('statusIndicator').className = 'status-dot' + (status.vaultConfigured ? '' : ' warning');
