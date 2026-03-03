@@ -5,7 +5,8 @@ node_modules/
 tools/
 
 # Database (user-specific data)
-data/mediavault.db
+data/*.db
+data/*.db-*
 data/config.json
 data/uploads/
 data/tmp.txt
@@ -37,11 +38,7 @@ Thumbs.db
 .vscode/
 .idea/
 *.bak
-data/mediavault.db.backup-*
-data/uploads/
 data/review-snapshots/
-data/*.db-shm
-data/*.db-wal
 
 # Hub/spoke test instance
 test-spoke/
