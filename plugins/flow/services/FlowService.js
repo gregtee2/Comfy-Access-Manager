@@ -591,10 +591,109 @@ class FlowService {
             ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?)
         `);
 
+        // Separate insert for frame sequences — includes is_sequence columns
+        const insertSequenceAsset = db.prepare(`
+            INSERT INTO assets (
+                project_id, sequence_id, shot_id, role_id,
+                original_name, vault_name, file_path, relative_path,
+                media_type, file_ext, file_size,
+                is_linked, status, metadata,
+                is_sequence, frame_start, frame_end, frame_count, frame_pattern
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 1, NULL, ?, 1, ?, ?, ?, ?)
+        `);
+
+        const { detectSequences } = require('../../../src/utils/sequenceDetector');
+
         let registered = 0, skipped = 0, missing = 0, errors = 0;
         const ThumbnailService = require('../../../src/services/ThumbnailService');
         const newAssetIds = [];
         const newFlowMap = [];  // { flowId, assetId, source } for thumbnail fetch
+
+        /**
+         * Resolve a ShotGrid frame-sequence path pattern to actual files on disk.
+         * SG stores paths like "X:\...\render.####.exr" or "X:\...\render.%04d.exr"
+         * which aren't real files — we need to scan the directory for matching frames.
+         *
+         * @param {string} rawPath - Path that may contain ####, %0Nd, or $F padding notation
+         * @returns {{ files: string[], dir: string }|null} - Array of matching file paths, or null
+         */
+        function resolveFrameSequencePath(rawPath) {
+            if (!rawPath) return null;
+
+            // Detect frame padding patterns in filename:
+            //   #### or ######              → ShotGrid/Houdini style
+            //   %04d or %0Nd                → printf/Nuke style
+            //   $F or $F4                   → Houdini style
+            const fileName = path.basename(rawPath);
+            const dirPath = path.dirname(rawPath);
+
+            // Match patterns and convert to regex for scanning
+            let fileRegex = null;
+            let paddingDigits = 4;  // default
+
+            // Pattern 1: #### notation (e.g. render.####.exr → render.\d{4}.exr)
+            const hashMatch = fileName.match(/(#+)/);
+            if (hashMatch) {
+                paddingDigits = hashMatch[1].length;
+                const escaped = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                const regexStr = escaped.replace(/#+/, `\\d{${paddingDigits},}`);
+                fileRegex = new RegExp(`^${regexStr}$`);
+            }
+
+            // Pattern 2: %04d or %0Nd notation (e.g. render.%04d.exr)
+            if (!fileRegex) {
+                const printfMatch = fileName.match(/%0?(\d*)d/);
+                if (printfMatch) {
+                    paddingDigits = parseInt(printfMatch[1]) || 1;
+                    const escaped = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regexStr = escaped.replace(/%0?\d*d/, `\\d{${paddingDigits},}`);
+                    fileRegex = new RegExp(`^${regexStr}$`);
+                }
+            }
+
+            // Pattern 3: $F or $F4 notation (Houdini)
+            if (!fileRegex) {
+                const houdiniMatch = fileName.match(/\$F(\d*)/);
+                if (houdiniMatch) {
+                    paddingDigits = parseInt(houdiniMatch[1]) || 1;
+                    const escaped = fileName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+                    const regexStr = escaped.replace(/\\\$F\d*/, `\\d{${paddingDigits},}`);
+                    fileRegex = new RegExp(`^${regexStr}$`);
+                }
+            }
+
+            if (!fileRegex) return null;
+
+            // Check if the directory exists (try direct and cross-platform resolved)
+            let resolvedDir = dirPath;
+            if (!fs.existsSync(resolvedDir)) {
+                try {
+                    const mapped = resolveFilePath(resolvedDir);
+                    if (mapped && fs.existsSync(mapped)) {
+                        resolvedDir = mapped;
+                    } else {
+                        return null;
+                    }
+                } catch {
+                    return null;
+                }
+            }
+
+            // Scan directory for matching files
+            try {
+                const dirContents = fs.readdirSync(resolvedDir);
+                const matchingFiles = dirContents
+                    .filter(f => fileRegex.test(f))
+                    .sort()
+                    .map(f => path.join(resolvedDir, f));
+
+                if (matchingFiles.length >= 2) {
+                    return { files: matchingFiles, dir: resolvedDir };
+                }
+            } catch {}
+
+            return null;
+        }
 
         const registerBatch = db.transaction((batchItems) => {
             for (const item of batchItems) {
@@ -607,8 +706,9 @@ class FlowService {
 
                     // Try each path variant until we find one that exists on disk
                     let resolvedPath = null;
+                    let frameSeqResult = null;  // for frame sequence paths
                     for (const rawPath of (item.paths || [])) {
-                        // Try the path as-is first
+                        // Try the path as-is first (works for .mov, single files)
                         if (fs.existsSync(rawPath)) {
                             resolvedPath = rawPath;
                             break;
@@ -621,6 +721,90 @@ class FlowService {
                                 break;
                             }
                         } catch {}
+
+                        // If path has frame padding notation (####, %04d, $F),
+                        // try resolving as a frame sequence by scanning the directory
+                        if (!frameSeqResult) {
+                            frameSeqResult = resolveFrameSequencePath(rawPath);
+                        }
+                    }
+
+                    // ── Frame sequence registration ──
+                    if (!resolvedPath && frameSeqResult) {
+                        const { files, dir } = frameSeqResult;
+
+                        // Use sequence detector to group frames properly
+                        const { sequences } = detectSequences(files);
+                        if (sequences.length > 0) {
+                            const seq = sequences[0];  // one SG version = one sequence
+                            const firstFrame = seq.files[0];
+
+                            // Skip if first frame already registered
+                            if (existingPaths.has(firstFrame)) {
+                                skipped++;
+                                continue;
+                            }
+
+                            const seqFileName = path.basename(firstFrame);
+                            const seqExt = path.extname(seqFileName).toLowerCase();
+                            const { type: seqMediaType } = detectMediaType(seqFileName);
+
+                            // Compute total file size
+                            let totalSize = 0;
+                            for (const f of seq.files) {
+                                try { totalSize += fs.statSync(f).size; } catch {}
+                            }
+
+                            // Resolve shot + sequence from entity link
+                            let shotId = null, sequenceId = null;
+                            if (item.entity_type === 'Shot' && item.entity_id) {
+                                const shot = shotsByFlowId.get(item.entity_id);
+                                if (shot) {
+                                    shotId = shot.id;
+                                    sequenceId = shot.sequence_id;
+                                }
+                            }
+
+                            let roleId = null;
+                            if (item.step_id) {
+                                const role = rolesByFlowId.get(item.step_id);
+                                if (role) roleId = role.id;
+                            }
+
+                            const metadata = JSON.stringify({
+                                flow_version_id: item.flow_id,
+                                flow_source: item._source,
+                                flow_code: item.code,
+                            });
+
+                            // frame_pattern: printf-style for FFmpeg/RV compatibility
+                            // e.g. "AL_049_GWH_0005_comp_v012.%04d.exr"
+                            const framePattern = path.join(dir, seq.ffmpegPattern);
+
+                            const result = insertSequenceAsset.run(
+                                localProjectId, sequenceId, shotId, roleId,
+                                `${seq.baseName}${seq.ext} [${seq.frameStart}-${seq.frameEnd}]`,   // original_name
+                                item.code || `${seq.baseName}${seq.ext}`,   // vault_name
+                                firstFrame,            // file_path (first frame)
+                                firstFrame,            // relative_path
+                                seqMediaType,          // media_type (usually 'exr')
+                                seqExt,                // file_ext
+                                totalSize,             // total size of all frames
+                                metadata,
+                                seq.frameStart,        // frame_start
+                                seq.frameEnd,          // frame_end
+                                seq.frameCount,        // frame_count
+                                framePattern           // frame_pattern (printf-style full path)
+                            );
+
+                            existingPaths.add(firstFrame);
+                            registered++;
+                            if (result.lastInsertRowid) {
+                                newAssetIds.push(result.lastInsertRowid);
+                                newFlowMap.push({ flowId: item.flow_id, assetId: result.lastInsertRowid, source: item._source });
+                            }
+                            continue;
+                        }
                     }
 
                     if (!resolvedPath) {
