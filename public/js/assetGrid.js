@@ -18,6 +18,46 @@ import { getActiveCrateId } from './crate.js';
 import { expandNode, renderTree } from './treeNav.js';
 
 // ═══════════════════════════════════════════
+//  COLUMN SORT STATE
+// ═══════════════════════════════════════════
+
+let _sortColumn = null;   // current sort key or null (default server order)
+let _sortAsc    = true;    // true = ascending
+
+function sortAssets(column) {
+    if (_sortColumn === column) {
+        _sortAsc = !_sortAsc;          // toggle direction
+    } else {
+        _sortColumn = column;
+        _sortAsc = true;
+    }
+    const dir = _sortAsc ? 1 : -1;
+    state.assets.sort((a, b) => {
+        let va, vb;
+        switch (column) {
+            case 'id':   va = a.id || 0; vb = b.id || 0; break;
+            case 'show': va = (a.project_code || '').toLowerCase(); vb = (b.project_code || '').toLowerCase(); break;
+            case 'shot': va = (a.shot_name || a.shot_code || '').toLowerCase(); vb = (b.shot_name || b.shot_code || '').toLowerCase(); break;
+            case 'name': va = (a.vault_name || '').toLowerCase(); vb = (b.vault_name || '').toLowerCase(); break;
+            case 'role': va = (a.role_name || '').toLowerCase(); vb = (b.role_name || '').toLowerCase(); break;
+            case 'size': va = a.file_size || 0; vb = b.file_size || 0; break;
+            case 'date': va = a.created_at || ''; vb = b.created_at || ''; break;
+            case 'res':  va = (a.width || 0) * (a.height || 0); vb = (b.width || 0) * (b.height || 0); break;
+            default:     return 0;
+        }
+        if (va < vb) return -1 * dir;
+        if (va > vb) return  1 * dir;
+        return 0;
+    });
+    renderAssets();
+}
+
+function _sortIndicator(column) {
+    if (_sortColumn !== column) return '';
+    return _sortAsc ? ' &#9650;' : ' &#9660;';
+}
+
+// ═══════════════════════════════════════════
 //  PROJECT DETAIL / BROWSER
 // ═══════════════════════════════════════════
 
@@ -383,16 +423,16 @@ function renderAssets() {
         container.className = 'asset-list';
         const headerRow = `
             <div class="asset-row asset-row-header">
-                <div class="row-id">ID</div>
+                <div class="row-id sort-header${_sortColumn === 'id' ? ' sort-active' : ''}" onclick="sortAssets('id')">ID${_sortIndicator('id')}</div>
                 <div class="row-thumb">Media</div>
                 <div class="row-audio">Audio</div>
-                <div class="row-show">Show</div>
-                <div class="row-shot">Shot</div>
-                <div class="row-name">Vault Name</div>
-                <div class="row-role">Role</div>
-                <div class="row-res">Resolution</div>
-                <div class="row-size">Size</div>
-                <div class="row-date">Created</div>
+                <div class="row-show sort-header${_sortColumn === 'show' ? ' sort-active' : ''}" onclick="sortAssets('show')">Show${_sortIndicator('show')}</div>
+                <div class="row-shot sort-header${_sortColumn === 'shot' ? ' sort-active' : ''}" onclick="sortAssets('shot')">Shot${_sortIndicator('shot')}</div>
+                <div class="row-name sort-header${_sortColumn === 'name' ? ' sort-active' : ''}" onclick="sortAssets('name')">Vault Name${_sortIndicator('name')}</div>
+                <div class="row-role sort-header${_sortColumn === 'role' ? ' sort-active' : ''}" onclick="sortAssets('role')">Role${_sortIndicator('role')}</div>
+                <div class="row-res sort-header${_sortColumn === 'res' ? ' sort-active' : ''}" onclick="sortAssets('res')">Resolution${_sortIndicator('res')}</div>
+                <div class="row-size sort-header${_sortColumn === 'size' ? ' sort-active' : ''}" onclick="sortAssets('size')">Size${_sortIndicator('size')}</div>
+                <div class="row-date sort-header${_sortColumn === 'date' ? ' sort-active' : ''}" onclick="sortAssets('date')">Created${_sortIndicator('date')}</div>
                 <div class="row-star"></div>
             </div>`;
         const rows = state.assets.map((a, i) => {
@@ -1041,6 +1081,7 @@ window.onShotDrop = onShotDrop;
 window.onSeqDrop = onSeqDrop;
 window.refreshAssets = refreshAssets;
 window.toggleGroupFormats = toggleGroupFormats;
+window.sortAssets = sortAssets;
 
 // ═══════════════════════════════════════════
 //  VIDEO SCRUBBING
