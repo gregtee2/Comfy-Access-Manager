@@ -91,6 +91,7 @@ class FlowService {
             const proc = spawn(pythonCmd, args, {
                 cwd: path.dirname(BRIDGE_SCRIPT),
                 env: { ...process.env },
+                windowsHide: true,
             });
 
             let stdout = '';

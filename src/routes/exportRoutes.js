@@ -337,7 +337,7 @@ function exportSingleAsset(asset, opts) {
             try {
                 const probeOut = execFileSync(resolvedFFprobe, [
                     '-v', 'quiet', '-print_format', 'json', '-show_streams', asset.file_path
-                ], { maxBuffer: 1024 * 1024 }).toString();
+                ], { maxBuffer: 1024 * 1024, windowsHide: true }).toString();
                 const probeInfo = JSON.parse(probeOut);
                 const vs = (probeInfo.streams || []).find(s => s.codec_type === 'video');
                 const srcCodec = (vs?.codec_name || '').toLowerCase();

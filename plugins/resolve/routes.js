@@ -69,6 +69,7 @@ function executeBridge(command, params = null) {
             cwd: path.dirname(BRIDGE_SCRIPT),
             env,
             timeout: 30000,
+            windowsHide: true,
         });
 
         let stdout = '';

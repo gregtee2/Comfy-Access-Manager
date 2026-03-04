@@ -61,7 +61,7 @@ function buildRvpkg() {
             if (fs.existsSync(tmpZip)) fs.unlinkSync(tmpZip);
             execSync(
                 `tar -a -cf "${tmpZip}" -C "${PLUGIN_SRC}" PACKAGE mediavault_mode.py`,
-                { stdio: 'pipe', timeout: 10000 }
+                { stdio: 'pipe', timeout: 10000, windowsHide: true }
             );
             if (fs.existsSync(tmpZip)) {
                 if (fs.existsSync(outPath)) fs.unlinkSync(outPath);
@@ -280,7 +280,7 @@ function deployTo(rvpkgBuffer, install, hash) {
             try {
                 execSync(
                     `"${rvpkgBin}" -install -force "${RVPKG_FILENAME}"`,
-                    { stdio: 'pipe', timeout: 15000 }
+                    { stdio: 'pipe', timeout: 15000, windowsHide: true }
                 );
                 installedViaCLI = true;
             } catch (cliErr) {

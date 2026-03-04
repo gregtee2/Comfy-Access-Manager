@@ -512,7 +512,7 @@ function killExistingRVSync() {
             execSync("pkill -f 'MacOS/RV.*-network' 2>/dev/null || true", { timeout: 5000 });
         } else if (process.platform === 'win32') {
             // On Windows, kill rv.exe instances with -network in command line
-            execSync('wmic process where "name=\'rv.exe\' and commandline like \'%-network%\'" call terminate 2>NUL || exit /b 0', { timeout: 5000 });
+            execSync('wmic process where "name=\'rv.exe\' and commandline like \'%-network%\'" call terminate 2>NUL || exit /b 0', { timeout: 5000, windowsHide: true });
         } else {
             execSync("pkill -f 'rv.*-network' 2>/dev/null || true", { timeout: 5000 });
         }

@@ -358,7 +358,7 @@ class FileService {
             // Windows: check for mapped network drives via net use
             try {
                 const { execSync } = require('child_process');
-                const netUse = execSync('net use 2>nul', { encoding: 'utf8', timeout: 3000 });
+                const netUse = execSync('net use 2>nul', { encoding: 'utf8', timeout: 3000, windowsHide: true });
                 const mapped = new Set();
                 for (const line of netUse.split('\n')) {
                     const match = line.match(/^\s*(?:OK|Disconnected)\s+([A-Z]:)/i);

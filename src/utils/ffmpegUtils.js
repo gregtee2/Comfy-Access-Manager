@@ -28,7 +28,7 @@ function _findBinary(name, candidates) {
     for (const candidate of candidates) {
         try {
             if (candidate === name) {
-                execFileSync(name, ['-version'], { stdio: 'ignore', timeout: 5000 });
+                execFileSync(name, ['-version'], { stdio: 'ignore', timeout: 5000, windowsHide: true });
                 return name;
             } else if (fs.existsSync(candidate)) {
                 return candidate;
