@@ -1141,48 +1141,13 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
         print("[MediaVault] Initialising mediavault-mode")
 
-        # Fetch real roles from CAM at init (falls back to defaults if
-        # the server isn't running yet).
-        self._all_role_names = self._fetchAllRoleNames()
-        if _VERBOSE:
-            print("[MediaVault] Roles for submenu: %s" % self._all_role_names)
-
-        def _role_state(role_name):
-            """Return a state callback that grays out *role_name* when
-            it has no assets for the current shot.
-
-            Eagerly fetches from the CAM API on first menu open so
-            roles are grayed out correctly even before any Compare /
-            Switch / Version action."""
-            def _check(*args, **kwargs):
-                # Populate cache on first access (fast localhost call,
-                # _getRolesData caches by path so only the first
-                # callback in the batch actually hits the network).
-                if not self._cached_data:
-                    try:
-                        self._getRolesData()
-                    except Exception:
-                        pass
-                if not self._cached_data:
-                    return rvc.NeutralMenuState   # server unreachable
-                for role in self._cached_data.get("roles", []):
-                    if (role.get("name") or "").lower() == role_name.lower():
-                        if role.get("assets"):
-                            return rvc.NeutralMenuState
-                return rvc.DisabledMenuState
-            return _check
-
         def _role_items(mode):
-            """Build submenu item list for a given mode (compare/switch)."""
+            """Build submenu item list for a given mode (compare/switch).
+
+            Initial menu before source loads — no asset data yet,
+            so just show navigation actions (no flat role dump).
+            """
             items = []
-            for r in self._all_role_names:
-                items.append(
-                    (r,
-                     lambda e, _m=mode, _r=r: self._loadRoleLatest(_m, _r),
-                     None,
-                     _role_state(r))
-                )
-            items.append(("_", None))
             items.append(
                 ("Prev Version",
                  lambda e, _m=mode: self._stepVersion(1, _m), None, None))
@@ -1281,13 +1246,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             items = []
             data = self._cached_data
             if not data:
-                # No cached data — fall back to flat role names
-                for r in self._all_role_names:
-                    items.append(
-                        (r,
-                         lambda e, _m=mode, _r=r: self._loadRoleLatest(_m, _r),
-                         None, None))
-                items.append(("_", None))
+                # No cached data — just show navigation (no flat role dump)
                 items.append(("Prev Version",
                               lambda e, _m=mode: self._stepVersion(1, _m),
                               None, None))
@@ -1343,12 +1302,9 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                     items.append((role_name, ver_items))
 
             if not items:
-                # No roles with assets — show flat list as fallback
-                for r in self._all_role_names:
-                    items.append((
-                        r,
-                        lambda e, _m=mode, _r=r: self._loadRoleLatest(_m, _r),
-                        None, None))
+                # No roles with assets — show info label only
+                items.append(("(no versions found)", None, None,
+                              lambda *a, **kw: rvc.DisabledMenuState))
 
             items.append(("_", None))
             items.append(("Prev Version",
