@@ -2335,25 +2335,6 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
     # ── version stepping ─────────────────────────────────────────
 
-    def _fetchAllRoleNames(self):
-        """Fetch every role name from CAM (GET /api/roles).
-
-        Used at init to build the submenu items.  Falls back to the
-        default seeded roles if the server is unreachable."""
-        _DEFAULTS = ["Comp", "Light", "Anim", "FX",
-                     "Enviro", "Layout", "Matchmove", "Roto"]
-        try:
-            url = DMV_URL + "/api/roles"
-            req = urllib.request.Request(url, headers={"Accept": "application/json"})
-            resp = urllib.request.urlopen(req, timeout=3)
-            data = json.loads(resp.read().decode("utf-8"))
-            if isinstance(data, list) and data:
-                names = [r.get("name") for r in data if r.get("name")]
-                return sorted(names, key=str.lower) if names else _DEFAULTS
-        except Exception as e:
-            print("[MediaVault] Could not fetch roles from CAM: %s (using defaults)" % e)
-        return _DEFAULTS
-
     def _loadRoleLatest(self, mode, role_name):
         """Load the latest version of *role_name* for compare or switch.
 
