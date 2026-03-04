@@ -654,6 +654,13 @@ function updateSelectionToolbar() {
     toolbar.style.display = count > 0 ? 'flex' : 'none';
     document.getElementById('selectionCount').textContent =
         `${count} selected (${formatSize(state.assets.filter(a => state.selectedAssets.includes(a.id)).reduce((s, a) => s + (a.file_size || 0), 0))})`;
+
+    // Only show "Delete from Disk" button for admin users
+    const diskBtn = document.getElementById('btnDeleteFromDisk');
+    if (diskBtn) {
+        const isAdmin = state.currentUser?.is_admin || localStorage.getItem('cam_user_is_admin') === '1';
+        diskBtn.style.display = isAdmin ? '' : 'none';
+    }
 }
 
 // ═══════════════════════════════════════════

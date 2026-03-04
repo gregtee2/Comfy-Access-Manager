@@ -277,7 +277,7 @@ Import from Resolve</button>
                     <button class="btn-small" onclick="sendSelectedToRV('merge')" title="Add selected clips to the running RV session (keeps existing sources)" style="background:#334">Add to RV</button>
                     <button class="btn-small" onclick="startSyncReviewFromSelection()" title="Start a synchronized RV review session that others can join" style="background:#2a4a3e"> Sync Review</button>
                     <button class="btn-small" onclick="bulkDeleteAssets(true)" title="Remove from database only — files stay on disk">Remove from DB</button>
-                    <button class="btn-small btn-danger" onclick="bulkDeleteAssets()" title="Delete from database AND remove files from disk — cannot be undone">Delete from Disk</button>
+                    <button id="btnDeleteFromDisk" class="btn-small btn-danger" onclick="bulkDeleteAssets()" title="Delete from database AND remove files from disk — cannot be undone" style="display:none">Delete from Disk</button>
                 </div>
               </div><!-- /.project-sticky-header -->
 

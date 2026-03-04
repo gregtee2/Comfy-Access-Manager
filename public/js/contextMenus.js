@@ -179,7 +179,11 @@ async function showContextMenu(event, assetIdx) {
     if (!window.getActiveCrateId?.()) {
         html += `<div class="ctx-separator"></div>`;
         html += `<div class="ctx-item" data-action="removeDb"> Remove from DB${!isSingle ? ` (${count})` : ''}</div>`;
-        html += `<div class="ctx-item ctx-danger" data-action="delete"> Delete files from disk${!isSingle ? ` (${count})` : ''}</div>`;
+        // Only admins can delete files from disk
+        const isAdmin = state.currentUser?.is_admin || localStorage.getItem('cam_user_is_admin') === '1';
+        if (isAdmin) {
+            html += `<div class="ctx-item ctx-danger" data-action="delete"> Delete files from disk${!isSingle ? ` (${count})` : ''}</div>`;
+        }
     }
 
     menu.innerHTML = html;
@@ -756,11 +760,24 @@ async function bulkDeleteAssets(dbOnly = false) {
     const count = state.selectedAssets.length;
     if (count === 0) return;
 
-    const msg = dbOnly
-        ? `Remove ${count} asset(s) from the database?\n\nFiles will be KEPT on disk.`
-        : `DELETE ${count} asset(s)?\n\n This will permanently delete the files from disk!\n\nThis cannot be undone.`;
+    // Admin-only check for disk deletion (client-side, server enforces too)
+    if (!dbOnly) {
+        const isAdmin = state.currentUser?.is_admin || localStorage.getItem('cam_user_is_admin') === '1';
+        if (!isAdmin) {
+            alert('Only administrators can delete files from disk.\n\nUse "Remove from DB" instead to untrack assets without affecting files.');
+            return;
+        }
+    }
 
-    if (!confirmDelete(msg)) return;
+    if (dbOnly) {
+        // Simple confirm for DB-only removal
+        const msg = `Remove ${count} asset(s) from the database?\n\nFiles will be KEPT on disk.`;
+        if (!confirmDelete(msg)) return;
+    } else {
+        // Type-to-confirm for disk deletion — extra safety
+        const confirmed = await showTypeToConfirmDialog(count);
+        if (!confirmed) return;
+    }
 
     try {
         const result = await api('/api/assets/bulk-delete', {
@@ -771,8 +788,8 @@ async function bulkDeleteAssets(dbOnly = false) {
             },
         });
 
-        alert(` Deleted ${result.deleted} asset(s).` +
-            (result.errors > 0 ? `\n ${result.errors} error(s)` : ''));
+        alert(`Deleted ${result.deleted} asset(s).` +
+            (result.errors > 0 ? `\n${result.errors} error(s)` : ''));
 
         state.selectedAssets = [];
         state.lastClickedAsset = -1;
@@ -782,8 +799,86 @@ async function bulkDeleteAssets(dbOnly = false) {
         }
         window.checkSetup?.();
     } catch (err) {
-        alert(' Delete failed: ' + err.message);
+        alert('Delete failed: ' + err.message);
     }
+}
+
+/**
+ * Show a modal that requires the user to type DELETE to confirm disk deletion.
+ * Returns a promise that resolves true if confirmed, false if cancelled.
+ */
+function showTypeToConfirmDialog(count) {
+    return new Promise(resolve => {
+        const overlay = document.createElement('div');
+        overlay.className = 'modal-overlay';
+        overlay.style.cssText = 'position:fixed;top:0;left:0;width:100%;height:100%;background:rgba(0,0,0,0.7);z-index:10000;display:flex;align-items:center;justify-content:center;';
+
+        const box = document.createElement('div');
+        box.style.cssText = 'background:#2a2a2a;border:2px solid #cc4444;border-radius:8px;padding:28px 32px;max-width:460px;width:90%;color:#ddd;font-family:inherit;';
+        box.innerHTML = `
+            <h3 style="color:#ff6666;margin:0 0 12px 0;font-size:16px;">PERMANENT FILE DELETION</h3>
+            <p style="margin:0 0 8px 0;line-height:1.5;">You are about to <strong style="color:#ff6666;">permanently delete ${count} file(s) from disk</strong>.</p>
+            <p style="margin:0 0 8px 0;line-height:1.5;color:#aaa;">This will remove the actual files from the filesystem. For ShotGrid-synced assets, this deletes the original production files. <strong>This cannot be undone.</strong></p>
+            <p style="margin:0 0 14px 0;">Type <strong style="color:#ff6666;font-family:monospace;font-size:15px;">DELETE</strong> to confirm:</p>
+            <input type="text" id="deleteConfirmInput" autocomplete="off" spellcheck="false"
+                style="width:100%;padding:10px 12px;background:#1a1a1a;border:1px solid #555;color:#fff;font-size:16px;font-family:monospace;border-radius:4px;box-sizing:border-box;letter-spacing:2px;"
+                placeholder="Type DELETE here">
+            <div style="display:flex;gap:10px;margin-top:18px;justify-content:flex-end;">
+                <button id="deleteConfirmCancel" style="padding:8px 20px;background:#444;color:#ccc;border:none;border-radius:4px;cursor:pointer;font-size:14px;">Cancel</button>
+                <button id="deleteConfirmBtn" disabled style="padding:8px 20px;background:#553333;color:#886666;border:1px solid #664444;border-radius:4px;cursor:not-allowed;font-size:14px;font-weight:bold;">Delete from Disk</button>
+            </div>
+        `;
+        overlay.appendChild(box);
+        document.body.appendChild(overlay);
+
+        const input = box.querySelector('#deleteConfirmInput');
+        const btn = box.querySelector('#deleteConfirmBtn');
+        const cancel = box.querySelector('#deleteConfirmCancel');
+
+        input.focus();
+
+        input.addEventListener('input', () => {
+            const match = input.value.trim() === 'DELETE';
+            btn.disabled = !match;
+            btn.style.background = match ? '#cc3333' : '#553333';
+            btn.style.color = match ? '#fff' : '#886666';
+            btn.style.cursor = match ? 'pointer' : 'not-allowed';
+            btn.style.borderColor = match ? '#ff4444' : '#664444';
+        });
+
+        input.addEventListener('keydown', (e) => {
+            if (e.key === 'Enter' && input.value.trim() === 'DELETE') {
+                cleanup();
+                resolve(true);
+            } else if (e.key === 'Escape') {
+                cleanup();
+                resolve(false);
+            }
+        });
+
+        btn.addEventListener('click', () => {
+            if (input.value.trim() === 'DELETE') {
+                cleanup();
+                resolve(true);
+            }
+        });
+
+        cancel.addEventListener('click', () => {
+            cleanup();
+            resolve(false);
+        });
+
+        overlay.addEventListener('click', (e) => {
+            if (e.target === overlay) {
+                cleanup();
+                resolve(false);
+            }
+        });
+
+        function cleanup() {
+            overlay.remove();
+        }
+    });
 }
 
 // ===========================================

@@ -1340,6 +1340,14 @@ router.delete('/:id', (req, res) => {
 
     const deleteFile = req.query.delete_file === 'true'; // Default: DB only — file stays on disk
 
+    // SAFETY: Only admins can delete files from disk
+    if (deleteFile) {
+        const { isAdmin } = resolveUserAccess(req);
+        if (!isAdmin) {
+            return res.status(403).json({ error: 'Only administrators can delete files from disk' });
+        }
+    }
+
     // Never delete the physical file for linked/referenced assets
     if (deleteFile && !asset.is_linked && fs.existsSync(asset.file_path)) {
         fs.unlinkSync(asset.file_path);
@@ -1494,6 +1502,14 @@ router.post('/bulk-delete', (req, res) => {
 
     if (!Array.isArray(ids) || ids.length === 0) {
         return res.status(400).json({ error: 'ids array required' });
+    }
+
+    // SAFETY: Only admins can delete files from disk
+    if (delete_files) {
+        const { isAdmin } = resolveUserAccess(req);
+        if (!isAdmin) {
+            return res.status(403).json({ error: 'Only administrators can delete files from disk' });
+        }
     }
 
     let deleted = 0;
