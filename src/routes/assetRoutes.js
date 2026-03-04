@@ -520,7 +520,11 @@ router.get('/compare-targets-by-path', (req, res) => {
                 file_ext: s.file_ext, file_path: resolveFilePath(s.file_path),
                 created_at: s.created_at || null,
                 shot_name: s.shot_name || null, seq_name: s.seq_name || null,
-                is_current: s.id === currentId
+                is_current: s.id === currentId,
+                is_sequence: s.is_sequence || 0,
+                frame_pattern: s.frame_pattern || null,
+                frame_start: s.frame_start != null ? s.frame_start : null,
+                frame_end: s.frame_end != null ? s.frame_end : null
             });
         }
         return [...roleMap.values()];
@@ -544,6 +548,7 @@ router.get('/compare-targets-by-path', (req, res) => {
     const hierarchy = asset.project_id ? buildHierarchy(asset.project_id) : null;
 
     const baseCols = `a.id, a.vault_name, a.version, a.file_ext, a.media_type, a.file_size, a.file_path, a.created_at,
+               a.is_sequence, a.frame_pattern, a.frame_start, a.frame_end,
                a.role_id, r.name AS role_name, r.code AS role_code, r.icon AS role_icon, r.color AS role_color,
                r.sort_order AS role_sort`;
     const baseJoin = `FROM assets a LEFT JOIN roles r ON a.role_id = r.id`;

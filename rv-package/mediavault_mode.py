@@ -726,6 +726,7 @@ class AssetPickerDialog(QDialog):
             # Store file_path in first column's user data
             items[0].setData(Qt.UserRole, a.get("file_path", ""))
             items[0].setData(Qt.UserRole + 1, a.get("id"))
+            items[0].setData(Qt.UserRole + 2, a)  # full asset dict for sequence resolution
 
             is_current = a.get("is_current", False)
             is_missing = not a.get("file_path") or not os.path.exists(a.get("file_path", ""))
@@ -796,9 +797,11 @@ class AssetPickerDialog(QDialog):
             item = self._table.item(rows[0].row(), 0)
             fp = item.data(Qt.UserRole) if item else ""
             self._selected_path = fp
+            self._selected_asset = item.data(Qt.UserRole + 2) if item else None
             self._load_btn.setEnabled(bool(fp) and os.path.exists(fp))
         else:
             self._selected_path = None
+            self._selected_asset = None
             self._load_btn.setEnabled(False)
 
     def _onDoubleClick(self, index):
@@ -808,10 +811,15 @@ class AssetPickerDialog(QDialog):
             fp = item.data(Qt.UserRole)
             if fp and os.path.exists(fp):
                 self._selected_path = fp
+                self._selected_asset = item.data(Qt.UserRole + 2)
                 self.accept()
 
     def selectedPath(self):
         return self._selected_path
+
+    def selectedAsset(self):
+        """Return the full asset dict for the selected row (for sequence resolution)."""
+        return self._selected_asset
 
 
 class MediaVaultMode(rv.rvtypes.MinorMode):
@@ -1669,9 +1677,47 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         except Exception as e:
             print("[MediaVault] _stripAutoAudio error: %s" % e)
 
+    @staticmethod
+    def _assetToRvPath(asset_dict):
+        """Convert an asset dict from the API into an RV-loadable path.
+
+        For frame sequences (is_sequence=1 with frame_pattern), builds
+        RV sequence notation like:
+            X:/path/to/render.1001-1100####.exr
+        For regular files, returns file_path as-is.
+        """
+        fp = asset_dict.get("file_path", "")
+        if not fp:
+            return None
+
+        is_seq = asset_dict.get("is_sequence")
+        pattern = asset_dict.get("frame_pattern")
+        f_start = asset_dict.get("frame_start")
+        f_end = asset_dict.get("frame_end")
+
+        if is_seq and pattern and f_start is not None and f_end is not None:
+            d = os.path.dirname(fp)
+            # pattern is printf-style filename, e.g. "render.%04d.exr"
+            pad_m = re.search(r'%0(\d+)d', pattern)
+            if pad_m:
+                digits = int(pad_m.group(1))
+                hashes = '#' * digits
+                rv_name = re.sub(r'%0\d+d',
+                                 '%d-%d%s' % (f_start, f_end, hashes),
+                                 pattern)
+                rv_path = os.path.join(d, rv_name)
+                # Verify at least one frame exists
+                first_name = pattern.replace(
+                    pad_m.group(0), str(f_start).zfill(digits))
+                if os.path.exists(os.path.join(d, first_name)):
+                    return rv_path
+            # Fallback: if pattern parsing fails, return single file
+        return fp
+
     def _loadAsCompare(self, filepath):
         """Add filepath as a new source for A/B sequence comparison."""
-        if not os.path.exists(filepath):
+        is_seq_notation = '#' in filepath
+        if not is_seq_notation and not os.path.exists(filepath):
             rve.displayFeedback("File not found: %s" % os.path.basename(filepath), 4.0)
             return
         try:
@@ -1695,7 +1741,8 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
     def _switchTo(self, filepath):
         """Replace the current source with filepath."""
-        if not os.path.exists(filepath):
+        is_seq_notation = '#' in filepath
+        if not is_seq_notation and not os.path.exists(filepath):
             rve.displayFeedback("File not found: %s" % os.path.basename(filepath), 4.0)
             return
         try:
@@ -1810,12 +1857,16 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         result = dlg.exec_()
 
         if result == QDialog.Accepted:
-            path = dlg.selectedPath()
-            if path:
+            asset = dlg.selectedAsset()
+            if asset:
+                rv_path = self._assetToRvPath(asset)
+            else:
+                rv_path = dlg.selectedPath()
+            if rv_path:
                 if mode == "compare":
-                    self._loadAsCompare(path)
+                    self._loadAsCompare(rv_path)
                 else:
-                    self._switchTo(path)
+                    self._switchTo(rv_path)
 
     # ── version stepping ─────────────────────────────────────────
 
@@ -1877,20 +1928,22 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                         if not a_ext.startswith("."):
                             a_ext = "." + a_ext
                         if a_ext == current_ext and fp and os.path.exists(fp):
+                            rv_path = self._assetToRvPath(a)
                             if mode == "compare":
-                                self._loadAsCompare(fp)
+                                self._loadAsCompare(rv_path)
                             else:
-                                self._switchTo(fp)
+                                self._switchTo(rv_path)
                             return
 
                 # 2) Fallback — any asset that exists on disk
                 for a in sorted_assets:
                     fp = a.get("file_path", "")
                     if fp and os.path.exists(fp):
+                        rv_path = self._assetToRvPath(a)
                         if mode == "compare":
-                            self._loadAsCompare(fp)
+                            self._loadAsCompare(rv_path)
                         else:
-                            self._switchTo(fp)
+                            self._switchTo(rv_path)
                         return
                 rve.displayFeedback("Files for %s not on disk" % role_name, 3.0)
                 return
@@ -1951,10 +2004,11 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                     if 0 <= new_idx < len(assets):
                         new_path = assets[new_idx].get("file_path", "")
                         if new_path and os.path.exists(new_path):
+                            rv_path = self._assetToRvPath(assets[new_idx])
                             if mode == "compare":
-                                self._loadAsCompare(new_path)
+                                self._loadAsCompare(rv_path)
                             else:
-                                self._switchTo(new_path)
+                                self._switchTo(rv_path)
                             return
                     label = "previous" if direction < 0 else "next"
                     rve.displayFeedback("No %s version available" % label, 2.0)
@@ -2071,8 +2125,8 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                     font.setBold(True)
                     action.setFont(font)
 
-                # Store file path on the action for retrieval
-                action.setData(target.get("file_path", ""))
+                # Store RV-loadable path (handles sequences with frame notation)
+                action.setData(self._assetToRvPath(target))
 
             if menu.isEmpty():
                 rve.displayFeedback("No roles with available files", 3.0)
