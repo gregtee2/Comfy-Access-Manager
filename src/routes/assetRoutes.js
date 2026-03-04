@@ -479,6 +479,23 @@ router.get('/compare-targets-by-path', (req, res) => {
         asset = stmt.get(variant);
         if (asset) break;
     }
+    // Sequence fallback: RV returns the current frame (e.g. render.1018.exr) but
+    // the DB stores only the first frame (render.1001.exr). Match by directory +
+    // is_sequence flag to find the right asset.
+    if (!asset) {
+        const dirFwd = path.dirname(filePath).replace(/\\/g, '/');
+        const seqStmt = db.prepare(`
+            SELECT id, shot_id, sequence_id, project_id, role_id, vault_name
+            FROM assets
+            WHERE is_sequence = 1
+              AND replace(file_path, '\\', '/') LIKE ? COLLATE NOCASE
+            LIMIT 1
+        `);
+        for (const variant of getAllPathVariants(dirFwd + '/%')) {
+            asset = seqStmt.get(variant);
+            if (asset) break;
+        }
+    }
     if (!asset) {
         console.log('[compare-targets] Asset not found for path: %s (tried %d variants)', filePath, variants.length);
         return res.status(404).json({ error: 'Asset not found in vault' });
@@ -605,6 +622,30 @@ router.get('/overlay-info', (req, res) => {
     for (const variant of variants) {
         asset = stmt.get(variant);
         if (asset) break;
+    }
+    // Sequence fallback: RV returns current frame but DB stores first frame
+    if (!asset) {
+        const dirFwd = path.dirname(filePath).replace(/\\/g, '/');
+        const seqOvStmt = db.prepare(`
+            SELECT a.id, a.vault_name, a.original_name, a.version, a.file_ext,
+                   a.media_type, a.created_at, a.status,
+                   r.name AS role_name, r.code AS role_code,
+                   p.name AS project_name, p.code AS project_code,
+                   seq.name AS sequence_name, seq.code AS sequence_code,
+                   sh.name AS shot_name, sh.code AS shot_code
+            FROM assets a
+            LEFT JOIN roles r ON a.role_id = r.id
+            LEFT JOIN projects p ON a.project_id = p.id
+            LEFT JOIN sequences seq ON a.sequence_id = seq.id
+            LEFT JOIN shots sh ON a.shot_id = sh.id
+            WHERE a.is_sequence = 1
+              AND replace(a.file_path, '\\', '/') LIKE ? COLLATE NOCASE
+            LIMIT 1
+        `);
+        for (const variant of getAllPathVariants(dirFwd + '/%')) {
+            asset = seqOvStmt.get(variant);
+            if (asset) break;
+        }
     }
 
     if (!asset) {

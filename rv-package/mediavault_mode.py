@@ -2660,6 +2660,18 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         # Update standard overlay pointers
         self._syncCurrentSource()
 
+        # Pre-populate Compare/Switch role cache so the menu shows
+        # correct enabled/disabled states on first open.
+        try:
+            self._getRolesData(force_refresh=True)
+            if self._cached_data:
+                scope = self._cached_data.get("scope", "?")
+                role_names = [r.get("name") for r in self._cached_data.get("roles", [])]
+                print("[MediaVault] Role cache ready (scope=%s, %d roles with assets: %s)"
+                      % (scope, len(role_names), ", ".join(role_names[:10])))
+        except Exception as e:
+            print("[MediaVault] Pre-cache roles failed: %s" % e)
+
     def _onViewChanged(self, event):
         """Handle source switching (PageUp/Down, timeline click, etc.).
 
