@@ -536,6 +536,30 @@ function runMigrations(wrapper) {
         });
         insertMany(Object.entries(defaults));
     }
+
+    // ─── One-time cleanup: purge non-viewable asset types (3D caches, documents) ───
+    // These were imported by SG sync before the media type filter was added (v1.7.6)
+    const didPurge = wrapper.prepare("SELECT value FROM settings WHERE key = 'purged_nonviewable'").get();
+    if (!didPurge) {
+        const nonViewable = wrapper.prepare(
+            "SELECT id FROM assets WHERE media_type IN ('threed', 'document', 'other')"
+        ).all();
+        if (nonViewable.length > 0) {
+            const ThumbnailService = require('./services/ThumbnailService');
+            const delAsset = wrapper.prepare('DELETE FROM assets WHERE id = ?');
+            const delCrateItem = wrapper.prepare('DELETE FROM crate_items WHERE asset_id = ?');
+            const purge = wrapper.transaction((ids) => {
+                for (const { id } of ids) {
+                    delCrateItem.run(id);
+                    delAsset.run(id);
+                    try { ThumbnailService.deleteThumb(id); } catch (_) {}
+                }
+            });
+            purge(nonViewable);
+            console.log(`[DB] Purged ${nonViewable.length} non-viewable assets (3D caches, documents)`);
+        }
+        wrapper.prepare("INSERT OR REPLACE INTO settings (key, value) VALUES ('purged_nonviewable', '1')").run();
+    }
 }
 
 // ─── Settings Helpers ───
