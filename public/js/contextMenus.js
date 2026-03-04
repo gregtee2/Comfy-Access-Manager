@@ -35,9 +35,10 @@ async function showContextMenu(event, assetIdx) {
     const asset = state.assets[assetIdx];
     if (!asset) return;
 
-    // macOS: Ctrl+click fires contextmenu instead of click.
-    // Treat it as a multi-select toggle (same as Cmd+click).
-    if (event.ctrlKey && !event.metaKey) {
+    // macOS: Ctrl+click fires the contextmenu event (it's the OS right-click).
+    // On Windows/Linux, Ctrl+right-click = multi-select toggle instead.
+    const isMac = /Mac|iPhone|iPad/.test(navigator.userAgent);
+    if (event.ctrlKey && !event.metaKey && !isMac) {
         window.toggleAssetSelection?.(asset.id);
         state.lastClickedAsset = assetIdx;
         window.updateSelectionClasses?.();
