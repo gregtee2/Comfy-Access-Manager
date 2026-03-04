@@ -499,22 +499,56 @@ router.post('/path-config', (req, res) => {
 
 // POST /api/flow/sync/versions — Fetch Versions + PublishedFiles from Flow and register in-place
 // Body: { flowProjectId, localProjectId, source?: 'versions'|'published_files'|'both' }
+// Query: ?stream=1 for SSE progress events
 router.post('/sync/versions', async (req, res) => {
     const { flowProjectId, localProjectId, source } = req.body;
     if (!flowProjectId || !localProjectId) {
         return res.status(400).json({ error: 'flowProjectId and localProjectId required' });
     }
 
-    try {
-        const result = await FlowService.syncVersions(
-            Number(flowProjectId),
-            Number(localProjectId),
-            { source: source || 'both' }
-        );
-        res.json(result);
-    } catch (err) {
-        console.error('[Flow] sync/versions error:', err);
-        res.status(500).json({ success: false, error: err.message });
+    const useStream = req.query.stream === '1';
+
+    if (useStream) {
+        // SSE streaming mode — send progress events as they happen
+        res.writeHead(200, {
+            'Content-Type': 'text/event-stream',
+            'Cache-Control': 'no-cache',
+            'Connection': 'keep-alive',
+        });
+
+        const sendEvent = (data) => {
+            res.write(`data: ${JSON.stringify(data)}\n\n`);
+        };
+
+        try {
+            const result = await FlowService.syncVersions(
+                Number(flowProjectId),
+                Number(localProjectId),
+                {
+                    source: source || 'both',
+                    onProgress: sendEvent,
+                }
+            );
+            res.write(`event: done\ndata: ${JSON.stringify(result)}\n\n`);
+            res.end();
+        } catch (err) {
+            console.error('[Flow] sync/versions error:', err);
+            res.write(`event: error\ndata: ${JSON.stringify({ error: err.message })}\n\n`);
+            res.end();
+        }
+    } else {
+        // Normal JSON response
+        try {
+            const result = await FlowService.syncVersions(
+                Number(flowProjectId),
+                Number(localProjectId),
+                { source: source || 'both' }
+            );
+            res.json(result);
+        } catch (err) {
+            console.error('[Flow] sync/versions error:', err);
+            res.status(500).json({ success: false, error: err.message });
+        }
     }
 });
 

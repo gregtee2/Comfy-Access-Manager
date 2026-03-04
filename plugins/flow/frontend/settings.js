@@ -228,28 +228,117 @@ async function flowSyncVersions() {
     const source = sourceSelect ? sourceSelect.value : 'both';
     const projectName = select.options[select.selectedIndex]?.text || '';
 
-    _log(`⏳ Importing media from Flow for ${projectName} (${source})… This may take a moment.`);
+    // Show progress bar
+    const progressWrap = document.getElementById('flowSyncProgress');
+    const progressFill = document.getElementById('flowSyncProgressFill');
+    const progressText = document.getElementById('flowSyncProgressText');
+    if (progressWrap) progressWrap.style.display = 'block';
+    if (progressFill) progressFill.style.width = '0%';
+    if (progressText) progressText.textContent = 'Connecting to ShotGrid...';
+
+    _log(`⏳ Importing media from Flow for ${projectName} (${source})…`);
+
+    // Disable button during sync
+    const btn = document.getElementById('flowSyncVersionsBtn');
+    if (btn) btn.disabled = true;
 
     try {
-        const result = await api('/api/flow/sync/versions', {
+        const response = await fetch(`/api/flow/sync/versions?stream=1`, {
             method: 'POST',
-            body: { flowProjectId: Number(flowId), localProjectId: Number(localId), source }
+            headers: {
+                'Content-Type': 'application/json',
+                'X-CAM-User': localStorage.getItem('cam_user_id') || '',
+            },
+            body: JSON.stringify({ flowProjectId: Number(flowId), localProjectId: Number(localId), source }),
         });
 
-        if (result.registered > 0) {
-            _log(`✅ Imported ${result.registered} assets from Flow`);
-        } else {
-            _log('ℹ️ No new assets to import');
+        if (!response.ok) {
+            throw new Error(`Server returned ${response.status}`);
         }
-        if (result.missing > 0) {
-            _log(`⚠️ ${result.missing} files not found on disk — check path mappings if media is on a NAS`);
+
+        // Parse SSE stream
+        const reader = response.body.getReader();
+        const decoder = new TextDecoder();
+        let buffer = '';
+        let finalResult = null;
+
+        while (true) {
+            const { done, value } = await reader.read();
+            if (done) break;
+
+            buffer += decoder.decode(value, { stream: true });
+
+            // Parse complete SSE events from buffer
+            let eventEnd;
+            while ((eventEnd = buffer.indexOf('\n\n')) !== -1) {
+                const eventBlock = buffer.slice(0, eventEnd);
+                buffer = buffer.slice(eventEnd + 2);
+
+                // Check for named events (done/error)
+                let eventType = 'message';
+                let eventData = '';
+                for (const line of eventBlock.split('\n')) {
+                    if (line.startsWith('event: ')) eventType = line.slice(7).trim();
+                    else if (line.startsWith('data: ')) eventData = line.slice(6);
+                }
+
+                if (!eventData) continue;
+                let data;
+                try { data = JSON.parse(eventData); } catch { continue; }
+
+                if (eventType === 'done') {
+                    finalResult = data;
+                    break;
+                }
+                if (eventType === 'error') {
+                    throw new Error(data.error || 'Sync failed');
+                }
+
+                // Progress update
+                if (data.phase === 'fetching') {
+                    if (progressFill) progressFill.style.width = '0%';
+                    if (progressText) progressText.textContent = data.message;
+                } else if (data.phase === 'processing') {
+                    const pct = data.total > 0 ? Math.round((data.current / data.total) * 100) : 0;
+                    if (progressFill) progressFill.style.width = `${pct}%`;
+                    if (progressText) progressText.textContent = `${data.current} / ${data.total} — ${data.registered || 0} registered`;
+                } else if (data.phase === 'thumbnails') {
+                    if (progressFill) progressFill.style.width = '100%';
+                    if (progressText) progressText.textContent = data.message;
+                }
+            }
+
+            if (finalResult) break;
         }
-        if (result.skipped > 0) {
-            _log(`   ${result.skipped} already imported or non-media, ${result.errors} errors`);
+
+        // Show final results
+        if (finalResult) {
+            if (progressFill) progressFill.style.width = '100%';
+            if (progressText) progressText.textContent = `Done — ${finalResult.registered} imported`;
+
+            if (finalResult.registered > 0) {
+                _log(`✅ Imported ${finalResult.registered} assets from Flow`);
+            } else {
+                _log('ℹ️ No new assets to import');
+            }
+            if (finalResult.missing > 0) {
+                _log(`⚠️ ${finalResult.missing} files not found on disk — check path mappings if media is on a NAS`);
+            }
+            if (finalResult.skipped > 0) {
+                _log(`   ${finalResult.skipped} already imported or non-media, ${finalResult.errors} errors`);
+            }
+            _log(`   Total from Flow: ${finalResult.total}`);
         }
-        _log(`   Total from Flow: ${result.total}`);
     } catch (err) {
         _log(`❌ Import: ${err.message}`);
+        if (progressFill) progressFill.style.width = '0%';
+        if (progressText) progressText.textContent = `Error: ${err.message}`;
+    } finally {
+        if (btn) btn.disabled = false;
+        // Hide progress bar after a delay
+        setTimeout(() => {
+            if (progressWrap) progressWrap.style.display = 'none';
+        }, 5000);
     }
 }
 async function flowSyncThumbnails() {

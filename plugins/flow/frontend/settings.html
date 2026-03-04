@@ -42,6 +42,12 @@
             </div>
         </div>
     </div>
+    <div id="flowSyncProgress" style="display:none; margin-top:8px;">
+        <div style="position:relative; height:22px; background:rgba(255,255,255,0.06); border-radius:4px; overflow:hidden;">
+            <div id="flowSyncProgressFill" style="height:100%; width:0%; background:var(--accent, #888); transition:width 0.3s ease;"></div>
+            <div id="flowSyncProgressText" style="position:absolute; top:0; left:0; right:0; bottom:0; display:flex; align-items:center; justify-content:center; font-size:0.78rem; color:#fff;"></div>
+        </div>
+    </div>
     <div id="flowSyncLog" style="margin-top:8px;font-size:0.82rem;color:var(--text-dim);max-height:150px;overflow-y:auto;"></div>
 </div>
 

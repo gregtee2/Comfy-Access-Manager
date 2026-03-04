@@ -511,10 +511,11 @@ class FlowService {
      *
      * @param {number} flowProjectId — ShotGrid project ID
      * @param {number} localProjectId — CAM project ID
-     * @param {object} [opts] — { source: 'versions'|'published_files'|'both', statuses: string[] }
+     * @param {object} [opts] — { source: 'versions'|'published_files'|'both', statuses: string[], onProgress: function }
      * @returns {object} — { registered, skipped, missing, errors, total }
      */
     static async syncVersions(flowProjectId, localProjectId, opts = {}) {
+        const onProgress = opts.onProgress || (() => {});
         const path = require('path');
         const fs = require('fs');
         const { isMediaFile, detectMediaType } = require('../../../src/utils/mediaTypes');
@@ -524,6 +525,7 @@ class FlowService {
         const source = opts.source || 'both';
 
         // Collect all items (versions + published files)
+        onProgress({ phase: 'fetching', message: 'Fetching versions from ShotGrid...' });
         let items = [];
 
         if (source === 'versions' || source === 'both') {
@@ -556,8 +558,11 @@ class FlowService {
         }
 
         if (items.length === 0) {
+            onProgress({ phase: 'done', message: 'No versions found', registered: 0, total: 0 });
             return { success: true, registered: 0, skipped: 0, missing: 0, errors: 0, total: 0, message: 'No versions or published files found in Flow' };
         }
+
+        onProgress({ phase: 'processing', message: `Processing ${items.length} versions...`, current: 0, total: items.length });
 
         // Build lookup maps for shots and roles by flow_id
         const shotsByFlowId = new Map();
@@ -695,8 +700,10 @@ class FlowService {
             return null;
         }
 
-        const registerBatch = db.transaction((batchItems) => {
-            for (const item of batchItems) {
+        const CHUNK_SIZE = 50;
+        const registerChunk = db.transaction((batchItems, chunkOffset) => {
+            for (let idx = 0; idx < batchItems.length; idx++) {
+                const item = batchItems[idx];
                 try {
                     // Skip if we already imported this flow version
                     if (existingFlowIds.has(item.flow_id)) {
@@ -887,7 +894,22 @@ class FlowService {
             }
         });
 
-        registerBatch(items);
+        // Process items in chunks with progress reporting between each
+        for (let chunkStart = 0; chunkStart < items.length; chunkStart += CHUNK_SIZE) {
+            const chunk = items.slice(chunkStart, chunkStart + CHUNK_SIZE);
+            registerChunk(chunk, chunkStart);
+            onProgress({
+                phase: 'processing',
+                message: `Processing versions...`,
+                current: Math.min(chunkStart + CHUNK_SIZE, items.length),
+                total: items.length,
+                registered,
+                skipped,
+                missing,
+            });
+        }
+
+        onProgress({ phase: 'thumbnails', message: `Fetching thumbnails for ${newAssetIds.length} new assets...`, registered, total: items.length });
 
         // ─── Thumbnails: prefer ShotGrid thumbnails, FFmpeg fallback ───
         if (newAssetIds.length > 0) {
@@ -1031,7 +1053,7 @@ class FlowService {
             } catch {}
         }
 
-        return {
+        const finalResult = {
             success: true,
             registered,
             skipped,
@@ -1040,6 +1062,8 @@ class FlowService {
             total: items.length,
             message: `Registered ${registered} assets from Flow. ${missing} files not found on disk. ${skipped} already imported.`
         };
+        onProgress({ phase: 'done', ...finalResult });
+        return finalResult;
     }
 
     /**
