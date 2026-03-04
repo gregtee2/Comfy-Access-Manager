@@ -2484,10 +2484,15 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 sub.setStyleSheet(menu.styleSheet())
 
                 # Group by media type: prefer same ext as current source
-                same_type = [a for a in available
-                             if current_ext and
-                             (a.get("file_ext") or os.path.splitext(a.get("file_path", ""))[1]).lower().lstrip(".") == current_ext.lstrip(".")]
-                other_type = [a for a in available if a not in same_type]
+                same_type = []
+                other_type = []
+                for a in available:
+                    if current_ext:
+                        a_ext = (a.get("file_ext") or os.path.splitext(a.get("file_path", ""))[1] or "").lower().lstrip(".")
+                        if a_ext == current_ext.lstrip("."):
+                            same_type.append(a)
+                            continue
+                    other_type.append(a)
 
                 # Show same-type versions first, then separator + others
                 groups = []
@@ -2550,7 +2555,9 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                         self._switchTo(path)
 
         except Exception as e:
+            import traceback
             print("[MediaVault] _showRoleMenu error: %s" % e)
+            traceback.print_exc()
             # Fallback
             self._showPickerDialog(mode)
 
