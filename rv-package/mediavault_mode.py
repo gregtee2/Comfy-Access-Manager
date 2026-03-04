@@ -2440,14 +2440,11 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                     reverse=True
                 )
 
-                # Filter to assets that actually exist on disk
-                available = []
-                for a in sorted_assets:
-                    fp = a.get("file_path", "")
-                    if fp and os.path.exists(fp):
-                        available.append(a)
-                    elif not fp:
-                        continue
+                # Include all assets with a file_path (skip os.path.exists
+                # check — network drives are slow and paths may not resolve
+                # on cross-platform setups; better to show all versions and
+                # let the load fail gracefully if a file is truly missing)
+                available = [a for a in sorted_assets if a.get("file_path")]
 
                 # Skip role if it only contains the current file for 'switch'
                 if role_id == current_role_id and mode == "switch":
