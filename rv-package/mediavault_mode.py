@@ -3537,12 +3537,87 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                         except Exception:
                             pass
 
-    def _setLUTOnSourceGroup(self, sg, lut_file, lut_name):
-        """Apply a LUT file to the RVLinearize node (File LUT slot).
+    def _enumerateLUTProperties(self, node):
+        """List all lut/prelut properties on a node for diagnostic."""
+        print("[LUT-DIAG]   === LUT properties on %s ===" % node)
+        try:
+            props = rvc.properties(node)
+            for p in props:
+                plow = p.lower()
+                if 'lut' not in plow and 'prelut' not in plow:
+                    continue
+                for getter, label in ((rvc.getStringProperty, "str"),
+                                      (rvc.getFloatProperty, "float"),
+                                      (rvc.getIntProperty, "int")):
+                    try:
+                        val = getter(p)
+                        s = str(val)
+                        if len(s) > 120:
+                            s = s[:60] + " ... (len=%d)" % len(val)
+                        print("[LUT-DIAG]     %s = %s (%s)" % (p, s, label))
+                        break
+                    except Exception:
+                        pass
+        except Exception as e:
+            print("[LUT-DIAG]   Could not enumerate: %s" % e)
 
-        We use the File LUT slot instead of Look LUT because studio
-        .cube files (exported from Resolve) typically expect raw/log
-        file data as input, not linearized data.
+    def _generateACEScctShaperFile(self):
+        """Generate a 1D .cube file that encodes linear ACES -> ACEScct.
+
+        The resulting shaper compresses high-dynamic-range linear values
+        into the 0-1 range that Resolve-generated 3D grade LUTs expect.
+        Think of it like squishing a wide histogram into a narrow box so
+        the 3D LUT can read it properly.
+
+        Returns the path to the generated .cube file (cached in temp dir).
+        """
+        import math
+        import tempfile
+
+        DOMAIN_MAX = 16.0   # 7+ stops above mid-gray
+        SHAPER_SIZE = 4096
+        CUT = 0.0078125     # 2^-7  (ACEScct linear-segment cutoff)
+
+        shaper_path = os.path.join(tempfile.gettempdir(),
+                                   "cam_acescct_shaper_d16.cube")
+
+        if os.path.isfile(shaper_path):
+            print("[LUT-DIAG]   Cached ACEScct shaper exists: %s" % shaper_path)
+            return shaper_path
+
+        lines = ['TITLE "ACEScct Encoding Shaper (MediaVault auto-gen)"',
+                 "DOMAIN_MIN 0.0 0.0 0.0",
+                 "DOMAIN_MAX %.1f %.1f %.1f" % (DOMAIN_MAX, DOMAIN_MAX, DOMAIN_MAX),
+                 "LUT_1D_SIZE %d" % SHAPER_SIZE]
+
+        for i in range(SHAPER_SIZE):
+            x = float(i) / (SHAPER_SIZE - 1) * DOMAIN_MAX
+            if x <= 0.0:
+                y = 0.0729055341958355
+            elif x < CUT:
+                y = 10.5402377416545 * x + 0.0729055341958355
+            else:
+                y = (math.log2(x) + 9.72) / 17.52
+            y = max(0.0, min(1.0, y))
+            lines.append("%.10f %.10f %.10f" % (y, y, y))
+
+        with open(shaper_path, 'w') as f:
+            f.write("\n".join(lines) + "\n")
+
+        print("[LUT-DIAG]   Generated ACEScct shaper: %s (%d entries, domain 0-%.0f)"
+              % (shaper_path, SHAPER_SIZE, DOMAIN_MAX))
+        return shaper_path
+
+    def _setLUTOnSourceGroup(self, sg, lut_file, lut_name):
+        """Apply a LUT using ACEScct shaper (1D) + grade (3D) in two slots.
+
+        Pipeline after this runs:
+          RVLinearize  ->  1D ACEScct shaper  (linear 0-16 -> log 0-1)
+          RVLookLUT    ->  3D grade LUT       (log 0-1    -> graded)
+          RVDisplayColor -> default display   (sRGB gamma etc.)
+
+        This matches how Resolve generates .cube LUTs in an ACES project:
+        the LUT expects ACEScct (log) input, not raw linear.
         """
         try:
             norm_path = lut_file.replace("\\", "/")
@@ -3551,12 +3626,17 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             # Dump pipeline state BEFORE
             self._dumpColorPipeline(sg)
 
-            # Find the RVLinearize node (File LUT slot)
             lin_node = self._findNodeInSG(sg, "RVLinearize")
             look_node = self._findNodeInSG(sg, "RVLookLUT")
 
             print("[LUT-DIAG]   RVLinearize node: %s" % lin_node)
             print("[LUT-DIAG]   RVLookLUT node: %s" % look_node)
+
+            # Enumerate all LUT properties for diagnostic
+            if lin_node:
+                self._enumerateLUTProperties(lin_node)
+            if look_node:
+                self._enumerateLUTProperties(look_node)
 
             # File checks
             if not os.path.isfile(norm_path) and os.path.isfile(lut_file):
@@ -3567,34 +3647,34 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             except Exception:
                 pass
 
-            # Try BOTH slots — File LUT (RVLinearize) and Look LUT
-            # so we can see which one looks correct
-            target_node = lin_node or look_node
-            if not target_node:
-                print("[LUT-DIAG] WARNING: No LUT node found at all")
-                return
-
-            print("[LUT-DIAG]   Using node: %s (type: %s)"
-                  % (target_node, rvc.nodeType(target_node)))
-
-            # readLUT parses the file and loads LUT data
-            print("[LUT-DIAG]   Calling rvc.readLUT('%s', '%s') ..."
-                  % (norm_path, target_node))
-            rvc.readLUT(norm_path, target_node)
-            print("[LUT-DIAG]   readLUT returned OK")
-
-            rvc.setIntProperty(target_node + ".lut.active", [1], True)
-
-            # Also disable any auto-linearization so we don't double-transform
+            # ---- Step 1: Load ACEScct 1D shaper into RVLinearize ----
             if lin_node:
-                try:
-                    rvc.setIntProperty(lin_node + ".color.logtype", [0], True)
-                    rvc.setIntProperty(lin_node + ".color.sRGB2linear", [0], True)
-                    rvc.setIntProperty(lin_node + ".color.Rec709ToLinear", [0], True)
-                    rvc.setFloatProperty(lin_node + ".color.fileGamma", [1.0], True)
-                    print("[LUT-DIAG]   Disabled linearization on %s" % lin_node)
-                except Exception as e:
-                    print("[LUT-DIAG]   Could not disable linearization: %s" % e)
+                shaper_path = self._generateACEScctShaperFile()
+                print("[LUT-DIAG]   Loading ACEScct shaper into RVLinearize ...")
+                rvc.readLUT(shaper_path, lin_node)
+                rvc.setIntProperty(lin_node + ".lut.active", [1], True)
+
+                # Disable all other linearization transforms
+                rvc.setIntProperty(lin_node + ".color.logtype", [0], True)
+                rvc.setIntProperty(lin_node + ".color.sRGB2linear", [0], True)
+                rvc.setIntProperty(lin_node + ".color.Rec709ToLinear", [0], True)
+                rvc.setFloatProperty(lin_node + ".color.fileGamma", [1.0], True)
+                print("[LUT-DIAG]   ACEScct shaper loaded OK")
+            else:
+                print("[LUT-DIAG]   WARNING: No RVLinearize node — skipping shaper")
+
+            # ---- Step 2: Load 3D grade LUT into RVLookLUT ----
+            if look_node:
+                print("[LUT-DIAG]   Loading 3D LUT into RVLookLUT ...")
+                rvc.readLUT(norm_path, look_node)
+                rvc.setIntProperty(look_node + ".lut.active", [1], True)
+                print("[LUT-DIAG]   3D LUT loaded OK")
+            else:
+                # Fallback: load into linearize if no look node
+                print("[LUT-DIAG]   WARNING: No RVLookLUT — loading 3D into RVLinearize")
+                if lin_node:
+                    rvc.readLUT(norm_path, lin_node)
+                    rvc.setIntProperty(lin_node + ".lut.active", [1], True)
 
             # Dump pipeline state AFTER
             self._dumpColorPipeline(sg)
@@ -3605,9 +3685,10 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             except Exception:
                 pass
             rvc.redraw()
-            rve.displayFeedback("File LUT: %s" % lut_name, 3.0)
+            rve.displayFeedback("LUT: %s (ACEScct shaper)" % lut_name, 3.0)
 
-            print("[LUT-DIAG]   SUCCESS: Applied LUT '%s' to %s" % (lut_name, sg))
+            print("[LUT-DIAG]   SUCCESS: Applied shaper + LUT '%s' to %s"
+                  % (lut_name, sg))
 
         except Exception as e:
             import traceback
