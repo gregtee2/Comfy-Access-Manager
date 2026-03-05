@@ -3362,6 +3362,10 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
             lut_path = lut_info.get("lut_path", "")
             download_url = lut_info.get("download_url")
+            match_type = lut_info.get("match_type", "unknown")
+            if _VERBOSE:
+                print("[MediaVault] LUT match for %s: type=%s, path=%s"
+                      % (sg, match_type, lut_path))
 
             # Try disk path first — resolve cross-platform if needed
             resolved = lut_path

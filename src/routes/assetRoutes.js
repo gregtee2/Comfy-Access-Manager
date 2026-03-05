@@ -643,6 +643,11 @@ router.get('/compare-targets-by-path', (req, res) => {
 
 // GET /api/assets/lut-for-path — Returns LUT config for an asset by file path
 // Used by RV plugin to auto-apply show LUTs on source load
+//
+// Resolution order:
+//   1. Shot-level: scan project's lut_folder for files matching the shot name
+//      (.cube preferred over .cdl)
+//   2. Show-level fallback: project_luts table by media category (exr/video/image)
 router.get('/lut-for-path', (req, res) => {
     const db = getDb();
     const filePath = req.query.path;
@@ -650,8 +655,12 @@ router.get('/lut-for-path', (req, res) => {
 
     const variants = getAllPathVariants(filePath);
     const stmt = db.prepare(`
-        SELECT a.project_id, a.media_type
+        SELECT a.project_id, a.media_type, a.shot_id,
+               sh.name AS shot_name, sh.code AS shot_code,
+               p.lut_folder
         FROM assets a
+        LEFT JOIN shots sh ON a.shot_id = sh.id
+        LEFT JOIN projects p ON a.project_id = p.id
         WHERE replace(a.file_path, '\\\\', '/') = ? COLLATE NOCASE
         LIMIT 1
     `);
@@ -665,7 +674,12 @@ router.get('/lut-for-path', (req, res) => {
     if (!asset) {
         const dirFwd = path.dirname(filePath).replace(/\\/g, '/');
         const seqStmt = db.prepare(`
-            SELECT a.project_id, a.media_type FROM assets a
+            SELECT a.project_id, a.media_type, a.shot_id,
+                   sh.name AS shot_name, sh.code AS shot_code,
+                   p.lut_folder
+            FROM assets a
+            LEFT JOIN shots sh ON a.shot_id = sh.id
+            LEFT JOIN projects p ON a.project_id = p.id
             WHERE a.is_sequence = 1
               AND replace(a.file_path, '\\\\', '/') LIKE ? COLLATE NOCASE
             LIMIT 1
@@ -678,7 +692,24 @@ router.get('/lut-for-path', (req, res) => {
 
     if (!asset) return res.json({ found: false });
 
-    // Map media_type to LUT category
+    // ── Step 1: Try shot-level LUT from lut_folder ──
+    if (asset.lut_folder && asset.shot_name) {
+        const resolvedFolder = resolveFilePath(asset.lut_folder);
+        if (resolvedFolder && fs.existsSync(resolvedFolder)) {
+            const shotMatch = _findShotLUT(resolvedFolder, asset.shot_name, asset.shot_code);
+            if (shotMatch) {
+                return res.json({
+                    found: true,
+                    lut_path: shotMatch,
+                    lut_name: path.basename(shotMatch),
+                    match_type: 'shot',
+                    shot_name: asset.shot_name,
+                });
+            }
+        }
+    }
+
+    // ── Step 2: Fall back to show-level LUT by media category ──
     const category = asset.media_type === 'exr' ? 'exr'
                    : asset.media_type === 'video' ? 'video'
                    : 'image';
@@ -698,10 +729,83 @@ router.get('/lut-for-path', (req, res) => {
         found: true,
         lut_path: lut.lut_path,
         lut_name: lut.lut_name,
+        match_type: 'show',
         media_category: category,
         download_url: hasDownload ? `/api/projects/${asset.project_id}/luts/${category}/file` : null,
     });
 });
+
+/**
+ * Scan a LUT folder for a file matching a shot name/number.
+ * Looks for the shot name (e.g. "0010") anywhere in the filename.
+ * Prefers .cube over .cdl.
+ *
+ * @param {string} folder - Absolute path to LUT folder
+ * @param {string} shotName - Shot name (e.g. "0010", "SH020")
+ * @param {string} shotCode - Shot code fallback (e.g. "SH020")
+ * @returns {string|null} Full path to matching LUT file, or null
+ */
+function _findShotLUT(folder, shotName, shotCode) {
+    try {
+        const files = fs.readdirSync(folder);
+        const LUT_EXTS_PRIORITY = ['.cube', '.cdl', '.3dl', '.lut', '.csp', '.spi1d', '.spi3d'];
+
+        // Build search tokens from shot name and code
+        const tokens = [shotName];
+        if (shotCode && shotCode !== shotName) tokens.push(shotCode);
+        // Also try zero-padded variants (e.g. shot "10" → "0010")
+        const numericMatch = shotName.match(/^(\d+)$/);
+        if (numericMatch) {
+            const num = numericMatch[1];
+            for (const pad of [4, 3, 5]) {
+                const padded = num.padStart(pad, '0');
+                if (padded !== num && !tokens.includes(padded)) tokens.push(padded);
+            }
+        }
+
+        // Score each file: must contain a token, prefer .cube, prefer exact shot boundary match
+        let best = null;
+        let bestScore = -1;
+
+        for (const file of files) {
+            const ext = path.extname(file).toLowerCase();
+            const extIdx = LUT_EXTS_PRIORITY.indexOf(ext);
+            if (extIdx < 0) continue; // not a LUT file
+
+            const base = path.basename(file, ext).toLowerCase();
+            let matched = false;
+            let boundaryMatch = false;
+
+            for (const token of tokens) {
+                const tLower = token.toLowerCase();
+                const idx = base.indexOf(tLower);
+                if (idx < 0) continue;
+                matched = true;
+
+                // Check if it's a word-boundary match (surrounded by _, -, start/end)
+                const before = idx === 0 || /[_\-.]/.test(base[idx - 1]);
+                const after = (idx + tLower.length >= base.length) ||
+                              /[_\-.]/.test(base[idx + tLower.length]);
+                if (before && after) boundaryMatch = true;
+            }
+
+            if (!matched) continue;
+
+            // Score: boundary match = 100, then by extension priority (lower index = better)
+            const score = (boundaryMatch ? 100 : 0) + (LUT_EXTS_PRIORITY.length - extIdx);
+
+            if (score > bestScore) {
+                bestScore = score;
+                best = path.join(folder, file);
+            }
+        }
+
+        return best;
+    } catch (e) {
+        console.error('[LUT] Folder scan error:', e.message);
+        return null;
+    }
+}
 
 
 // GET /api/assets/overlay-info — Lightweight metadata for RV overlay burn-in

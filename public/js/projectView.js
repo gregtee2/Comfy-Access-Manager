@@ -279,7 +279,21 @@ async function showEditProjectModal(projectId) {
         <div class="ep-section" id="epLutSection">
             <div class="ep-section-hdr">
                 <span>Show LUTs</span>
-                <span style="font-size:0.72rem;color:var(--text-muted);">Auto-applied in RV per media type</span>
+                <span style="font-size:0.72rem;color:var(--text-muted);">Auto-applied in RV</span>
+            </div>
+            <div style="display:flex;flex-direction:column;gap:6px;padding:4px 0 10px 0;">
+                <label style="font-size:.78rem;color:var(--text-dim);">Shot LUT Folder
+                    <span style="font-size:.68rem;color:var(--text-muted);margin-left:4px;">Auto-matches LUT files to shots by name</span>
+                </label>
+                <div style="display:flex;gap:6px;align-items:center;">
+                    <input type="text" id="epLutFolderInput"
+                        value="${esc(proj.lut_folder || '')}"
+                        placeholder="Path to folder with per-shot .cube / .cdl files"
+                        style="flex:1;font-size:.78rem;padding:4px 6px;">
+                </div>
+            </div>
+            <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px;">
+                <label style="font-size:.72rem;color:var(--text-muted);display:block;margin-bottom:6px;">Show-Level Fallback (used when no shot-level match found)</label>
             </div>
             <div id="epLutList" style="display:flex;flex-direction:column;gap:8px;padding:4px 0;">
                 <span style="color:var(--text-dim);font-size:.8rem;">Loading...</span>
@@ -607,13 +621,14 @@ async function showEditProjectModal(projectId) {
         const description = document.getElementById('editProjectDesc').value.trim();
         const episode = document.getElementById('editProjectEpisode').value.trim();
         const convention = getConvention();
+        const lut_folder = (document.getElementById('epLutFolderInput')?.value || '').trim();
 
         if (!name) return alert('Project name is required');
 
         try {
             await api(`/api/projects/${proj.id}`, {
                 method: 'PUT',
-                body: { name, description, episode, naming_convention: convention }
+                body: { name, description, episode, naming_convention: convention, lut_folder }
             });
 
             // Save hidden-from users

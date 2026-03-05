@@ -564,6 +564,16 @@ function runMigrations(wrapper) {
     `);
 
     // ─── Migrations: add columns to existing tables ───
+
+    // lut_folder column on projects (path to shot-level LUT/CDL directory)
+    try {
+        const cols = wrapper.pragma('table_info(projects)');
+        if (!cols.find(c => c.name === 'lut_folder')) {
+            wrapper.exec(`ALTER TABLE projects ADD COLUMN lut_folder TEXT`);
+            console.log('[DB] Added lut_folder column to projects');
+        }
+    } catch (e) { /* table might not exist yet */ }
+
     // annotation_image column for review_notes (stores annotated frame snapshot path)
     try {
         const cols = wrapper.pragma('table_info(review_notes)');

@@ -350,24 +350,25 @@ router.post('/', (req, res) => {
 
 // PUT /api/projects/:id — Update project
 router.put('/:id', (req, res) => {
-    const { name, description, type, naming_convention, episode } = req.body;
+    const { name, description, type, naming_convention, episode, lut_folder } = req.body;
     const db = getDb();
 
     const project = db.prepare('SELECT * FROM projects WHERE id = ?').get(req.params.id);
     if (!project) return res.status(404).json({ error: 'Project not found' });
 
     const newEpisode = episode !== undefined ? episode : (project.episode || '');
+    const newLutFolder = lut_folder !== undefined ? (lut_folder || null) : (project.lut_folder || null);
 
     // If naming_convention is provided, update it too
     if (naming_convention !== undefined) {
         const conventionJson = naming_convention ? JSON.stringify(naming_convention) : null;
         db.prepare(`
-            UPDATE projects SET name = ?, description = ?, type = ?, naming_convention = ?, episode = ?, updated_at = datetime('now') WHERE id = ?
-        `).run(name || project.name, description ?? project.description, type || project.type, conventionJson, newEpisode, project.id);
+            UPDATE projects SET name = ?, description = ?, type = ?, naming_convention = ?, episode = ?, lut_folder = ?, updated_at = datetime('now') WHERE id = ?
+        `).run(name || project.name, description ?? project.description, type || project.type, conventionJson, newEpisode, newLutFolder, project.id);
     } else {
         db.prepare(`
-            UPDATE projects SET name = ?, description = ?, type = ?, episode = ?, updated_at = datetime('now') WHERE id = ?
-        `).run(name || project.name, description ?? project.description, type || project.type, newEpisode, project.id);
+            UPDATE projects SET name = ?, description = ?, type = ?, episode = ?, lut_folder = ?, updated_at = datetime('now') WHERE id = ?
+        `).run(name || project.name, description ?? project.description, type || project.type, newEpisode, newLutFolder, project.id);
     }
 
     logActivity('project_updated', 'project', project.id, { name, type });
