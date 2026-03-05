@@ -393,7 +393,7 @@ async function fpNavigate(dir) {
             html += `<div class="fp-section-header" style="padding:6px 12px;font-size:0.75rem;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:0.5px;border-bottom:1px solid var(--border-color, #333);">Network Drives</div>`;
             for (const entry of networkDrives) {
                 const subtitle = entry.server ? `<span class="fp-subtitle" style="font-size:0.72rem;color:var(--text-muted);margin-left:8px;">${esc(entry.server)}</span>` : '';
-                html += `<div class="fp-entry fp-entry-network" onclick="fpSelectEntry('${escAttr(entry.path)}')" ondblclick="fpNavigate('${escAttr(entry.path)}')" style="background:rgba(59,130,246,0.06);">
+                html += `<div class="fp-entry fp-entry-network" onclick="fpNavigate('${escAttr(entry.path)}')" style="background:rgba(59,130,246,0.06);">
                     <span class="fp-icon">${entry.icon || ''}</span>
                     <span class="fp-name">${esc(entry.name)}${subtitle}</span>
                 </div>`;
@@ -405,7 +405,12 @@ async function fpNavigate(dir) {
 
         const mainEntries = networkDrives.length > 0 && !dir ? otherEntries : data.entries.filter(e => e.isDirectory);
         for (const entry of mainEntries) {
-            html += `<div class="fp-entry" onclick="fpSelectEntry('${escAttr(entry.path)}')" ondblclick="fpNavigate('${escAttr(entry.path)}')">
+            // At root level (drive list): single-click navigates into the drive
+            // Inside a directory: single-click selects, double-click navigates
+            const clickAction = !dir
+                ? `onclick="fpNavigate('${escAttr(entry.path)}')"`
+                : `onclick="fpSelectEntry('${escAttr(entry.path)}')" ondblclick="fpNavigate('${escAttr(entry.path)}')"`;
+            html += `<div class="fp-entry" ${clickAction}>
                 <span class="fp-icon">${entry.icon || '[Folder]'}</span>
                 <span class="fp-name">${esc(entry.name)}</span>
             </div>`;
