@@ -3299,8 +3299,28 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         except Exception as e:
             print("[MediaVault] Pre-cache roles failed: %s" % e)
 
-        # Auto-apply project LUTs to newly loaded sources
-        self._applyProjectLUTs()
+        # Auto-apply project LUTs to newly loaded sources.
+        # DEFERRED: We must wait until source_setup.py and other
+        # source-group-complete handlers finish setting up the color
+        # pipeline — otherwise our LUT gets overwritten.  A short
+        # timer (0.5s) ensures we run AFTER all synchronous handlers.
+        self._scheduleLUTApplication()
+
+    def _scheduleLUTApplication(self):
+        """Schedule LUT application after a short delay.
+
+        This ensures the color pipeline (linearize, look, display) is
+        fully configured by RV's source_setup before we inject our LUT.
+        """
+        import threading
+        def _deferred():
+            try:
+                self._applyProjectLUTs()
+            except Exception as e:
+                print("[LUT-DIAG] Deferred LUT application error: %s" % e)
+        t = threading.Timer(0.5, _deferred)
+        t.daemon = True
+        t.start()
 
     def _onViewChanged(self, event):
         """Handle source switching (PageUp/Down, timeline click, etc.).
@@ -3566,6 +3586,14 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                       % (new_file, new_active))
             except Exception:
                 pass
+
+            # Force RV to re-render the pipeline with the new LUT
+            try:
+                rvc.updateLUT()
+            except Exception:
+                pass
+            rvc.redraw()
+            rve.displayFeedback("Look LUT: %s" % lut_name, 3.0)
 
             print("[LUT-DIAG]   SUCCESS: Applied LUT '%s' to %s" % (lut_name, sg))
 
