@@ -2,6 +2,12 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.8.9] - 2026-03-04
+
+### Fixed — RV Display Output Transform (ODT)
+- **Enforced ACES 1.0 - SDR Video** — The RV plugin now actively configures the Display pipeline to use `OCIODisplay` with the correct ACES RRT+ODT, ensuring highlights are rolled off correctly instead of clipped. This fixes the "clipped whites" issue when viewing EXRs with the Nuke-matching LUT pipeline.
+- Matches Nuke's `monitorOutLUT "ACES 1.0 - SDR Video (sRGB - Display)"` setting.
+
 ## [1.8.8] - 2026-03-04
 
 ### Fixed — OCIO LUT Pipeline (Windows Path Support)

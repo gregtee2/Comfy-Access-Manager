@@ -3729,6 +3729,48 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             print("[LUT] SUCCESS: '%s' applied via OCIO on %s" %
                   (lut_name, sg))
 
+            # Step 8: Enforce ACES Output Transform on Display
+            # The output of our Look pipeline is ACEScg (Linear). We must ensure
+            # the Display pipeline treats it as ACEScg and applies the RRT+ODT.
+            try:
+                for disp_group in rvc.nodesOfType("RVDisplayPipelineGroup"):
+                    # Find OCIODisplay node
+                    ocio_disp = None
+                    for n in rvc.nodesInGroup(disp_group):
+                        if rvc.nodeType(n) == "OCIODisplay":
+                            ocio_disp = n
+                            break
+                    
+                    if not ocio_disp:
+                        # Force swap to OCIODisplay
+                        rvc.setStringProperty(
+                            disp_group + ".pipeline.nodes", ["OCIODisplay"], True)
+                        for n in rvc.nodesInGroup(disp_group):
+                            if rvc.nodeType(n) == "OCIODisplay":
+                                ocio_disp = n
+                                break
+                    
+                    if ocio_disp:
+                        # Use the same config so definitions match
+                        rvc.setStringProperty(
+                            ocio_disp + ".ocio.config", [config_path], True)
+                        rvc.setStringProperty(
+                            ocio_disp + ".ocio.function", ["display"], True)
+                        rvc.setStringProperty(
+                            ocio_disp + ".ocio.inColorSpace", ["ACEScg"], True)
+                        
+                        # Match Nuke Video Monitor: sRGB / ACES 1.0 - SDR Video
+                        rvc.setStringProperty(
+                            ocio_disp + ".ocio_display.display", ["sRGB"], True)
+                        rvc.setStringProperty(
+                            ocio_disp + ".ocio_display.view", ["ACES 1.0 - SDR Video"], True)
+                        
+                        rvc.setIntProperty(ocio_disp + ".ocio.active", [1], True)
+                        rvc.ocioUpdateConfig(ocio_disp)
+                        print("[LUT] Enforced ACES Display on %s" % ocio_disp)
+            except Exception as e:
+                print("[LUT] Error enforcing Display ODT: %s" % e)
+
         except Exception as e:
             import traceback
             print("[LUT] ERROR setting OCIO LUT on %s: %s" % (sg, e))
