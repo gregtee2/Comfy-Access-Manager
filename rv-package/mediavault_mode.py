@@ -1153,7 +1153,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
         # ── Project LUT cache ────────────────────────────────────
         self._lut_cache        = {}     # {norm_key: lut_info_dict | False}
-        self._lut_applied_sgs  = set()  # source groups that already have LUT applied
+        self._lut_applied_sgs  = {}     # {source_group: norm_path} — tracks which SG got which LUT
         self._lut_name_by_sg   = {}     # {source_group: lut_filename} for overlay display
         self._source_init_sgs  = set()  # source groups that completed first-time init
 
@@ -3310,6 +3310,35 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         # Always update overlay pointers (lightweight path comparison)
         self._syncCurrentSource()
 
+        # ── Detect media changes on EXISTING source groups ──
+        # When the user switches to a different shot via Compare/Switch
+        # or version stepping, RV reuses the same sourceGroup node but
+        # with different media.  Detect this by comparing each SG's
+        # current file path to what was stored when its LUT was applied.
+        media_changed = False
+        for sg in current_sgs:
+            fp = self._pathFromSourceGroup(sg)
+            if not fp:
+                continue
+            cur_dir = self._normKey(os.path.dirname(fp))
+            prev_dir = self._lut_applied_sgs.get(sg)
+            if prev_dir is not None and prev_dir != cur_dir:
+                # Media in this source group changed — invalidate
+                print("[LUT] Source group %s media changed, clearing LUT state" % sg)
+                del self._lut_applied_sgs[sg]
+                self._lut_name_by_sg.pop(sg, None)
+                # Also clear overlay caches so they re-fetch for new shot
+                self._overlay_meta = None
+                self._overlay_path = None
+                self._cam_overlay_data = None
+                self._cam_overlay_path = None
+                self._cached_data = None
+                self._cached_path = None
+                media_changed = True
+                # Remove from init set so heavy work re-runs
+                self._source_init_sgs.discard(sg)
+                new_sgs = new_sgs | {sg}
+
         if not new_sgs:
             # All source groups already initialized — skip heavy work.
             # This prevents per-frame HTTP calls, menu rebuilds, and
@@ -3381,7 +3410,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
         print("[LUT-DIAG] === _applyProjectLUTs called ===")
         print("[LUT-DIAG] Source groups found: %d" % len(source_groups))
-        print("[LUT-DIAG] Already processed: %s" % list(self._lut_applied_sgs))
+        print("[LUT-DIAG] Already processed: %s" % list(self._lut_applied_sgs.keys()))
 
         for sg in source_groups:
             if sg in self._lut_applied_sgs:
@@ -3395,6 +3424,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 continue
 
             norm = self._normKey(filepath)
+            norm_dir = self._normKey(os.path.dirname(filepath))
 
             # Check cache first
             if norm not in self._lut_cache:
@@ -3405,7 +3435,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             lut_info = self._lut_cache[norm]
             if not lut_info:
                 print("[LUT-DIAG] No LUT info returned for %s" % sg)
-                self._lut_applied_sgs.add(sg)
+                self._lut_applied_sgs[sg] = norm_dir
                 continue
 
             lut_path = lut_info.get("lut_path", "")
@@ -3450,13 +3480,13 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
             if not os.path.isfile(resolved):
                 print("[LUT-DIAG] FAILED — LUT file not found anywhere: %s" % lut_path)
-                self._lut_applied_sgs.add(sg)
+                self._lut_applied_sgs[sg] = norm_dir
                 continue
 
             # Find the RVLookLUT node inside this source group and apply
             self._setLUTOnSourceGroup(sg, resolved, lut_info.get("lut_name", ""))
             self._lut_name_by_sg[sg] = lut_info.get("lut_name", os.path.basename(resolved))
-            self._lut_applied_sgs.add(sg)
+            self._lut_applied_sgs[sg] = norm_dir
 
     def _fetchLUTForPath(self, filepath):
         """Ask the CAM server for the LUT config for a given file path.
