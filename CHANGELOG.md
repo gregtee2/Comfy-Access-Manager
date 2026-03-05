@@ -2,6 +2,12 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.9.42] - 2026-03-04
+
+### Fixed — RV OCIO: Correct Display Name for ACES Studio Config
+- **Display name fix** — Changed `sRGB` to `sRGB - Display` to match the ACES Studio Config v2.1.0 naming convention. The previous name caused `Display 'sRGB' not found`, meaning no output transform was applied — resulting in oversaturated, un-tonemapped output.
+- With the correct display name, RV now applies the full ACES RRT + sRGB ODT, matching Nuke's `ACES 1.0 - SDR Video (sRGB - Display)` monitor output.
+
 ## [1.9.41] - 2026-03-04
 
 ### Fixed — RV OCIO: Set Global OCIO Env Var + Re-set After ocioUpdateConfig

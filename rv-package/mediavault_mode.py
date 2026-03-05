@@ -3832,7 +3832,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                         rvc.setStringProperty(
                             ocio_disp + ".ocio.inColorSpace", ["ACEScg"], True)
                         rvc.setStringProperty(
-                            ocio_disp + ".ocio_display.display", ["sRGB"], True)
+                            ocio_disp + ".ocio_display.display", ["sRGB - Display"], True)
                         rvc.setStringProperty(
                             ocio_disp + ".ocio_display.view",
                             ["ACES 1.0 - SDR Video"], True)
