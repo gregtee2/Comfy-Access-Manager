@@ -16,6 +16,7 @@ import os
 import re
 import struct
 import subprocess
+import sys
 import tempfile
 
 import time
@@ -34,6 +35,7 @@ _GL_CURRENT_PROGRAM = 0x8B8D    # GL 2.0 enum constant (same on all drivers)
 try:
     from OpenGL.GL import (
         glMatrixMode, glPushMatrix, glPopMatrix, glLoadIdentity,
+        glPushAttrib, glPopAttrib,
         glEnable, glDisable, glBlendFunc, glColor4f,
         glBegin, glEnd, glVertex2f, glRasterPos2f, glLineWidth,
         glBitmap, glPixelStorei, glPixelZoom,
@@ -42,6 +44,7 @@ try:
         GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_QUADS, GL_LINE_LOOP,
         GL_UNPACK_ALIGNMENT, GL_RGBA, GL_UNSIGNED_BYTE,
         GL_DEPTH_TEST, GL_SCISSOR_TEST, GL_TEXTURE_2D,
+        GL_ALL_ATTRIB_BITS,
     )
     from OpenGL.GLU import gluOrtho2D
     _HAS_GL = True
@@ -4950,6 +4953,13 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             if w < 100 or h < 100:
                 return
 
+            # ── Save ALL GL state (nuclear option) ──
+            # OCIO can leave shaders, textures, depth test, scissor,
+            # FBO bindings, etc. in arbitrary states.  glPushAttrib
+            # saves all fixed-function state.  We handle the shader
+            # program separately since push/pop doesn't cover GL 2.0+.
+            glPushAttrib(GL_ALL_ATTRIB_BITS)
+
             # ── Disable active OCIO shader ──
             # After OCIO renders a color-managed EXR, its GL shader
             # stays bound.  Fixed-function calls (glColor4f, glBitmap)
@@ -4964,18 +4974,21 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                         _prev_prog = int(_result[0])
                     elif _result is not None:
                         _prev_prog = int(_result)
+                    if _prev_prog:
+                        if not hasattr(self, '_shader_diag_done'):
+                            self._shader_diag_done = True
+                            print("[MediaVault] Disabling active shader %d for overlay" % _prev_prog)
                     _glUseProgram(0)
-                except Exception:
+                except Exception as e:
+                    if not hasattr(self, '_shader_err_logged'):
+                        self._shader_err_logged = True
+                        print("[MediaVault] glUseProgram error: %s" % e)
                     _prev_prog = 0
 
-            # ── Ensure clean fixed-function GL state ──
-            # OCIO may leave depth test, scissor, or textures enabled.
-            try:
-                glDisable(GL_DEPTH_TEST)
-                glDisable(GL_SCISSOR_TEST)
-                glDisable(GL_TEXTURE_2D)
-            except Exception:
-                pass
+            # ── Clean fixed-function state ──
+            glDisable(GL_DEPTH_TEST)
+            glDisable(GL_SCISSOR_TEST)
+            glDisable(GL_TEXTURE_2D)
 
             # ── Set up 2D ortho projection ──
             glMatrixMode(GL_PROJECTION)
@@ -5006,12 +5019,14 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             glPopMatrix()
             glMatrixMode(GL_MODELVIEW)
 
-            # ── Restore shader program ──
+            # ── Restore GL state ──
             if _HAS_GL_SHADERS and _glUseProgram and _prev_prog:
                 try:
                     _glUseProgram(_prev_prog)
                 except Exception:
                     pass
+
+            glPopAttrib()   # restore all fixed-function state
 
         except Exception as e:
             if not hasattr(self, '_render_err_logged'):

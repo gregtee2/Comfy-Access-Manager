@@ -1,6 +1,6 @@
 {
   "name": "comfy-asset-manager",
-  "version": "1.9.45",
+  "version": "1.9.46",
   "rv_build": "2026-02-18",
   "description": "Local media asset manager for creative production — organize, rename, and play media files with ComfyUI integration",
   "main": "src/server.js",

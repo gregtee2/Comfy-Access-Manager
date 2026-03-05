@@ -2,6 +2,14 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.9.46] - 2026-03-05
+
+### Fixed — EXR Overlay Still Invisible (Missing `import sys` + Full GL State Isolation)
+- **Root Cause** — `import sys` was missing from the file. The ctypes `wglGetProcAddress` fallback (v1.9.45) used `sys.platform` which raised `NameError`, caught silently by `except Exception`. Result: `glUseProgram` was never resolved, and the OCIO shader was never disabled on frames 2+.
+- **Fix 1** — Added `import sys` to the imports block.
+- **Fix 2** — Added `glPushAttrib(GL_ALL_ATTRIB_BITS)` / `glPopAttrib()` around all overlay drawing. This saves and restores ALL fixed-function GL state (textures, blending, depth, scissor, etc.) that OCIO may leave dirty. The shader program is handled separately since `glPushAttrib` doesn't cover GL 2.0+ state.
+- Added diagnostic prints showing active shader ID when disabling, so the console shows proof that glUseProgram(0) actually ran.
+
 ## [1.9.45] - 2026-03-05
 
 ### Fixed — EXR Overlay Invisible After Frame 1 (Comprehensive Fix)
