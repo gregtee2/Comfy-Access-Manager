@@ -3747,16 +3747,18 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 ocio_look + ".ocio_look.look", ["shot_grade"], True)
             print("[LUT] All OCIO properties set on %s" % ocio_look)
 
-            # 5d — Re-enable the node
-            rvc.setIntProperty(ocio_look + ".ocio.active", [1], True)
-
-            # 5e — NOW call ocioUpdateConfig: config path, function,
-            #      colorspaces, and look name are all populated.
+            # 5d — Load the config WHILE STILL DISABLED.  All property
+            #      values are set, so validation will pass.  If we
+            #      re-enable first, the render thread validates against
+            #      an un-loaded config and errors out.
             try:
                 rvc.ocioUpdateConfig(ocio_look)
-                print("[LUT] ocioUpdateConfig OK")
+                print("[LUT] ocioUpdateConfig OK (node still disabled)")
             except Exception as e:
                 print("[LUT] ocioUpdateConfig note: %s" % e)
+
+            # 5e — NOW re-enable: config is loaded, shader built.
+            rvc.setIntProperty(ocio_look + ".ocio.active", [1], True)
 
             # Step 7: Redraw
             rvc.redraw()
@@ -3822,12 +3824,15 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                             ocio_disp + ".ocio_display.view",
                             ["ACES 1.0 - SDR Video"], True)
 
-                        # Re-enable, then single ocioUpdateConfig
-                        rvc.setIntProperty(disp_active, [1], True)
+                        # Load config WHILE STILL DISABLED — all
+                        # properties are set, so validation passes.
                         try:
                             rvc.ocioUpdateConfig(ocio_disp)
                         except Exception:
                             pass
+
+                        # NOW re-enable: config loaded, shader ready.
+                        rvc.setIntProperty(disp_active, [1], True)
                         print("[LUT] Enforced ACES Display on %s" % ocio_disp)
             except Exception as e:
                 print("[LUT] Error enforcing Display ODT: %s" % e)

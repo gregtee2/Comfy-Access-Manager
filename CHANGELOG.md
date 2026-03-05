@@ -2,6 +2,13 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.9.4] - 2026-03-04
+
+### Fixed — RV OCIO: Load Config Before Re-Enable
+- **Root Cause** — Re-enabling a node (`active=1`) instantly triggers RV's render thread, which validates color space names against whatever config is loaded. Since `ocioUpdateConfig` hadn't run yet, the render thread validated against an empty/default config — producing `empty destination` and `Cannot find ACEScg` errors.
+- **Fix** — `ocioUpdateConfig` is now called **while the node is still disabled** (all property values are already set, so validation passes), and the node is re-enabled **after** the config is loaded and the shader is built.
+- Applied to both `OCIOLook` and `OCIODisplay` nodes.
+
 ## [1.9.3] - 2026-03-04
 
 ### Fixed — RV OCIO: Single ocioUpdateConfig After All Properties Set
