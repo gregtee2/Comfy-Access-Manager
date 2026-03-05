@@ -3561,305 +3561,173 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         except Exception as e:
             print("[LUT-DIAG]   Could not enumerate: %s" % e)
 
-    # Linear range covered by the baked LUT.
-    # 4.0 covers highlights well (user confirmed max EXR values < 3).
-    # .lut.scale = 1/RANGE is set after readLUT as an input divider
-    # so pixels 0-4 map to cube positions 0-1.
-    _LUT_BAKE_RANGE = 4.0
+    # ------------------------------------------------------------------ #
+    #  OCIO-based LUT application                                         #
+    #                                                                      #
+    #  Instead of baking ACEScct shaper curves into a 3D cube (which       #
+    #  failed due to RV ignoring DOMAIN_MAX, .lut.scale, and 1D sections), #
+    #  we use RV's built-in OCIO pipeline.  An OCIO Look with              #
+    #  processSpace='ACEScct' automatically converts:                      #
+    #    ACEScg -> ACEScct -> apply .cube -> ACEScct -> ACEScg             #
+    #  This is exactly what Nuke's OCIOFileTransform does with             #
+    #  working_space='color_timing'.                                       #
+    # ------------------------------------------------------------------ #
 
-    @staticmethod
-    def _lin2acescct(x):
-        """Convert a single linear ACES value to ACEScct."""
-        import math
-        CUT = 0.0078125  # 2^-7
-        if x <= 0.0:
-            return 10.5402377416545 * 0.0 + 0.0729055341958355
-        elif x < CUT:
-            return 10.5402377416545 * x + 0.0729055341958355
-        else:
-            return (math.log2(x) + 9.72) / 17.52
+    def _getOrCreateOCIOConfig(self, cube_path):
+        """Create (or return cached) OCIO config with a shot_grade Look.
 
-    @staticmethod
-    def _acescct2lin(y):
-        """Convert a single ACEScct value back to linear ACES.
+        The Look has processSpace='ACEScct' and a FileTransform pointing
+        to the given .cube file.  OCIO automatically handles:
+          ACEScg -> ACEScct -> apply .cube -> ACEScct -> ACEScg
 
-        Inverse of _lin2acescct.  The grade LUT outputs ACEScct values,
-        so we need to convert back to linear for RV's display pipeline.
-        """
-        import math
-        CUT_OUT = 0.155251141552511  # lin2acescct(2^-7) = (2.72/17.52)
-        if y <= CUT_OUT:
-            return (y - 0.0729055341958355) / 10.5402377416545
-        else:
-            return math.pow(2.0, y * 17.52 - 9.72)
-
-    def _trilinearLookup(self, cube_data, size, r, g, b):
-        """Trilinear interpolation into a 3D LUT.
-
-        cube_data is a flat list of (r,g,b) tuples, indexed in standard
-        .cube order: R varies fastest, then G, then B.
-        r, g, b are in [0, 1] range.
-        """
-        # Clamp inputs
-        r = max(0.0, min(1.0, r))
-        g = max(0.0, min(1.0, g))
-        b = max(0.0, min(1.0, b))
-
-        # Scale to grid
-        fr = r * (size - 1)
-        fg = g * (size - 1)
-        fb = b * (size - 1)
-
-        r0 = min(int(fr), size - 2)
-        g0 = min(int(fg), size - 2)
-        b0 = min(int(fb), size - 2)
-
-        dr = fr - r0
-        dg = fg - g0
-        db = fb - b0
-
-        def idx(ri, gi, bi):
-            return bi * size * size + gi * size + ri
-
-        # 8 corner lookups
-        c000 = cube_data[idx(r0,     g0,     b0)]
-        c100 = cube_data[idx(r0 + 1, g0,     b0)]
-        c010 = cube_data[idx(r0,     g0 + 1, b0)]
-        c110 = cube_data[idx(r0 + 1, g0 + 1, b0)]
-        c001 = cube_data[idx(r0,     g0,     b0 + 1)]
-        c101 = cube_data[idx(r0 + 1, g0,     b0 + 1)]
-        c011 = cube_data[idx(r0,     g0 + 1, b0 + 1)]
-        c111 = cube_data[idx(r0 + 1, g0 + 1, b0 + 1)]
-
-        out = [0.0, 0.0, 0.0]
-        for ch in range(3):
-            # Interpolate along R
-            c00 = c000[ch] * (1 - dr) + c100[ch] * dr
-            c01 = c001[ch] * (1 - dr) + c101[ch] * dr
-            c10 = c010[ch] * (1 - dr) + c110[ch] * dr
-            c11 = c011[ch] * (1 - dr) + c111[ch] * dr
-            # Interpolate along G
-            c0 = c00 * (1 - dg) + c10 * dg
-            c1 = c01 * (1 - dg) + c11 * dg
-            # Interpolate along B
-            out[ch] = c0 * (1 - db) + c1 * db
-
-        return out
-
-    def _bakeShaperIntoCube(self, original_cube_path):
-        """Bake ACEScct shaper directly into a new 3D LUT.
-
-        Since RV's readLUT ignores DOMAIN_MAX and 1D shaper sections,
-        we pre-compute a new 3D cube where each grid point already
-        includes the linear->ACEScct conversion.
-
-        Grid position p represents linear value (p * _LUT_BAKE_RANGE).
-        After readLUT, .lut.scale is set to 1/RANGE so that:
-          pixel_value * (1/RANGE) = grid_position
-        This maps pixel range [0, RANGE] into cube [0, 1].
-
-        For each grid point p:
-          1. linear = p * RANGE
-          2. ACEScct = lin2acescct(linear)
-          3. graded_cct = lookup original cube at ACEScct position
-          4. output = acescct2lin(graded_cct)
-
-        Returns the path to the baked .cube file (cached in temp dir).
+        Returns the path to the temp .ocio config file, or None on error.
         """
         import hashlib, tempfile
 
-        md5 = hashlib.md5(original_cube_path.encode()).hexdigest()[:8]
-        baked_path = os.path.join(tempfile.gettempdir(),
-                                  "cam_baked_%s.cube" % md5)
-        if os.path.isfile(baked_path):
-            print("[LUT-DIAG]   Using cached baked .cube: %s" % baked_path)
-            return baked_path
-
-        # ---- Parse the original .cube to get 3D data ----
         try:
-            with open(original_cube_path, 'r') as f:
-                original_lines = f.readlines()
-        except Exception as e:
-            print("[LUT-DIAG]   Cannot read original cube: %s" % e)
-            return original_cube_path
+            import PyOpenColorIO as OCIO
+        except ImportError:
+            print("[LUT] ERROR: PyOpenColorIO not available in this RV build")
+            return None
 
-        src_size = None
-        src_data = []  # list of (r, g, b) tuples
-        in_data = False
-        for line in original_lines:
-            stripped = line.strip()
-            if not stripped or stripped.startswith('#'):
-                continue
-            if stripped.startswith('LUT_3D_SIZE'):
-                src_size = int(stripped.split()[-1])
-                in_data = True
-                continue
-            if stripped.startswith(('TITLE', 'DOMAIN_', 'LUT_1D')):
-                continue
-            if in_data:
-                parts = stripped.split()
-                if len(parts) >= 3:
-                    try:
-                        src_data.append((float(parts[0]),
-                                         float(parts[1]),
-                                         float(parts[2])))
-                    except ValueError:
-                        pass
+        norm = cube_path.replace("\\", "/")
+        md5 = hashlib.md5(norm.encode()).hexdigest()[:12]
+        config_path = os.path.join(tempfile.gettempdir(),
+                                   "cam_ocio_%s.ocio" % md5)
 
-        if not src_size or len(src_data) < src_size ** 3:
-            print("[LUT-DIAG]   WARNING: Could not parse original cube "
-                  "(size=%s, data=%d)" % (src_size, len(src_data)))
-            return original_cube_path
+        if os.path.isfile(config_path):
+            print("[LUT] Using cached OCIO config: %s" % config_path)
+            return config_path
 
-        print("[LUT-DIAG]   Parsed original: %d^3 cube, %d entries"
-              % (src_size, len(src_data)))
-
-        # ---- Bake: grid pos p = linear (p * RANGE) ----
-        # .lut.scale = 1/RANGE is set after readLUT to map
-        # pixel range [0, RANGE] into cube positions [0, 1].
-        OUT_SIZE = src_size  # match original (typically 33)
-        RANGE = self._LUT_BAKE_RANGE
-        total = OUT_SIZE ** 3
-
-        print("[LUT-DIAG]   Baking %d^3=%d points (covers 0-%.1f linear, "
-              "scale will be %.4f) ..."
-              % (OUT_SIZE, total, RANGE, 1.0 / RANGE))
-
-        out_lines = [
-            'TITLE "Baked ACEScct + Grade (MediaVault auto-gen)"',
-            'LUT_3D_SIZE %d' % OUT_SIZE,
-        ]
-
-        count = 0
-        # .cube order: R fastest, then G, then B
-        for bi in range(OUT_SIZE):
-            b_lin = float(bi) / (OUT_SIZE - 1) * RANGE
-            b_cct = self._lin2acescct(b_lin)
-            for gi in range(OUT_SIZE):
-                g_lin = float(gi) / (OUT_SIZE - 1) * RANGE
-                g_cct = self._lin2acescct(g_lin)
-                for ri in range(OUT_SIZE):
-                    r_lin = float(ri) / (OUT_SIZE - 1) * RANGE
-                    r_cct = self._lin2acescct(r_lin)
-
-                    # Look up original grade cube at ACEScct position
-                    # Output is in ACEScct space — convert back to linear
-                    graded_cct = self._trilinearLookup(
-                        src_data, src_size, r_cct, g_cct, b_cct)
-                    graded_lin = [
-                        max(0.0, self._acescct2lin(graded_cct[0])),
-                        max(0.0, self._acescct2lin(graded_cct[1])),
-                        max(0.0, self._acescct2lin(graded_cct[2])),
-                    ]
-
-                    out_lines.append('%.10f %.10f %.10f'
-                                     % (graded_lin[0], graded_lin[1],
-                                        graded_lin[2]))
-                    count += 1
-
-        with open(baked_path, 'w') as f:
-            f.write('\n'.join(out_lines) + '\n')
-
-        fsize = os.path.getsize(baked_path)
-        print("[LUT-DIAG]   Baked cube: %s (%d bytes, %d^3=%d entries, "
-              "range 0-%.1f linear, needs scale=%.4f)"
-              % (baked_path, fsize, OUT_SIZE, count, RANGE,
-                 1.0 / RANGE))
-        return baked_path
-
-    def _setLUTOnSourceGroup(self, sg, lut_file, lut_name):
-        """Apply a grade LUT with baked-in ACEScct shaper.
-
-        Since RV's readLUT() ignores 1D shaper sections in combined .cube
-        files, we bake the linear→ACEScct conversion directly into a new
-        3D cube.  Each grid point maps linear ACES (0-16) through ACEScct
-        encoding then through the original grade, producing a single 3D
-        LUT that readLUT() can handle natively.
-        """
         try:
-            norm_path = lut_file.replace("\\", "/")
-            print("[LUT-DIAG] _setLUTOnSourceGroup: sg=%s  file='%s'"
-                  % (sg, norm_path))
+            # Start from the built-in ACES studio config which already has
+            # ACEScg (scene_linear) and ACEScct (color_timing) defined.
+            config = OCIO.Config.CreateFromBuiltinConfig(
+                'studio-config-v2.1.0_aces-v1.3_ocio-v2.3')
 
-            # Dump pipeline state BEFORE
-            self._dumpColorPipeline(sg)
+            # Create a Look that applies the .cube in ACEScct space.
+            look = OCIO.Look()
+            look.setName('shot_grade')
+            look.setProcessSpace('ACEScct')
 
-            lin_node = self._findNodeInSG(sg, "RVLinearize")
-            look_node = self._findNodeInSG(sg, "RVLookLUT")
+            ft = OCIO.FileTransform()
+            ft.setSrc(norm)
+            ft.setInterpolation(OCIO.INTERP_TETRAHEDRAL)
 
-            print("[LUT-DIAG]   RVLinearize node: %s" % lin_node)
-            print("[LUT-DIAG]   RVLookLUT node: %s" % look_node)
+            look.setTransform(ft)
+            config.addLook(look)
 
-            if not look_node:
-                print("[LUT-DIAG]   ERROR: No RVLookLUT found")
-                return
+            # Add the directory containing the .cube to the search path
+            # so OCIO can resolve relative references if needed.
+            cube_dir = os.path.dirname(norm)
+            existing = config.getSearchPath() or ""
+            if cube_dir and cube_dir not in existing:
+                if existing:
+                    config.setSearchPath(existing + ":" + cube_dir)
+                else:
+                    config.setSearchPath(cube_dir)
 
-            # File checks
-            if not os.path.isfile(norm_path) and os.path.isfile(lut_file):
-                norm_path = lut_file
-            try:
-                fsize = os.path.getsize(lut_file)
-                print("[LUT-DIAG]   Original LUT file size: %d bytes" % fsize)
-            except Exception:
-                pass
+            # Serialize to temp file
+            with open(config_path, 'w') as f:
+                f.write(config.serialize())
 
-            # ---- Step 1: Clear RVLinearize ----
-            if lin_node:
-                try:
-                    rvc.setStringProperty(lin_node + ".lut.file", [""], True)
-                    rvc.setIntProperty(lin_node + ".lut.active", [0], True)
-                    rvc.setIntProperty(lin_node + ".color.logtype", [0], True)
-                    rvc.setIntProperty(lin_node + ".color.sRGB2linear", [0], True)
-                    rvc.setIntProperty(lin_node + ".color.Rec709ToLinear", [0], True)
-                    rvc.setFloatProperty(lin_node + ".color.fileGamma", [1.0], True)
-                    print("[LUT-DIAG]   Cleared RVLinearize")
-                except Exception as e:
-                    print("[LUT-DIAG]   Could not clear RVLinearize: %s" % e)
-
-            # ---- Step 2: Bake ACEScct shaper into the 3D cube ----
-            baked_path = self._bakeShaperIntoCube(norm_path)
-
-            # ---- Step 3: Load baked cube into RVLookLUT ----
-            print("[LUT-DIAG]   Loading baked cube into RVLookLUT via "
-                  "readLUT('%s', '%s') ..." % (baked_path, look_node))
-            rvc.readLUT(baked_path, look_node)
-            rvc.setIntProperty(look_node + ".lut.active", [1], True)
-            print("[LUT-DIAG]   readLUT OK")
-
-            # ---- Step 3b: Set scale to compress input range ----
-            # .lut.scale is an INPUT multiplier.  scale = 1/RANGE means
-            # pixel 3.0 * 0.25 = 0.75 -> cube pos 0.75 -> baked from
-            # linear 3.0.  This extends coverage to [0, RANGE].
-            inv_range = 1.0 / self._LUT_BAKE_RANGE
-            try:
-                rvc.setFloatProperty(
-                    look_node + ".lut.scale",
-                    [inv_range, inv_range, inv_range], True)
-                print("[LUT-DIAG]   Set scale = [%.4f, %.4f, %.4f] "
-                      "(range 0-%.1f)"
-                      % (inv_range, inv_range, inv_range,
-                         self._LUT_BAKE_RANGE))
-            except Exception as e:
-                print("[LUT-DIAG]   Could not set scale: %s" % e)
-
-            # ---- Step 4: Verify ----
-            self._dumpColorPipeline(sg)
-            self._enumerateLUTProperties(look_node)
-
-            # Force redraw
-            try:
-                rvc.updateLUT()
-            except Exception:
-                pass
-            rvc.redraw()
-            rve.displayFeedback("LUT: %s  [baked ACEScct]" % lut_name, 3.0)
-
-            print("[LUT-DIAG]   SUCCESS: baked LUT '%s' on %s"
-                  % (lut_name, sg))
+            print("[LUT] Created OCIO config: %s  (cube: %s)" %
+                  (config_path, os.path.basename(norm)))
+            return config_path
 
         except Exception as e:
             import traceback
-            print("[LUT-DIAG] ERROR setting LUT on %s: %s" % (sg, e))
+            print("[LUT] ERROR creating OCIO config: %s" % e)
+            traceback.print_exc()
+            return None
+
+    def _setLUTOnSourceGroup(self, sg, lut_file, lut_name):
+        """Apply a grade LUT via OCIO Look with processSpace='ACEScct'.
+
+        This is the correct pipeline approach:
+        1. Create an OCIO config with ACEScg + ACEScct + a Look that
+           converts ACEScg -> ACEScct, applies the .cube, then converts
+           back ACEScct -> ACEScg.
+        2. Swap the RVLookPipelineGroup from RVLookLUT to OCIOLook.
+        3. Set OCIO properties on the OCIOLook node.
+
+        Replicates Nuke's OCIOFileTransform with working_space='color_timing'.
+        """
+        try:
+            norm_path = lut_file.replace("\\", "/")
+            print("[LUT] _setLUTOnSourceGroup: sg=%s  file='%s'" %
+                  (sg, norm_path))
+
+            # Verify file exists
+            if not os.path.isfile(norm_path) and os.path.isfile(lut_file):
+                norm_path = lut_file
+            if not os.path.isfile(norm_path):
+                print("[LUT] ERROR: LUT file not found: %s" % norm_path)
+                return
+
+            # Step 1: Create OCIO config with shot_grade Look
+            config_path = self._getOrCreateOCIOConfig(norm_path)
+            if not config_path:
+                print("[LUT] ERROR: Could not create OCIO config")
+                return
+
+            # Step 2: Find the RVLookPipelineGroup in this source group
+            look_pipeline = self._findNodeInSG(sg, "RVLookPipelineGroup")
+            if not look_pipeline:
+                print("[LUT] ERROR: No RVLookPipelineGroup in %s" % sg)
+                return
+            print("[LUT] Found pipeline: %s" % look_pipeline)
+
+            # Step 3: Swap pipeline nodes from RVLookLUT to OCIOLook
+            rvc.setStringProperty(
+                look_pipeline + ".pipeline.nodes", ["OCIOLook"], True)
+            print("[LUT] Swapped pipeline to OCIOLook")
+
+            # Step 4: Find the newly created OCIOLook node
+            ocio_look = None
+            for n in rvc.nodesInGroup(look_pipeline):
+                if rvc.nodeType(n) == "OCIOLook":
+                    ocio_look = n
+                    break
+            if not ocio_look:
+                print("[LUT] ERROR: OCIOLook node not created after swap")
+                return
+            print("[LUT] OCIOLook node: %s" % ocio_look)
+
+            # Step 5: Set OCIO properties
+            # Disable during property changes to prevent premature
+            # shader rebuild while config/function/colorspace are
+            # still being set.
+            rvc.setIntProperty(ocio_look + ".ocio.active", [0], True)
+            rvc.setStringProperty(
+                ocio_look + ".ocio.config", [config_path], True)
+            rvc.setStringProperty(
+                ocio_look + ".ocio.function", ["look"], True)
+            rvc.setStringProperty(
+                ocio_look + ".ocio.inColorSpace", ["ACEScg"], True)
+            rvc.setStringProperty(
+                ocio_look + ".ocio_look.look", ["shot_grade"], True)
+            # Re-enable -- this triggers the OCIO shader build
+            rvc.setIntProperty(ocio_look + ".ocio.active", [1], True)
+            print("[LUT] OCIO properties set on %s" % ocio_look)
+
+            # Step 6: Tell OCIO node to pick up the new config
+            try:
+                rvc.ocioUpdateConfig(ocio_look)
+                print("[LUT] ocioUpdateConfig OK")
+            except Exception as e:
+                print("[LUT] ocioUpdateConfig skipped: %s" % e)
+
+            # Step 7: Redraw
+            rvc.redraw()
+            rve.displayFeedback("LUT: %s  [OCIO ACEScct]" % lut_name, 3.0)
+
+            print("[LUT] SUCCESS: '%s' applied via OCIO on %s" %
+                  (lut_name, sg))
+
+        except Exception as e:
+            import traceback
+            print("[LUT] ERROR setting OCIO LUT on %s: %s" % (sg, e))
             traceback.print_exc()
 
     def _setComfyUIPointersFromCache(self, hint_path=None):

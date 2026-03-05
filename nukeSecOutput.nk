@@ -1,0 +1,838 @@
+#! C:/Program Files/Nuke15.1v7/nuke-15.1.7.dll -nx
+version 15.1 v7
+define_window_layout_xml {<?xml version="1.0" encoding="UTF-8"?>
+<layout version="1.0">
+    <window x="0" y="0" w="1917" h="1000" screen="0">
+        <splitter orientation="1">
+            <split size="40"/>
+            <dock id="" hideTitles="1" activePageId="Toolbar.1">
+                <page id="Toolbar.1"/>
+            </dock>
+            <split size="1254" stretch="1"/>
+            <splitter orientation="2">
+                <split size="562"/>
+                <dock id="" activePageId="Viewer.1">
+                    <page id="Viewer.1"/>
+                </dock>
+                <split size="396"/>
+                <dock id="" activePageId="DAG.1" focus="true">
+                    <page id="DAG.1"/>
+                    <page id="Curve Editor.1"/>
+                    <page id="DopeSheet.1"/>
+                </dock>
+            </splitter>
+            <split size="615"/>
+            <dock id="" activePageId="Properties.1">
+                <page id="Properties.1"/>
+                <page id="uk.co.thefoundry.backgroundrenderview.1"/>
+                <page id="Scenegraph.1"/>
+            </dock>
+        </splitter>
+    </window>
+</layout>
+}
+Root {
+ inputs 0
+ name X:/alphas_al-1150/reference/nukeScripts/15.1/nukeSecOutput.nk
+ frame 1060
+ first_frame 1001
+ last_frame 1114
+ lock_range true
+ format "2048 1080 0 0 2048 1080 1 2K_DCP"
+ proxy_type scale
+ proxy_format "1024 778 0 0 1024 778 1 1K_Super_35(full-ap)"
+ colorManagement OCIO
+ OCIO_config fn-nuke_studio-config-v1.0.0_aces-v1.3_ocio-v2.1
+ defaultViewerLUT "OCIO LUTs"
+ workingSpaceLUT scene_linear
+ monitorLut "ACES 1.0 - SDR Video (sRGB - Display)"
+ monitorOutLUT "ACES 1.0 - SDR Video (sRGB - Display)"
+ int8Lut matte_paint
+ int16Lut texture_paint
+ logLut compositing_log
+ floatLut scene_linear
+}
+BackdropNode {
+ inputs 0
+ name BackdropNode1
+ tile_color 0x719eb2ff
+ label "FINAL EXR"
+ note_font "Verdana Bold"
+ note_font_size 50
+ xpos -1532
+ ypos -276
+ bdwidth 1531
+ bdheight 2385
+ z_order -1
+}
+BackdropNode {
+ inputs 0
+ name BackdropNode10
+ tile_color 0x5c8849ff
+ label DJI
+ note_font_size 50
+ xpos -2677
+ ypos 1012
+ border_width 5
+ bdwidth 1018
+ bdheight 1083
+ z_order -1
+}
+BackdropNode {
+ inputs 0
+ name BackdropNode7
+ tile_color 0x885d41ff
+ label "ARRI ALEXA 35 / ALEXA MINI"
+ note_font_size 50
+ xpos -4133
+ ypos 1054
+ border_width 5
+ bdwidth 823
+ bdheight 1031
+ z_order -1
+}
+BackdropNode {
+ inputs 0
+ name BackdropNode11
+ tile_color 0x8e388e00
+ label "HD 1080"
+ note_font "Verdana Bold"
+ note_font_size 42
+ xpos -3118
+ ypos 1043
+ bdwidth 244
+ bdheight 159
+}
+BackdropNode {
+ inputs 0
+ name BackdropNode12
+ tile_color 0x4b5788ff
+ label "APPLY DJI .cube and SHOT .cube"
+ note_font_size 42
+ xpos -2588
+ ypos 1423
+ bdwidth 694
+ bdheight 307
+}
+BackdropNode {
+ inputs 0
+ name BackdropNode2
+ tile_color 0x7171c600
+ label DJI
+ note_font_size 42
+ note_font_color 0xffffffff
+ xpos -410
+ ypos -165
+ appearance Border
+ border_width 5
+ bdwidth 304
+ bdheight 900
+}
+BackdropNode {
+ inputs 0
+ name BackdropNode35
+ tile_color 0x71c67100
+ label "ALEXA MINI"
+ note_font_size 42
+ note_font_color 0xffffffff
+ xpos -907
+ ypos -156
+ appearance Border
+ border_width 5
+ bdwidth 292
+ bdheight 892
+}
+BackdropNode {
+ inputs 0
+ name BackdropNode4
+ tile_color 0x388e8e00
+ label "ALEXA 35"
+ note_font_size 42
+ note_font_color 0xffffffff
+ xpos -1452
+ ypos -145
+ appearance Border
+ border_width 5
+ bdwidth 328
+ bdheight 874
+}
+BackdropNode {
+ inputs 0
+ name BackdropNode8
+ tile_color 0xaa5d64ff
+ label "PRIMARY COMP EXR"
+ note_font "Verdana Bold"
+ note_font_size 42
+ xpos -4126
+ ypos -255
+ bdwidth 2481
+ bdheight 334
+}
+BackdropNode {
+ inputs 0
+ name BackdropNode9
+ tile_color 0x7d8869ff
+ label "APPLY SHOT .cube"
+ note_font_size 42
+ xpos -4019
+ ypos 1462
+ bdwidth 411
+ bdheight 258
+}
+BackdropNode {
+ inputs 0
+ name BackdropNode3
+ tile_color 0xff5555ff
+ label REFORMAT
+ note_font "Verdana Bold"
+ note_font_size 42
+ xpos -1383
+ ypos 233
+ bdwidth 210
+ bdheight 209
+ z_order 1
+}
+BackdropNode {
+ inputs 0
+ name BackdropNode5
+ tile_color 0xff5555ff
+ label REFORMAT
+ note_font "Verdana Bold"
+ note_font_size 42
+ xpos -376
+ ypos 223
+ bdwidth 210
+ bdheight 209
+ z_order 1
+}
+BackdropNode {
+ inputs 0
+ name BackdropNode6
+ tile_color 0xff5555ff
+ label REFORMAT
+ note_font "Verdana Bold"
+ note_font_size 42
+ xpos -869
+ ypos 211
+ bdwidth 210
+ bdheight 209
+ z_order 1
+}
+Read {
+ inputs 0
+ file_type exr
+ file X:/alphas_al-1150/sequences/113/VBP_0020/plateBG/work/images/plateBG/v001/8192x4320/exr/AL_113_VBP_0020_plateBG_v001.####.exr
+ format "8192 4320 0 0 8192 4320 1 "
+ first 1001
+ last 1114
+ origfirst 1001
+ origlast 1114
+ origset true
+ version 2
+ colorspace aces_interchange
+ name PRIMARY_RENDER_READ
+ xpos -3037
+ ypos -117
+}
+Dot {
+ name Dot1
+ xpos -3004
+ ypos 48
+}
+Dot {
+ name Dot35
+ xpos -1297
+ ypos 48
+}
+set N7f5a0800 [stack 0]
+Dot {
+ name Dot39
+ xpos -769
+ ypos 48
+}
+set N7f5a0c00 [stack 0]
+Dot {
+ name Dot37
+ xpos -277
+ ypos 48
+}
+Transform {
+ scale 0.743
+ center {4096 2160}
+ name Transform4
+ xpos -311
+ ypos 149
+ disable true
+}
+Reformat {
+ format "2582 1362 0 0 2582 1362 1 AlphaDrone2"
+ black_outside true
+ pbb true
+ name AlphasDrone_reformat1
+ xpos -311
+ ypos 323
+}
+Crop {
+ box {0 141 2582 1221}
+ reformat true
+ name AlphasDrone_Crop1
+ label "\[value box.r] x \[value box.t]"
+ xpos -311
+ ypos 359
+}
+Reformat {
+ format "2582 1080 0 0 2582 1080 1 2582x1080"
+ resize height
+ name FINAL_Reformat6
+ label FINAL
+ note_font "Verdana Bold"
+ xpos -311
+ ypos 561
+}
+Dot {
+ name Dot40
+ xpos -277
+ ypos 971
+}
+push $N7f5a0c00
+Transform {
+ scale 0.743
+ center {2304 1582}
+ name Transform5
+ xpos -803
+ ypos 151
+ disable true
+}
+Reformat {
+ type "to box"
+ box_width 3424
+ box_height 2202
+ box_fixed true
+ resize distort
+ filter Lanczos4
+ name FORCE_PAR2
+ xpos -803
+ ypos 290
+}
+Reformat {
+ format "2574 1080 0 0 2574 1080 1 MINI"
+ black_outside true
+ pbb true
+ name AlphasMini_reformat2
+ xpos -803
+ ypos 326
+}
+Crop {
+ box {0 0 2582 1080}
+ reformat true
+ name AlphasMiniCrop2
+ label "\[value box.r] x \[value box.t]"
+ xpos -803
+ ypos 364
+}
+Reformat {
+ format "2582 1080 0 0 2582 1080 1 2582x1080"
+ resize height
+ name FINAL_Reformat7
+ label FINAL
+ note_font "Verdana Bold"
+ xpos -803
+ ypos 566
+}
+Dot {
+ name Dot38
+ xpos -769
+ ypos 845
+}
+push $N7f5a0800
+Transform {
+ scale 0.743
+ center {2304 1582}
+ name Transform3
+ xpos -1331
+ ypos 167
+ disable true
+}
+Reformat {
+ format "3150 1080 0 0 3150 1080 1 AlphasMain"
+ black_outside true
+ pbb true
+ name AlphasMain_reformat2
+ xpos -1331
+ ypos 331
+}
+Crop {
+ box {284 0 2866 1080}
+ reformat true
+ name AlphasMain_crop2
+ label "\[value box.r] x \[value box.t]"
+ xpos -1331
+ ypos 385
+}
+Reformat {
+ format "2582 1080 0 0 2582 1080 1 2582x1080"
+ resize height
+ name FINAL_Reformat5
+ label FINAL
+ note_font "Verdana Bold"
+ xpos -1331
+ ypos 577
+}
+Dot {
+ name Dot36
+ xpos -1297
+ ypos 845
+}
+Switch {
+ inputs 2
+ which {{"((PRIMARY_RENDER_READ.width == 3424) && (PRIMARY_RENDER_READ.height == 2202)) ? 1 : 0"}}
+ name Switch1
+ xpos -1070
+ ypos 842
+}
+Dot {
+ name Dot41
+ xpos -1036
+ ypos 971
+}
+Switch {
+ inputs 2
+ which {{"((PRIMARY_RENDER_READ.width == 8192) && (PRIMARY_RENDER_READ.height == 4320)) ? 1 : 0"}}
+ name Switch2
+ xpos -608
+ ypos 968
+}
+Dot {
+ name Dot4
+ xpos -574
+ ypos 1145
+}
+set N67335400 [stack 0]
+Reformat {
+ format "1920 1080 0 0 1920 1080 1 HD_1080"
+ black_outside true
+ name Reformat1
+ xpos -3038
+ ypos 1136
+}
+Dot {
+ name Dot5
+ xpos -3004
+ ypos 1355
+}
+set N67368000 [stack 0]
+Dot {
+ name Dot6
+ xpos -2023
+ ypos 1355
+}
+set N67368400 [stack 0]
+OCIOFileTransform {
+ file X:/alphas_al-1150/reference/client_color_ref/DJI_colour/DJI_CONVERSION_LUT.cube
+ version 2
+ working_space compositing_log
+ name LUT_002
+ xpos -2057
+ ypos 1554
+}
+OCIOFileTransform {
+ file "X:/alphas_al-1150/_input/251003-001/20251003/alp_042_orc_0030/02_lut/AL_042_orc _0030_lut01_v001.cube"
+ version 2
+ working_space color_timing
+ name LUT_001
+ xpos -2057
+ ypos 1602
+}
+set C67368c00 [stack 0]
+Anamorphic_Bars_v03.gizmo {
+ name Anamorphic_Bars_v03_1
+ xpos -2057
+ ypos 1784
+ disable true
+ Aspect_Ratio 2.385
+}
+Dot {
+ name Dot23
+ xpos -2023
+ ypos 1917
+}
+push $N67368000
+Dot {
+ name Dot7
+ xpos -3737
+ ypos 1355
+}
+clone $C67368c00 {
+ xpos -3771
+ ypos 1602
+ selected false
+}
+Anamorphic_Bars_v03.gizmo {
+ name Anamorphic_Bars_v03_2
+ xpos -3771
+ ypos 1802
+ disable true
+ Aspect_Ratio 2.385
+}
+Dot {
+ name Dot19
+ xpos -3737
+ ypos 1917
+}
+Switch {
+ inputs 2
+ which {{"((PRIMARY_RENDER_READ.width == 8192) && (PRIMARY_RENDER_READ.height == 4320)) ? 1 : 0"}}
+ name Switch
+ xpos -3042
+ ypos 1914
+}
+Dot {
+ name Dot21
+ xpos -3008
+ ypos 2158
+}
+set N65b4f000 [stack 0]
+Dot {
+ name Dot2
+ xpos -3152
+ ypos 2158
+}
+Dot {
+ name Dot8
+ xpos -3152
+ ypos 2316
+}
+push $N65b4f000
+V_Slate {
+ name V_Slate3
+ xpos -3042
+ ypos 2227
+ plate_shotname TAR_306_003-0040
+ plate_version 2
+ plate_jobname taran_tar-1071
+ plate_task comp
+ plate_artist "David Gutierrez"
+ plate_comp_name TAR_306_003-0040_comp.v002.nk
+ CustomStatus ""
+ plate_description1 ""
+ plate_description2 ""
+ plate_description3 ""
+ plate_description4 ""
+ advance 1
+ handlesOUT {{handlesIN i}}
+ ver ""
+ focalmm ""
+ CompanyName DFFX
+ slate_frame {{first_frame-1 i}}
+ Fonts 0
+ regfont ""
+ boldfont ""
+ frame 0
+ first_frame {{"\[exists parent.input]==1?\[value parent.input.first_frame]:0" i}}
+ last_frame {{"\[exists parent.input]==1?\[value parent.input.last_frame]:0" i}}
+ Overlays 0
+ TypeSize 25
+ UITLOpacity {{parent.OverlaysOpacity i}}
+ Logoenable false
+ translate {0 5}
+ LogoOverlayOpacity {{OverlaysOpacity}}
+ MaskOverlay 0
+ MaskAspectRatio 2
+ Testers 1
+ colorchart true
+ Slate 1
+ FontSize 30
+ TextPositionOffset {-150 0}
+ filelogo ""
+ logoautoalpha false
+ file ""
+ StatusSettings 1
+}
+CopyMetaData {
+ inputs 2
+ mergeMode "Meta only"
+ metadatafilter timecode
+ name CopyMetaData1
+ xpos -3042
+ ypos 2313
+}
+AddTimeCode {
+ startcode "\[metadata input/timecode]"
+ frame 1001
+ useFrame true
+ name AddTimeCode1
+ xpos -3042
+ ypos 2374
+}
+Dot {
+ name Dot16
+ xpos -3008
+ ypos 2458
+}
+set N6660f400 [stack 0]
+Dot {
+ name Dot17
+ xpos -3228
+ ypos 2458
+}
+Write {
+ file X:/nezhatwo_nzt-1142/sequences/djb/085/comp/work/images/comp/v001/2048x858/EXR_16_bit/JPEG_422/NZT_djb_085_comp_v001.%04d.jpeg
+ file_type jpeg
+ transformType display
+ colorspace "Gamma 2.2 Rec.709 - Texture"
+ checkHashOnRead false
+ version 27
+ in_colorspace scene_linear
+ out_colorspace scene_linear
+ ocioColorspace scene_linear
+ display "Rec.1886 Rec.709 - Display"
+ view "ACES 1.0 - SDR Video (D60 sim on D65)"
+ name JPEG_422
+ label "Shotgun Write JPEG 422"
+ note_font Verdana
+ xpos -3262
+ ypos 2581
+ addUserKnob {20 User}
+ addUserKnob {1 tk_profile_name}
+ tk_profile_name "JPEG 422"
+ addUserKnob {1 tk_output}
+ addUserKnob {6 tk_use_name_as_channel -STARTLINE}
+ addUserKnob {1 tk_render_template}
+ tk_render_template shot_work_render_path
+ addUserKnob {1 tk_publish_template}
+ tk_publish_template shot_publish_render_path
+ addUserKnob {1 tk_proxy_render_template}
+ addUserKnob {1 tk_proxy_publish_template}
+ addUserKnob {20 view_presets l "View Presets"}
+ addUserKnob {4 viewPresets l "View Presets" M {main stereo cams "stereo cams" all}}
+ addUserKnob {22 set l Set -STARTLINE T "w = nuke.thisNode()\nscriptViews = nuke.views()\nviewPreset = w\['viewPresets'].getValue()\nselectedViews = None\nif viewPreset == 0:\n  selectedViews = \['main']\nif viewPreset == 1:\n  stereoViews = \['left', 'right']\n  if set(stereoViews).issubset(set(scriptViews)):\n    selectedViews = stereoViews\n  else:\n    selectedViews = None\nelif viewPreset == 2:\n  selectedViews = \[v for v in scriptViews if 'cam' in v and not ('_left' in v or '_right' in v)]\nelif viewPreset == 3:\n  selectedViews = \[v for v in scriptViews if 'cam' in v and ('_left' in v or '_right' in v)]\nelif viewPreset == 4:\n  selectedViews = scriptViews\nif selectedViews:\n  w\['views'].fromScript(' '.join(selectedViews))\n"}
+}
+push $N6660f400
+Dot {
+ name Dot20
+ xpos -2788
+ ypos 2458
+}
+Write {
+ file X:/alphas_al-1150/sequences/042_ORC/0030/comp/work/images/lineup/v002/4608x3164/EXR_16_bit_RAW_ACES/H_264/H264/AL_042_ORC_0030_lineup_H_264_v002.mov
+ file_type mov
+ mov64_format "mov (QuickTime / MOV)"
+ mov64_codec h264
+ mov64_dnxhd_codec_profile "DNxHD 422 8-bit 36Mbit"
+ mov_prores_codec_profile "ProRes 4:2:2 10-bit"
+ mov_h264_codec_profile "High 4:2:0 8-bit"
+ mov64_pixel_format {{0} "yuv420p\tYCbCr 4:2:0 8-bit"}
+ mov64_quality Custom
+ mov64_advanced 1
+ mov64_fast_start true
+ mov64_write_timecode true
+ mov64_gop_size 12
+ mov64_b_frames 0
+ mov64_bitrate 28000
+ mov64_bitrate_tolerance 0
+ mov64_quality_min 1
+ mov64_quality_max 3
+ transformType display
+ colorspace "Gamma 2.2 Rec.709 - Texture"
+ checkHashOnRead false
+ version 30
+ in_colorspace scene_linear
+ out_colorspace scene_linear
+ ocioColorspace scene_linear
+ display "Rec.1886 Rec.709 - Display"
+ view "ACES 1.0 - SDR Video (D60 sim on D65)"
+ name H264
+ label "CLIENT QUICKTIME\nNuke 14"
+ xpos -2822
+ ypos 2575
+ addUserKnob {20 view_presets l "View Presets"}
+ addUserKnob {4 viewPresets l "View Presets" M {main stereo cams "stereo cams" all}}
+ addUserKnob {22 set l Set -STARTLINE T "w = nuke.thisNode()\nscriptViews = nuke.views()\nviewPreset = w\['viewPresets'].getValue()\nselectedViews = None\nif viewPreset == 0:\n  selectedViews = \['main']\nif viewPreset == 1:\n  stereoViews = \['left', 'right']\n  if set(stereoViews).issubset(set(scriptViews)):\n    selectedViews = stereoViews\n  else:\n    selectedViews = None\nelif viewPreset == 2:\n  selectedViews = \[v for v in scriptViews if 'cam' in v and not ('_left' in v or '_right' in v)]\nelif viewPreset == 3:\n  selectedViews = \[v for v in scriptViews if 'cam' in v and ('_left' in v or '_right' in v)]\nelif viewPreset == 4:\n  selectedViews = scriptViews\nif selectedViews:\n  w\['views'].fromScript(' '.join(selectedViews))\n"}
+}
+push $N67335400
+V_Slate {
+ name V_Slate1
+ xpos -608
+ ypos 1971
+ plate_shotname TAR_306_003-0040
+ plate_version 2
+ plate_jobname taran_tar-1071
+ plate_task comp
+ plate_artist "David Gutierrez"
+ plate_comp_name TAR_306_003-0040_comp.v002.nk
+ CustomStatus ""
+ plate_description1 ""
+ plate_description2 ""
+ plate_description3 ""
+ plate_description4 ""
+ advance 1
+ handlesOUT {{handlesIN i}}
+ ver ""
+ focalmm ""
+ CompanyName DFFX
+ slate_frame {{first_frame-1 i}}
+ Fonts 0
+ regfont ""
+ boldfont ""
+ frame 0
+ first_frame {{"\[exists parent.input]==1?\[value parent.input.first_frame]:0" i}}
+ last_frame {{"\[exists parent.input]==1?\[value parent.input.last_frame]:0" i}}
+ Overlays 0
+ BurnIOverlays false
+ TypeSize 25
+ UITLOpacity {{parent.OverlaysOpacity i}}
+ Logoenable false
+ translate {0 5}
+ LogoOverlayOpacity {{OverlaysOpacity}}
+ MaskOverlay 0
+ MaskAspectRatio 2
+ Testers 1
+ colorchart true
+ Slate 1
+ FontSize 30
+ TextPositionOffset {-150 0}
+ filelogo ""
+ logoautoalpha false
+ file ""
+ StatusSettings 1
+}
+Write {
+ channels all
+ file X:/alphas_al-1150/sequences/065/ATH_0010/comp/work/images/comp/v004/4608x3164/EXR_16_bit_RAW_ACES/exr/AL_065_ATH_0010_comp_v004.1060.exr
+ file_type exr
+ compression "PIZ Wavelet (32 scanlines)"
+ metadata "all metadata"
+ first_part rgba
+ colorspace aces_interchange
+ create_directories true
+ checkHashOnRead false
+ in_colorspace scene_linear
+ out_colorspace scene_linear
+ ocioColorspace scene_linear
+ display "sRGB - Display"
+ view "ACES 1.0 - SDR Video"
+ name FINAL_EXR
+ label "SG Write EXR_16_bit_RAW_ACES"
+ note_font Verdana
+ xpos -608
+ ypos 2529
+ addUserKnob {20 User}
+ addUserKnob {1 tk_profile_name}
+ tk_profile_name EXR_16_bit_RAW_ACES
+ addUserKnob {1 tk_output}
+ addUserKnob {6 tk_use_name_as_channel -STARTLINE}
+ addUserKnob {1 tk_render_template}
+ tk_render_template nuke_shot_render_path_work
+ addUserKnob {1 tk_publish_template}
+ tk_publish_template nuke_shot_render_path_publish
+ addUserKnob {1 tk_proxy_render_template}
+ addUserKnob {1 tk_proxy_publish_template}
+}
+push $N67368400
+Dot {
+ name Dot3
+ xpos -1184
+ ypos 1355
+}
+AddTimeCode {
+ startcode "\[metadata input/timecode]"
+ frame 1001
+ useFrame true
+ name AddTimeCode3
+ xpos -1218
+ ypos 1982
+}
+Write {
+ file X:/alphas_al-1150/sequences/042_ORC/0030/comp/work/images/lineup/v002/4608x3164/EXR_16_bit_RAW_ACES/H_264/H264/AL_042_ORC_0030_lineup_H_264_v002.mov
+ file_type mov
+ mov64_format "mov (QuickTime / MOV)"
+ mov64_codec h264
+ mov64_dnxhd_codec_profile "DNxHD 422 8-bit 36Mbit"
+ mov_prores_codec_profile "ProRes 4:2:2 10-bit"
+ mov_h264_codec_profile "High 4:2:0 8-bit"
+ mov64_pixel_format {{0}}
+ mov64_quality Custom
+ mov64_advanced 1
+ mov64_fast_start true
+ mov64_write_timecode true
+ mov64_gop_size 12
+ mov64_b_frames 0
+ mov64_bitrate 28000
+ mov64_bitrate_tolerance 0
+ mov64_quality_min 1
+ mov64_quality_max 3
+ transformType display
+ colorspace "Gamma 2.2 Rec.709 - Texture"
+ checkHashOnRead false
+ version 30
+ ocioColorspace scene_linear
+ display "Rec.1886 Rec.709 - Display"
+ view "ACES 1.0 - SDR Video (D60 sim on D65)"
+ name H264_NO_LUT
+ label "CLIENT QUICKTIME\nNuke 14"
+ xpos -1218
+ ypos 2531
+ addUserKnob {20 view_presets l "View Presets"}
+ addUserKnob {4 viewPresets l "View Presets" M {main stereo cams "stereo cams" all}}
+ addUserKnob {22 set l Set -STARTLINE T "w = nuke.thisNode()\nscriptViews = nuke.views()\nviewPreset = w\['viewPresets'].getValue()\nselectedViews = None\nif viewPreset == 0:\n  selectedViews = \['main']\nif viewPreset == 1:\n  stereoViews = \['left', 'right']\n  if set(stereoViews).issubset(set(scriptViews)):\n    selectedViews = stereoViews\n  else:\n    selectedViews = None\nelif viewPreset == 2:\n  selectedViews = \[v for v in scriptViews if 'cam' in v and not ('_left' in v or '_right' in v)]\nelif viewPreset == 3:\n  selectedViews = \[v for v in scriptViews if 'cam' in v and ('_left' in v or '_right' in v)]\nelif viewPreset == 4:\n  selectedViews = scriptViews\nif selectedViews:\n  w\['views'].fromScript(' '.join(selectedViews))\n"}
+}
+Viewer {
+ inputs 2
+ frame_range 1001-1114
+ gamma 1.64
+ viewerProcess "ACES 1.0 - SDR Video (sRGB - Display)"
+ monitorOutNDISenderName "NukeX - nukeSecOutput - Viewer3"
+ name Viewer3
+ xpos -3692
+ ypos 3134
+}
+push $N65b4f000
+Dot {
+ name Dot18
+ xpos -2568
+ ypos 2158
+}
+AddTimeCode {
+ startcode "\[metadata input/timecode]"
+ frame 1001
+ useFrame true
+ name AddTimeCode2
+ xpos -2602
+ ypos 2373
+}
+Write {
+ file X:/alphas_al-1150/sequences/042_ORC/0030/comp/work/images/lineup/v002/4608x3164/EXR_16_bit_RAW_ACES/H_264/H264/AL_042_ORC_0030_lineup_H_264_v002.mov
+ file_type mov
+ mov64_format "mov (QuickTime / MOV)"
+ mov64_codec h264
+ mov64_dnxhd_codec_profile "DNxHD 422 8-bit 36Mbit"
+ mov_prores_codec_profile "ProRes 4:2:2 10-bit"
+ mov_h264_codec_profile "High 4:2:0 8-bit"
+ mov64_pixel_format {{0} "yuv420p\tYCbCr 4:2:0 8-bit"}
+ mov64_quality Custom
+ mov64_advanced 1
+ mov64_fast_start true
+ mov64_write_timecode true
+ mov64_gop_size 12
+ mov64_b_frames 0
+ mov64_bitrate 28000
+ mov64_bitrate_tolerance 0
+ mov64_quality_min 1
+ mov64_quality_max 3
+ transformType display
+ colorspace "Gamma 2.2 Rec.709 - Texture"
+ checkHashOnRead false
+ version 30
+ in_colorspace scene_linear
+ out_colorspace scene_linear
+ ocioColorspace scene_linear
+ display "Rec.1886 Rec.709 - Display"
+ view "ACES 1.0 - SDR Video (D60 sim on D65)"
+ name H264_NO_OVERLAYS
+ label "CLIENT QUICKTIME\nNuke 14"
+ xpos -2602
+ ypos 2575
+ addUserKnob {20 view_presets l "View Presets"}
+ addUserKnob {4 viewPresets l "View Presets" M {main stereo cams "stereo cams" all}}
+ addUserKnob {22 set l Set -STARTLINE T "w = nuke.thisNode()\nscriptViews = nuke.views()\nviewPreset = w\['viewPresets'].getValue()\nselectedViews = None\nif viewPreset == 0:\n  selectedViews = \['main']\nif viewPreset == 1:\n  stereoViews = \['left', 'right']\n  if set(stereoViews).issubset(set(scriptViews)):\n    selectedViews = stereoViews\n  else:\n    selectedViews = None\nelif viewPreset == 2:\n  selectedViews = \[v for v in scriptViews if 'cam' in v and not ('_left' in v or '_right' in v)]\nelif viewPreset == 3:\n  selectedViews = \[v for v in scriptViews if 'cam' in v and ('_left' in v or '_right' in v)]\nelif viewPreset == 4:\n  selectedViews = scriptViews\nif selectedViews:\n  w\['views'].fromScript(' '.join(selectedViews))\n"}
+}
