@@ -140,7 +140,9 @@ else
         echo "         ✓ oiiotool installed."
     else
         echo "         NOTE: oiiotool not available — half-res proxy via FFmpeg still works."
-        echo "         Full-res DWAB proxy requires oiiotool: pip install OpenImageIO"
+        echo "         Full-res DWAB proxy requires oiiotool."
+        echo "         Install Python (https://www.python.org) then run:"
+        echo "           python3 -m pip install OpenImageIO"
     fi
 fi
 

@@ -187,10 +187,20 @@ if not errorlevel 1 (
         echo         python -m pip install shotgun_api3
     )
 ) else (
-    echo         Python not found — skipping ShotGrid SDK install.
-    echo         If you need Flow/ShotGrid sync, install Python from:
-    echo         https://www.python.org/downloads/
-    echo         Then run:  python -m pip install shotgun_api3
+    echo.
+    echo   ╔════════════════════════════════════════════════════════════╗
+    echo   ║  Python not found!                                       ║
+    echo   ║                                                          ║
+    echo   ║  Python is required for:                                  ║
+    echo   ║    - Full-res DWAB EXR proxy compression (oiiotool)       ║
+    echo   ║    - Flow/ShotGrid sync                                   ║
+    echo   ║                                                          ║
+    echo   ║  Install from: https://www.python.org/downloads/          ║
+    echo   ║  IMPORTANT: Check "Add Python to PATH" during install!    ║
+    echo   ║                                                          ║
+    echo   ║  After installing Python, re-run this installer.          ║
+    echo   ╚════════════════════════════════════════════════════════════╝
+    echo.
 )
 
 :: ─── [5/7] Download FFmpeg ───
@@ -271,7 +281,10 @@ for /d %%%%d in ("C:\Program Files\Side Effects Software\Houdini*") do (
 where python >nul 2>&1
 if errorlevel 1 (
     echo         Python not found — cannot install oiiotool.
-    echo         Full-res DWAB proxy requires: pip install OpenImageIO
+    echo         Install Python from https://www.python.org/downloads/
+    echo         (Check "Add Python to PATH" during install!)
+    echo         Then re-run this installer, or manually run:
+    echo           python -m pip install OpenImageIO
     echo         Half-res proxy via FFmpeg still works without it.
     goto :done_oiio
 )
