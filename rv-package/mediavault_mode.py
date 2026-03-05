@@ -3561,63 +3561,124 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         except Exception as e:
             print("[LUT-DIAG]   Could not enumerate: %s" % e)
 
-    def _buildACEScctPrelut(self, size):
-        """Build a 1D ACEScct encoding curve as a flat float array.
-
-        Returns a list of ``3 * size`` floats (R channel, then G, then B —
-        all identical for a neutral curve).  Each entry maps a linear ACES
-        value to its ACEScct-encoded equivalent.
-
-        The prelut input range is controlled by the ``.lut.scale`` property
-        on the target node — we set scale = 1/DOMAIN_MAX so that a linear
-        value of DOMAIN_MAX maps to the last prelut entry.  The prelut
-        output is in [0, 1] which directly indexes the 3D grade LUT.
-        """
-        import math
-        CUT = 0.0078125   # 2^-7  (ACEScct linear-segment cutoff)
-
-        one_ch = []
-        for i in range(size):
-            # Linear input: 0 → DOMAIN_MAX (mapped by scale externally)
-            # For the prelut, index 0 = input 0, index size-1 = input 1.0
-            # (after scale, so real-world value = index/(size-1) * DOMAIN_MAX)
-            x = float(i) / (size - 1)      # normalized 0-1
-            # We need to convert from the SCALED linear value back to the
-            # actual linear value to compute ACEScct.  But that depends on
-            # DOMAIN_MAX which is handled by scale.  The prelut input IS
-            # already 0-1 after scale, so x represents linear/DOMAIN_MAX.
-            # We need to remap: real_linear = x * DOMAIN_MAX
-            real_linear = x * self._LUT_DOMAIN_MAX
-            if real_linear <= 0.0:
-                y = 10.5402377416545 * 0.0 + 0.0729055341958355
-            elif real_linear < CUT:
-                y = 10.5402377416545 * real_linear + 0.0729055341958355
-            else:
-                y = (math.log2(real_linear) + 9.72) / 17.52
-            y = max(0.0, min(1.0, y))
-            one_ch.append(y)
-
-        # Planar format: all R, then all G, then all B
-        return one_ch + one_ch + one_ch
-
     # Domain max for ACEScct shaper — 16 covers ~7 stops above mid-gray
     _LUT_DOMAIN_MAX = 16.0
 
+    def _createShaperCubeFile(self, original_cube_path):
+        """Create a combined 1D+3D .cube file with ACEScct shaper.
+
+        The .cube format supports both LUT_1D_SIZE and LUT_3D_SIZE in one
+        file.  The 1D section acts as a shaper (prelut) applied before the
+        3D lookup.
+
+        Think of it like a funnel: the 1D part squishes the wide linear
+        range into the narrow 0-1 window, then the 3D cube does the grading.
+
+        Returns the path to the combined .cube file (cached in temp dir).
+        """
+        import math, hashlib, tempfile
+
+        # Cache key based on original path
+        md5 = hashlib.md5(original_cube_path.encode()).hexdigest()[:8]
+        combined_path = os.path.join(tempfile.gettempdir(),
+                                     "cam_shaped_%s.cube" % md5)
+        if os.path.isfile(combined_path):
+            print("[LUT-DIAG]   Using cached combined .cube: %s" % combined_path)
+            return combined_path
+
+        # ---- Parse the original .cube to extract 3D data ----
+        try:
+            with open(original_cube_path, 'r') as f:
+                original_lines = f.readlines()
+        except Exception as e:
+            print("[LUT-DIAG]   Cannot read original cube: %s" % e)
+            return original_cube_path
+
+        three_d_size = None
+        three_d_data = []
+        in_data = False
+        for line in original_lines:
+            stripped = line.strip()
+            if not stripped or stripped.startswith('#'):
+                continue
+            if stripped.startswith('LUT_3D_SIZE'):
+                three_d_size = int(stripped.split()[-1])
+                in_data = True
+                continue
+            # Skip metadata headers once we're looking for data
+            if stripped.startswith(('TITLE', 'DOMAIN_', 'LUT_1D')):
+                continue
+            if in_data:
+                parts = stripped.split()
+                if len(parts) >= 3:
+                    try:
+                        float(parts[0])
+                        three_d_data.append(stripped)
+                    except ValueError:
+                        pass
+
+        if not three_d_size:
+            print("[LUT-DIAG]   WARNING: No LUT_3D_SIZE found in original")
+            return original_cube_path
+
+        print("[LUT-DIAG]   Parsed original: %dx%dx%d cube, %d data lines"
+              % (three_d_size, three_d_size, three_d_size, len(three_d_data)))
+
+        # ---- Build the 1D ACEScct shaper section ----
+        SHAPER_SIZE = 4096
+        DOMAIN_MAX = self._LUT_DOMAIN_MAX
+        CUT = 0.0078125  # 2^-7
+
+        out_lines = [
+            'TITLE "ACEScct Shaped + Grade (MediaVault)"',
+            '',
+            '# 1D ACEScct shaper: linear 0-%.0f -> ACEScct 0-1' % DOMAIN_MAX,
+            'LUT_1D_SIZE %d' % SHAPER_SIZE,
+            'DOMAIN_MIN 0.0 0.0 0.0',
+            'DOMAIN_MAX %.1f %.1f %.1f' % (DOMAIN_MAX, DOMAIN_MAX, DOMAIN_MAX),
+        ]
+
+        for i in range(SHAPER_SIZE):
+            x = float(i) / (SHAPER_SIZE - 1) * DOMAIN_MAX
+            if x <= 0.0:
+                y = 10.5402377416545 * 0.0 + 0.0729055341958355
+            elif x < CUT:
+                y = 10.5402377416545 * x + 0.0729055341958355
+            else:
+                y = (math.log2(x) + 9.72) / 17.52
+            y = max(0.0, min(1.0, y))
+            out_lines.append('%.10f %.10f %.10f' % (y, y, y))
+
+        # ---- Append the 3D grade LUT section ----
+        out_lines.append('')
+        out_lines.append('# 3D grade LUT from: %s'
+                         % os.path.basename(original_cube_path))
+        out_lines.append('LUT_3D_SIZE %d' % three_d_size)
+        out_lines.extend(three_d_data)
+
+        with open(combined_path, 'w') as f:
+            f.write('\n'.join(out_lines) + '\n')
+
+        fsize = os.path.getsize(combined_path)
+        print("[LUT-DIAG]   Created combined .cube: %s (%d bytes, "
+              "1D=%d entries domain 0-%.0f + 3D=%d^3)"
+              % (combined_path, fsize, SHAPER_SIZE, DOMAIN_MAX, three_d_size))
+        return combined_path
+
     def _setLUTOnSourceGroup(self, sg, lut_file, lut_name):
-        """Apply a grade LUT with ACEScct prelut shaper on RVLookLUT.
+        """Apply a grade LUT via combined 1D shaper + 3D cube file.
 
-        Strategy: load the 3D .cube into RVLookLUT via readLUT(), then
-        populate the node's built-in ``.lut.prelut`` property with an
-        ACEScct encoding curve.  This acts as a 1D shaper that compresses
-        linear ACES values (0-16) into the 0-1 range the LUT expects.
+        Creates a temp .cube file that has:
+          - LUT_1D_SIZE 4096: ACEScct encoding (linear 0-16 -> log 0-1)
+          - LUT_3D_SIZE N:    the original grade cube (0-1 -> graded output)
 
-        Pipeline after this:
-          Raw linear EXR  -->  [prelut: ACEScct shaper]  -->  [3D grade LUT]  -->  display
-        All within the single RVLookLUT node — the prelut is native to it.
+        readLUT() parses BOTH sections and sets up the GPU pipeline
+        natively — no manual prelut/scale manipulation needed.
         """
         try:
             norm_path = lut_file.replace("\\", "/")
-            print("[LUT-DIAG] _setLUTOnSourceGroup: sg=%s  file='%s'" % (sg, norm_path))
+            print("[LUT-DIAG] _setLUTOnSourceGroup: sg=%s  file='%s'"
+                  % (sg, norm_path))
 
             # Dump pipeline state BEFORE
             self._dumpColorPipeline(sg)
@@ -3629,7 +3690,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             print("[LUT-DIAG]   RVLookLUT node: %s" % look_node)
 
             if not look_node:
-                print("[LUT-DIAG]   ERROR: No RVLookLUT node found — cannot apply LUT")
+                print("[LUT-DIAG]   ERROR: No RVLookLUT found")
                 return
 
             # File checks
@@ -3637,11 +3698,11 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 norm_path = lut_file
             try:
                 fsize = os.path.getsize(lut_file)
-                print("[LUT-DIAG]   LUT file size: %d bytes" % fsize)
+                print("[LUT-DIAG]   Original LUT file size: %d bytes" % fsize)
             except Exception:
                 pass
 
-            # ---- Step 1: Clear RVLinearize from any previous attempt ----
+            # ---- Step 1: Clear RVLinearize ----
             if lin_node:
                 try:
                     rvc.setStringProperty(lin_node + ".lut.file", [""], True)
@@ -3650,48 +3711,19 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                     rvc.setIntProperty(lin_node + ".color.sRGB2linear", [0], True)
                     rvc.setIntProperty(lin_node + ".color.Rec709ToLinear", [0], True)
                     rvc.setFloatProperty(lin_node + ".color.fileGamma", [1.0], True)
-                    print("[LUT-DIAG]   Cleared RVLinearize (no linearization)")
+                    print("[LUT-DIAG]   Cleared RVLinearize")
                 except Exception as e:
                     print("[LUT-DIAG]   Could not clear RVLinearize: %s" % e)
 
-            # ---- Step 2: Load 3D grade LUT into RVLookLUT ----
-            print("[LUT-DIAG]   Loading 3D grade LUT into RVLookLUT ...")
-            rvc.readLUT(norm_path, look_node)
+            # ---- Step 2: Create combined 1D+3D cube ----
+            combined_path = self._createShaperCubeFile(norm_path)
+
+            # ---- Step 3: Load combined cube into RVLookLUT ----
+            print("[LUT-DIAG]   Loading combined cube into RVLookLUT via "
+                  "readLUT('%s', '%s') ..." % (combined_path, look_node))
+            rvc.readLUT(combined_path, look_node)
             rvc.setIntProperty(look_node + ".lut.active", [1], True)
-            print("[LUT-DIAG]   3D LUT loaded OK into %s" % look_node)
-
-            # Enumerate properties AFTER readLUT to see what it set
-            self._enumerateLUTProperties(look_node)
-
-            # ---- Step 3: Build and inject ACEScct prelut ----
-            try:
-                prelut_size = rvc.getIntProperty(
-                    look_node + ".lut.preLUTSize")[0]
-            except Exception:
-                prelut_size = 2048  # RV default
-
-            print("[LUT-DIAG]   Building ACEScct prelut (%d entries/ch, "
-                  "domain 0-%.0f) ..." % (prelut_size, self._LUT_DOMAIN_MAX))
-
-            prelut_data = self._buildACEScctPrelut(prelut_size)
-            print("[LUT-DIAG]   Prelut array: %d floats total "
-                  "(3 ch x %d), first=[%.6f], mid=[%.6f], last=[%.6f]"
-                  % (len(prelut_data), prelut_size,
-                     prelut_data[0], prelut_data[prelut_size // 2],
-                     prelut_data[prelut_size - 1]))
-
-            rvc.setFloatProperty(look_node + ".lut.prelut",
-                                 prelut_data, True)
-
-            # Scale maps input range: value * scale → prelut index 0-1
-            # Linear 16 * (1/16) = 1.0 → last prelut entry
-            scale_val = 1.0 / self._LUT_DOMAIN_MAX
-            rvc.setFloatProperty(look_node + ".lut.scale",
-                                 [scale_val], True)
-            rvc.setFloatProperty(look_node + ".lut.offset",
-                                 [0.0], True)
-            print("[LUT-DIAG]   Set prelut + scale=%.6f offset=0.0"
-                  % scale_val)
+            print("[LUT-DIAG]   readLUT OK")
 
             # ---- Step 4: Verify ----
             self._dumpColorPipeline(sg)
@@ -3703,9 +3735,9 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             except Exception:
                 pass
             rvc.redraw()
-            rve.displayFeedback("LUT: %s  [ACEScct shaper]" % lut_name, 3.0)
+            rve.displayFeedback("LUT: %s  [ACEScct shaped]" % lut_name, 3.0)
 
-            print("[LUT-DIAG]   SUCCESS: prelut shaper + 3D LUT '%s' on %s"
+            print("[LUT-DIAG]   SUCCESS: shaped LUT '%s' on %s"
                   % (lut_name, sg))
 
         except Exception as e:
