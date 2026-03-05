@@ -283,20 +283,28 @@ async function showEditProjectModal(projectId) {
             </div>
             <div style="display:flex;flex-direction:column;gap:6px;padding:4px 0 10px 0;">
                 <label style="font-size:.78rem;color:var(--text-dim);">Shot LUT Folder
-                    <span style="font-size:.68rem;color:var(--text-muted);margin-left:4px;">Auto-matches LUT files to shots by name</span>
+                    <span style="font-size:.68rem;color:var(--text-muted);margin-left:4px;">Auto-matches .cube / .cdl files to shots by name</span>
                 </label>
                 <div style="display:flex;gap:6px;align-items:center;">
                     <input type="text" id="epLutFolderInput"
                         value="${esc(proj.lut_folder || '')}"
-                        placeholder="Path to folder with per-shot .cube / .cdl files"
-                        style="flex:1;font-size:.78rem;padding:4px 6px;">
+                        placeholder="Browse to the folder containing per-shot LUT files"
+                        style="flex:1;font-size:.78rem;padding:4px 6px;" readonly>
+                    <button class="btn-sm" onclick="window.openFolderPicker('epLutFolderInput')" style="white-space:nowrap;">Browse</button>
+                    <button class="btn-sm" onclick="document.getElementById('epLutFolderInput').value=''" style="font-size:.72rem;color:#c66;" title="Clear">x</button>
                 </div>
             </div>
-            <div style="border-top:1px solid var(--border);padding-top:8px;margin-top:2px;">
-                <label style="font-size:.72rem;color:var(--text-muted);display:block;margin-bottom:6px;">Show-Level Fallback (used when no shot-level match found)</label>
-            </div>
-            <div id="epLutList" style="display:flex;flex-direction:column;gap:8px;padding:4px 0;">
-                <span style="color:var(--text-dim);font-size:.8rem;">Loading...</span>
+            <div style="padding-top:4px;margin-top:2px;">
+                <button type="button" class="btn-sm" id="epLutAdvancedToggle"
+                    style="font-size:.72rem;color:var(--text-muted);background:transparent;border:1px solid var(--border);cursor:pointer;"
+                    onclick="const c=document.getElementById('epLutAdvancedContent');const v=c.style.display==='none';c.style.display=v?'block':'none';this.textContent=v?'Hide Advanced':'Show-Level Fallback (Advanced)';"
+                >Show-Level Fallback (Advanced)</button>
+                <div id="epLutAdvancedContent" style="display:none;margin-top:8px;border-top:1px solid var(--border);padding-top:8px;">
+                    <p style="font-size:.72rem;color:var(--text-muted);margin:0 0 8px 0;">Applied when no per-shot LUT match is found. One LUT per media type for the whole project.</p>
+                    <div id="epLutList" style="display:flex;flex-direction:column;gap:8px;padding:4px 0;">
+                        <span style="color:var(--text-dim);font-size:.8rem;">Loading...</span>
+                    </div>
+                </div>
             </div>
         </div>
 
@@ -478,12 +486,13 @@ async function showEditProjectModal(projectId) {
             container.innerHTML = categories.map(cat => {
                 const existing = lutMap[cat.key];
                 const val = existing ? esc(existing.lut_path || '') : '';
-                const name = existing ? esc(existing.lut_name || '') : '';
+                const inputId = 'epLutFile_' + cat.key;
                 return `<div style="display:flex;gap:6px;align-items:center;">
                     <label style="min-width:120px;font-size:.78rem;color:var(--text-dim);">${cat.label}</label>
-                    <input type="text" class="lut-path-input" data-cat="${cat.key}"
-                        value="${val}" placeholder="Path to LUT file (.cube, .3dl, ...)"
-                        style="flex:1;font-size:.78rem;padding:4px 6px;">
+                    <input type="text" id="${inputId}" class="lut-path-input" data-cat="${cat.key}"
+                        value="${val}" placeholder="Browse to a LUT file"
+                        style="flex:1;font-size:.78rem;padding:4px 6px;" readonly>
+                    <button class="btn-sm" onclick="window.openFilePicker('${inputId}', {title:'Select LUT File', extensions:['.cube','.cdl','.3dl','.lut','.csp','.spi1d','.spi3d'], confirmLabel:'Select This File'})" style="font-size:.72rem;">Browse</button>
                     <button class="btn-sm lut-save-btn" data-cat="${cat.key}"
                         style="font-size:.72rem;">Set</button>
                     ${existing ? '<button class="btn-sm lut-clear-btn" data-cat="' + cat.key + '" style="font-size:.72rem;color:#c66;">Clear</button>' : ''}

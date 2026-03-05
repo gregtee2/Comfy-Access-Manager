@@ -14,7 +14,7 @@ import { state } from './state.js';
 import { api } from './api.js';
 import { loadProjects, loadTree, initFileDropZone, loadCrates } from './browser.js';
 import { loadImportTab } from './import.js';
-import { loadSettings, loadRoles, openFolderPicker, autoCheckForUpdates } from './settings.js';
+import { loadSettings, loadRoles, openFolderPicker, openFilePicker, autoCheckForUpdates } from './settings.js';
 import { restoreGroupFormats } from './assetGrid.js';
 import pluginRegistry from './pluginRegistry.js';
 import './export.js';

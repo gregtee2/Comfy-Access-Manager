@@ -302,14 +302,46 @@ async function removeWatch(id) {
 // ===========================================
 let fpTargetInput = null;
 let fpCurrentDir = '';
+let fpMode = 'folder';        // 'folder' or 'file'
+let fpFileExtFilter = null;   // null = show all, or array like ['.cube','.cdl','.3dl']
+let fpOnConfirm = null;       // optional callback(selectedPath) instead of setting input
 
-export function openFolderPicker(inputId) {
+export function openFolderPicker(inputId, opts) {
     fpTargetInput = inputId;
+    fpMode = 'folder';
+    fpFileExtFilter = null;
+    fpOnConfirm = opts?.onConfirm || null;
     const currentVal = document.getElementById(inputId)?.value?.trim() || '';
     fpCurrentDir = '';
     document.getElementById('fpSelectedPath').value = currentVal;
+    document.getElementById('fpSelectedPath').placeholder = 'Navigate to a folder...';
+    document.getElementById('fpTitle').textContent = 'Select Folder';
+    document.getElementById('fpConfirmBtn').textContent = 'Select This Folder';
+    document.getElementById('fpNewFolderBtn').style.display = '';
     document.getElementById('folderPickerModal').style.display = 'flex';
     fpNavigate(currentVal || '');
+}
+
+export function openFilePicker(inputId, opts) {
+    fpTargetInput = inputId;
+    fpMode = 'file';
+    fpFileExtFilter = opts?.extensions || null;
+    fpOnConfirm = opts?.onConfirm || null;
+    const currentVal = document.getElementById(inputId)?.value?.trim() || '';
+    fpCurrentDir = '';
+    document.getElementById('fpSelectedPath').value = currentVal;
+    document.getElementById('fpSelectedPath').placeholder = 'Navigate to a file...';
+    document.getElementById('fpTitle').textContent = opts?.title || 'Select File';
+    document.getElementById('fpConfirmBtn').textContent = opts?.confirmLabel || 'Select This File';
+    document.getElementById('fpNewFolderBtn').style.display = 'none';
+    document.getElementById('folderPickerModal').style.display = 'flex';
+    // If we have a path, navigate to its parent directory
+    if (currentVal) {
+        const dir = currentVal.replace(/\\/g, '/').replace(/\/[^\/]+$/, '');
+        fpNavigate(dir || '');
+    } else {
+        fpNavigate('');
+    }
 }
 
 function closeFolderPicker() {
@@ -319,8 +351,11 @@ function closeFolderPicker() {
 
 function confirmFolderPicker() {
     const selected = document.getElementById('fpSelectedPath').value;
-    if (fpTargetInput && selected) {
-        document.getElementById(fpTargetInput).value = selected;
+    if (fpOnConfirm) {
+        fpOnConfirm(selected);
+    } else if (fpTargetInput && selected) {
+        const el = document.getElementById(fpTargetInput);
+        if (el) el.value = selected;
     }
     closeFolderPicker();
 }
@@ -336,7 +371,8 @@ async function fpNavigate(dir) {
     container.innerHTML = '<div style="padding:20px;text-align:center;color:var(--text-muted);">Loading...</div>';
 
     try {
-        const url = dir ? `/api/assets/browse?dir=${encodeURIComponent(dir)}&folders_only=1` : '/api/assets/browse?folders_only=1';
+        const foldersParam = fpMode === 'folder' ? '&folders_only=1' : '';
+        const url = dir ? `/api/assets/browse?dir=${encodeURIComponent(dir)}${foldersParam}` : `/api/assets/browse?${fpMode === 'folder' ? 'folders_only=1' : ''}`;
         const data = await api(url);
 
         let html = '';
@@ -367,15 +403,29 @@ async function fpNavigate(dir) {
             }
         }
 
-        for (const entry of (networkDrives.length > 0 && !dir ? otherEntries : data.entries.filter(e => e.isDirectory))) {
+        const mainEntries = networkDrives.length > 0 && !dir ? otherEntries : data.entries.filter(e => e.isDirectory);
+        for (const entry of mainEntries) {
             html += `<div class="fp-entry" onclick="fpSelectEntry('${escAttr(entry.path)}')" ondblclick="fpNavigate('${escAttr(entry.path)}')">
                 <span class="fp-icon">${entry.icon || '[Folder]'}</span>
                 <span class="fp-name">${esc(entry.name)}</span>
             </div>`;
         }
 
-        if (!html || (!networkDrives.length && !otherEntries.length && !data.entries.some(e => e.isDirectory))) {
-            html += '<div style="padding:20px;text-align:center;color:var(--text-muted);">No subfolders</div>';
+        // In file mode, show files after folders
+        if (fpMode === 'file' && dir) {
+            const files = data.entries.filter(e => !e.isDirectory);
+            for (const entry of files) {
+                const ext = (entry.name.match(/\.[^.]+$/) || [''])[0].toLowerCase();
+                if (fpFileExtFilter && !fpFileExtFilter.includes(ext)) continue;
+                html += `<div class="fp-entry fp-entry-file" onclick="fpSelectEntry('${escAttr(entry.path)}')" ondblclick="fpSelectAndConfirm('${escAttr(entry.path)}')">
+                    <span class="fp-icon">[F]</span>
+                    <span class="fp-name">${esc(entry.name)}</span>
+                </div>`;
+            }
+        }
+
+        if (!html || (!networkDrives.length && !mainEntries.length && !data.entries.some(e => e.isDirectory))) {
+            html += `<div style="padding:20px;text-align:center;color:var(--text-muted);">${fpMode === 'file' ? 'No matching files' : 'No subfolders'}</div>`;
         }
 
         container.innerHTML = html;
@@ -388,6 +438,11 @@ function fpSelectEntry(path) {
     document.getElementById('fpSelectedPath').value = path;
     document.querySelectorAll('.fp-entry').forEach(el => el.classList.remove('fp-entry-selected'));
     event.currentTarget.classList.add('fp-entry-selected');
+}
+
+function fpSelectAndConfirm(path) {
+    document.getElementById('fpSelectedPath').value = path;
+    confirmFolderPicker();
 }
 
 async function fpNewFolder() {
@@ -1630,10 +1685,12 @@ window.migrateVault = migrateVault;
 window.addWatchFolder = addWatchFolder;
 window.removeWatch = removeWatch;
 window.openFolderPicker = openFolderPicker;
+window.openFilePicker = openFilePicker;
 window.closeFolderPicker = closeFolderPicker;
 window.confirmFolderPicker = confirmFolderPicker;
 window.fpNavigate = fpNavigate;
 window.fpSelectEntry = fpSelectEntry;
+window.fpSelectAndConfirm = fpSelectAndConfirm;
 window.fpNewFolder = fpNewFolder;
 window.addRole = addRole;
 window.updateRoleColor = updateRoleColor;

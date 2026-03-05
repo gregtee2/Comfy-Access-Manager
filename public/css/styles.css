@@ -2410,6 +2410,8 @@ label:has(input[type="checkbox"]) {
 .fp-entry:hover { background: var(--surface-2); }
 .fp-entry-up { color: var(--text-muted); font-style: italic; }
 .fp-entry-selected { background: var(--accent) !important; color: #fff; }
+.fp-entry-file { opacity: 0.9; }
+.fp-entry-file .fp-icon { color: var(--text-muted); font-size: 0.85rem; }
 .fp-icon { font-size: 1.1rem; flex-shrink: 0; }
 .fp-name { white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
 

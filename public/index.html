@@ -809,7 +809,7 @@ Import from Resolve</button>
     <div id="folderPickerModal" class="modal" style="display:none" onclick="if(event.target===this)closeFolderPicker()">
         <div class="modal-card folder-picker-card">
             <div class="fp-header">
-                <h3> Select Folder</h3>
+                <h3 id="fpTitle">Select Folder</h3>
                 <button class="player-close" onclick="closeFolderPicker()">x</button>
             </div>
             <div class="fp-path-bar">
@@ -823,9 +823,9 @@ Import from Resolve</button>
                     <input type="text" id="fpSelectedPath" readonly placeholder="Navigate to a folder...">
                 </div>
                 <div class="fp-actions">
-                    <button class="btn-cancel" onclick="fpNewFolder()">+ New Folder</button>
+                    <button class="btn-cancel" id="fpNewFolderBtn" onclick="fpNewFolder()">+ New Folder</button>
                     <button class="btn-cancel" onclick="closeFolderPicker()">Cancel</button>
-                    <button class="btn-confirm" onclick="confirmFolderPicker()">Select This Folder</button>
+                    <button class="btn-confirm" id="fpConfirmBtn" onclick="confirmFolderPicker()">Select This Folder</button>
                 </div>
             </div>
         </div>
