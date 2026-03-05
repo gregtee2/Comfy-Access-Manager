@@ -2,6 +2,13 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.8.8] - 2026-03-04
+
+### Fixed — OCIO LUT Pipeline (Windows Path Support)
+- **Corrected OCIO Config Generation** — `_getOrCreateOCIOConfig` now adds the LUT directory to the OCIO `search_path` and uses `os.path.basename()` for the file reference. This prevents invalid backslashes in the generated XML on Windows, which was causing the LUT to fail silently or load incorrectly.
+- **Nuke-Matching Color Pipeline** — Explicitly set `processSpace='ACEScct'` on the OCIO Look to match Nuke's `color_timing` working space. Validated against `nukeSecOutput.nk` (Linear -> ACEScct -> Cube -> ACEScct -> Linear).
+- **Interpolation** — Added `INTERP_TETRAHEDRAL` for smoother LUT sampling.
+
 ## [1.7.1] - 2026-03-03
 
 ### Added — ShotGrid Bulk Sync, Thumbnails & Tree Enhancements

@@ -3608,10 +3608,12 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             # Create a Look that applies the .cube in ACEScct space.
             look = OCIO.Look()
             look.setName('shot_grade')
+            # Nuke 'color_timing' = ACEScct.
+            # This ensures Linear -> ACEScct -> Cube -> ACEScct -> Linear
             look.setProcessSpace('ACEScct')
 
             ft = OCIO.FileTransform()
-            ft.setSrc(norm)
+            ft.setSrc(os.path.basename(norm)) # Use basename, rely on search path
             ft.setInterpolation(OCIO.INTERP_TETRAHEDRAL)
 
             look.setTransform(ft)
@@ -3621,7 +3623,9 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             # so OCIO can resolve relative references if needed.
             cube_dir = os.path.dirname(norm)
             existing = config.getSearchPath() or ""
-            if cube_dir and cube_dir not in existing:
+            # Ensure we use forward slashes for OCIO search paths
+            cube_dir = cube_dir.replace("\\", "/")
+            if cube_dir:
                 if existing:
                     config.setSearchPath(existing + ":" + cube_dir)
                 else:
