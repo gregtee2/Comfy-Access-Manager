@@ -3472,6 +3472,42 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             print("[MediaVault] LUT download failed: %s" % e)
             return ""
 
+    def _findLookLUTNode(self, sg):
+        """Find the RVLookLUT node for a source group.
+
+        RV's pipeline nests the LookLUT inside an RVLookPipelineGroup,
+        which is a child of the source group — so we can't just iterate
+        nodesInGroup(sg).  Strategy:
+          1. Check nodesInGroup(sg) for a direct RVLookLUT child.
+          2. If not found, recurse into any pipeline-group children.
+          3. Last resort: find all RVLookLUT nodes globally and match
+             by name prefix (e.g. sourceGroup000000_look_lut).
+        """
+        # Strategy 1 & 2: walk children, recurse into sub-groups
+        for node in rvc.nodesInGroup(sg):
+            ntype = rvc.nodeType(node)
+            if ntype == "RVLookLUT":
+                return node
+            # Pipeline groups contain the actual LUT nodes
+            if "Pipeline" in ntype or "Group" in ntype:
+                try:
+                    for sub in rvc.nodesInGroup(node):
+                        if rvc.nodeType(sub) == "RVLookLUT":
+                            return sub
+                except Exception:
+                    pass
+
+        # Strategy 3: global search by name prefix
+        sg_prefix = sg + "_"  # e.g. "sourceGroup000000_"
+        try:
+            for gnode in rvc.nodesOfType("RVLookLUT"):
+                if gnode.startswith(sg_prefix) or sg_prefix in gnode:
+                    return gnode
+        except Exception:
+            pass
+
+        return None
+
     def _setLUTOnSourceGroup(self, sg, lut_file, lut_name):
         """Apply a LUT file to the RVLookLUT node inside a source group."""
         try:
@@ -3479,59 +3515,60 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             # even on Windows for LUT file paths.
             norm_path = lut_file.replace("\\", "/")
 
-            nodes_in_sg = rvc.nodesInGroup(sg)
             print("[LUT-DIAG] _setLUTOnSourceGroup: sg=%s  file='%s'" % (sg, norm_path))
-            print("[LUT-DIAG]   nodes in group: %s" % [(n, rvc.nodeType(n)) for n in nodes_in_sg])
 
-            for node in nodes_in_sg:
-                ntype = rvc.nodeType(node)
-                if ntype == "RVLookLUT":
-                    # Check file exists one final time
-                    print("[LUT-DIAG]   Found RVLookLUT node: %s" % node)
-                    print("[LUT-DIAG]   File exists check: %s" % os.path.isfile(norm_path))
-                    # Also check with original backslash path on Windows
-                    if not os.path.isfile(norm_path) and os.path.isfile(lut_file):
-                        print("[LUT-DIAG]   Forward-slash path not found but backslash works")
+            node = self._findLookLUTNode(sg)
 
-                    # Read first few bytes to verify file is non-empty
-                    try:
-                        fsize = os.path.getsize(lut_file)
-                        print("[LUT-DIAG]   LUT file size: %d bytes" % fsize)
-                    except Exception:
-                        print("[LUT-DIAG]   Could not stat LUT file")
+            if not node:
+                # Dump all RVLookLUT nodes globally for debug
+                try:
+                    all_lut = rvc.nodesOfType("RVLookLUT")
+                    print("[LUT-DIAG] WARNING: No RVLookLUT node for %s" % sg)
+                    print("[LUT-DIAG]   All RVLookLUT nodes in session: %s" % all_lut)
+                except Exception:
+                    print("[LUT-DIAG] WARNING: No RVLookLUT node and nodesOfType failed")
+                return
 
-                    # Try current props before we set
-                    try:
-                        cur_file = rvc.getStringProperty(node + ".lut.file")
-                        cur_active = rvc.getIntProperty(node + ".lut.active")
-                        print("[LUT-DIAG]   BEFORE: .lut.file=%s  .lut.active=%s"
-                              % (cur_file, cur_active))
-                    except Exception:
-                        print("[LUT-DIAG]   (could not read current LUT props)")
+            print("[LUT-DIAG]   Found RVLookLUT node: %s" % node)
 
-                    # readLUT actually parses the .cube/.3dl/etc file and
-                    # populates the LUT data in the pipeline.  Just setting
-                    # .lut.file alone does NOT load the LUT data.
-                    print("[LUT-DIAG]   Calling rvc.readLUT('%s', '%s') ..." % (norm_path, node))
-                    rvc.readLUT(norm_path, node)
-                    print("[LUT-DIAG]   readLUT returned OK")
+            # File checks
+            print("[LUT-DIAG]   File exists (fwd-slash): %s" % os.path.isfile(norm_path))
+            if not os.path.isfile(norm_path) and os.path.isfile(lut_file):
+                print("[LUT-DIAG]   Backslash path works, using that instead")
+                norm_path = lut_file
+            try:
+                fsize = os.path.getsize(lut_file)
+                print("[LUT-DIAG]   LUT file size: %d bytes" % fsize)
+            except Exception:
+                print("[LUT-DIAG]   Could not stat LUT file")
 
-                    rvc.setIntProperty(node + ".lut.active", [1], True)
+            # Props before
+            try:
+                cur_file = rvc.getStringProperty(node + ".lut.file")
+                cur_active = rvc.getIntProperty(node + ".lut.active")
+                print("[LUT-DIAG]   BEFORE: .lut.file=%s  .lut.active=%s"
+                      % (cur_file, cur_active))
+            except Exception:
+                print("[LUT-DIAG]   (could not read current LUT props)")
 
-                    # Verify props after setting
-                    try:
-                        new_file = rvc.getStringProperty(node + ".lut.file")
-                        new_active = rvc.getIntProperty(node + ".lut.active")
-                        print("[LUT-DIAG]   AFTER: .lut.file=%s  .lut.active=%s"
-                              % (new_file, new_active))
-                    except Exception:
-                        pass
+            # readLUT parses the .cube/.3dl file and loads LUT data
+            print("[LUT-DIAG]   Calling rvc.readLUT('%s', '%s') ..." % (norm_path, node))
+            rvc.readLUT(norm_path, node)
+            print("[LUT-DIAG]   readLUT returned OK")
 
-                    print("[LUT-DIAG]   SUCCESS: Applied LUT '%s' to %s"
-                          % (lut_name, sg))
-                    return
+            rvc.setIntProperty(node + ".lut.active", [1], True)
 
-            print("[LUT-DIAG] WARNING: No RVLookLUT node found in %s" % sg)
+            # Props after
+            try:
+                new_file = rvc.getStringProperty(node + ".lut.file")
+                new_active = rvc.getIntProperty(node + ".lut.active")
+                print("[LUT-DIAG]   AFTER: .lut.file=%s  .lut.active=%s"
+                      % (new_file, new_active))
+            except Exception:
+                pass
+
+            print("[LUT-DIAG]   SUCCESS: Applied LUT '%s' to %s" % (lut_name, sg))
+
         except Exception as e:
             import traceback
             print("[LUT-DIAG] ERROR setting LUT on %s: %s" % (sg, e))
