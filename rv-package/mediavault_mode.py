@@ -5034,36 +5034,6 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             glEnable(GL_BLEND)
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
-            # ── Diagnostic: draw a large bright red quad ──
-            # If this shows on all frames → glBitmap is the problem.
-            # If this only shows on frame 0 → FBO/pipeline stage issue.
-            if _diag_count < 20:
-                glColor4f(1.0, 0.0, 0.0, 0.9)
-                glBegin(GL_QUADS)
-                glVertex2f(50, 50)
-                glVertex2f(250, 50)
-                glVertex2f(250, 250)
-                glVertex2f(50, 250)
-                glEnd()
-                # Also try a raster-based draw (green dot via glBitmap)
-                glColor4f(0.0, 1.0, 0.0, 1.0)
-                glRasterPos2f(100.0, 100.0)
-                # Check if raster position is valid
-                if _glGetIntegerv_ct is not None:
-                    try:
-                        _rp_valid = _ct.c_int(0)
-                        _glGetIntegerv_ct(0x0B08, _ct.byref(_rp_valid))  # GL_CURRENT_RASTER_POSITION_VALID
-                        if _do_diag:
-                            print("[OVERLAY-DIAG] Frame %d: raster_pos_valid=%d" %
-                                  (_diag_count, _rp_valid.value))
-                    except Exception as e:
-                        if _do_diag:
-                            print("[OVERLAY-DIAG] Frame %d: raster_pos query err: %s" %
-                                  (_diag_count, e))
-                # Tiny 8x7 test bitmap
-                _test_bits = (b'\xFF' * 7)
-                glBitmap(8, 7, 0.0, 0.0, 10.0, 0.0, _test_bits)
-
             if self._show_metadata:
                 self._drawMetadataBurnIn(w, h)
             if self._show_status:
@@ -5345,9 +5315,32 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
             # ── draw text ──
             if use_qt:
-                # Blit pre-rendered RGBA text via glDrawPixels
-                glRasterPos2f(float(int(tx)), float(int(ty)))
-                glDrawPixels(tw, th, GL_RGBA, GL_UNSIGNED_BYTE, qt_bytes)
+                # Blit pre-rendered RGBA text via glDrawPixels.
+                # NOTE: glDrawPixels can fail silently when RV uses
+                # an FBO-based OCIO pipeline (the blit goes to the
+                # wrong buffer or gets discarded). Detect this by
+                # checking if we're in an FBO and fall back to bitmap.
+                _do_qt_blit = True
+                if _glGetIntegerv_ct is not None:
+                    try:
+                        import ctypes as _ct
+                        _fbo_buf = _ct.c_int(0)
+                        _glGetIntegerv_ct(_GL_FRAMEBUFFER_BINDING, _ct.byref(_fbo_buf))
+                        if _fbo_buf.value != 0:
+                            _do_qt_blit = False  # inside FBO — glDrawPixels unreliable
+                    except Exception:
+                        pass
+
+                if _do_qt_blit:
+                    glRasterPos2f(float(int(tx)), float(int(ty)))
+                    glDrawPixels(tw, th, GL_RGBA, GL_UNSIGNED_BYTE, qt_bytes)
+                else:
+                    # Fall back to bitmap font inside FBO
+                    glColor4f(*font_color)
+                    if scale <= 1:
+                        self._glText(int(tx), int(ty), text)
+                    else:
+                        self._glTextScaled(int(tx), int(ty), text, scale)
             else:
                 glColor4f(*font_color)
                 if scale <= 1:
