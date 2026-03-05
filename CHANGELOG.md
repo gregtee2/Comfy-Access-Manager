@@ -2,6 +2,13 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.9.44] - 2026-03-05
+
+### Fixed — OCIO LUT File Not Found on Windows (Drive Letter ':' Split)
+- **Root Cause** — The OCIO config's `search_path` uses `:` as a path separator. A Windows path like `X:/thechosen_cho-1157/reference/LUT` was split into `X` and `/thechosen_cho-1157/reference/LUT` — neither is a valid path. The cube file could not be found even though it existed on disk. The `SUCCESS` log was misleading (printed after property setup, before OCIO actually tried to load the file).
+- **Fix** — Use the full absolute path (forward slashes) in `FileTransform.setSrc()` instead of basename + search_path. OCIO resolves absolute paths directly without search_path lookup, bypassing the `:` separator issue entirely.
+- Added `v2:` salt to the OCIO config cache key so old broken configs are regenerated.
+
 ## [1.9.43] - 2026-03-05
 
 ### Fixed — RV Overlay Invisible After Frame 1 on EXR Sequences

@@ -3597,7 +3597,9 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             return None
 
         norm = cube_path.replace("\\", "/")
-        md5 = hashlib.md5(norm.encode()).hexdigest()[:12]
+        # v2 salt: invalidate old cached configs that used broken
+        # search_path approach (Windows drive-letter ':' was split).
+        md5 = hashlib.md5(("v2:" + norm).encode()).hexdigest()[:12]
         config_path = os.path.join(tempfile.gettempdir(),
                                    "cam_ocio_%s.ocio" % md5)
 
@@ -3619,23 +3621,16 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             look.setProcessSpace('ACEScct')
 
             ft = OCIO.FileTransform()
-            ft.setSrc(os.path.basename(norm)) # Use basename, rely on search path
+            # Use the full absolute path (forward slashes) so OCIO
+            # resolves the file directly.  The previous approach used
+            # basename + search_path, but OCIO's search_path splits on
+            # ':' — which breaks Windows drive-letter paths like
+            # 'X:/folder' (becomes 'X' + '/folder').
+            ft.setSrc(norm)
             ft.setInterpolation(OCIO.INTERP_TETRAHEDRAL)
 
             look.setTransform(ft)
             config.addLook(look)
-
-            # Add the directory containing the .cube to the search path
-            # so OCIO can resolve relative references if needed.
-            cube_dir = os.path.dirname(norm)
-            existing = config.getSearchPath() or ""
-            # Ensure we use forward slashes for OCIO search paths
-            cube_dir = cube_dir.replace("\\", "/")
-            if cube_dir:
-                if existing:
-                    config.setSearchPath(existing + ":" + cube_dir)
-                else:
-                    config.setSearchPath(cube_dir)
 
             # Serialize to temp file
             with open(config_path, 'w') as f:
