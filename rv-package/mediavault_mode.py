@@ -3477,108 +3477,135 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             print("[MediaVault] LUT download failed: %s" % e)
             return ""
 
-    def _findLookLUTNode(self, sg):
-        """Find the RVLookLUT node for a source group.
-
-        RV's pipeline nests the LookLUT inside an RVLookPipelineGroup,
-        which is a child of the source group — so we can't just iterate
-        nodesInGroup(sg).  Strategy:
-          1. Check nodesInGroup(sg) for a direct RVLookLUT child.
-          2. If not found, recurse into any pipeline-group children.
-          3. Last resort: find all RVLookLUT nodes globally and match
-             by name prefix (e.g. sourceGroup000000_look_lut).
-        """
-        # Strategy 1 & 2: walk children, recurse into sub-groups
+    def _findNodeInSG(self, sg, node_type):
+        """Find a node of given type inside a source group, recursing into
+        pipeline sub-groups."""
         for node in rvc.nodesInGroup(sg):
             ntype = rvc.nodeType(node)
-            if ntype == "RVLookLUT":
+            if ntype == node_type:
                 return node
-            # Pipeline groups contain the actual LUT nodes
             if "Pipeline" in ntype or "Group" in ntype:
                 try:
                     for sub in rvc.nodesInGroup(node):
-                        if rvc.nodeType(sub) == "RVLookLUT":
+                        if rvc.nodeType(sub) == node_type:
                             return sub
                 except Exception:
                     pass
-
-        # Strategy 3: global search by name prefix
-        sg_prefix = sg + "_"  # e.g. "sourceGroup000000_"
+        # Global fallback by name prefix
+        sg_prefix = sg + "_"
         try:
-            for gnode in rvc.nodesOfType("RVLookLUT"):
+            for gnode in rvc.nodesOfType(node_type):
                 if gnode.startswith(sg_prefix) or sg_prefix in gnode:
                     return gnode
         except Exception:
             pass
-
         return None
 
-    def _setLUTOnSourceGroup(self, sg, lut_file, lut_name):
-        """Apply a LUT file to the RVLookLUT node inside a source group."""
-        try:
-            # Normalize path to forward slashes — RV expects forward slashes
-            # even on Windows for LUT file paths.
-            norm_path = lut_file.replace("\\", "/")
+    def _dumpColorPipeline(self, sg):
+        """Dump full color pipeline state for a source group."""
+        print("[LUT-DIAG] === COLOR PIPELINE DUMP for %s ===" % sg)
+        for ntype in ("RVLinearize", "RVLookLUT", "RVDisplayColor"):
+            node = self._findNodeInSG(sg, ntype)
+            if not node:
+                # Try global for display
+                try:
+                    nodes = rvc.nodesOfType(ntype)
+                    if nodes:
+                        node = nodes[0]
+                except Exception:
+                    pass
+            if not node:
+                print("[LUT-DIAG]   %s: NOT FOUND" % ntype)
+                continue
+            print("[LUT-DIAG]   %s (%s):" % (ntype, node))
+            for prop_suffix in (".lut.file", ".lut.active",
+                                ".color.logtype", ".color.sRGB2linear",
+                                ".color.Rec709ToLinear", ".color.fileGamma",
+                                ".color.ignoreChromaticities"):
+                prop = node + prop_suffix
+                try:
+                    val = rvc.getStringProperty(prop)
+                    print("[LUT-DIAG]     %s = %s (string)" % (prop_suffix, val))
+                except Exception:
+                    try:
+                        val = rvc.getIntProperty(prop)
+                        print("[LUT-DIAG]     %s = %s (int)" % (prop_suffix, val))
+                    except Exception:
+                        try:
+                            val = rvc.getFloatProperty(prop)
+                            print("[LUT-DIAG]     %s = %s (float)" % (prop_suffix, val))
+                        except Exception:
+                            pass
 
+    def _setLUTOnSourceGroup(self, sg, lut_file, lut_name):
+        """Apply a LUT file to the RVLinearize node (File LUT slot).
+
+        We use the File LUT slot instead of Look LUT because studio
+        .cube files (exported from Resolve) typically expect raw/log
+        file data as input, not linearized data.
+        """
+        try:
+            norm_path = lut_file.replace("\\", "/")
             print("[LUT-DIAG] _setLUTOnSourceGroup: sg=%s  file='%s'" % (sg, norm_path))
 
-            node = self._findLookLUTNode(sg)
+            # Dump pipeline state BEFORE
+            self._dumpColorPipeline(sg)
 
-            if not node:
-                # Dump all RVLookLUT nodes globally for debug
-                try:
-                    all_lut = rvc.nodesOfType("RVLookLUT")
-                    print("[LUT-DIAG] WARNING: No RVLookLUT node for %s" % sg)
-                    print("[LUT-DIAG]   All RVLookLUT nodes in session: %s" % all_lut)
-                except Exception:
-                    print("[LUT-DIAG] WARNING: No RVLookLUT node and nodesOfType failed")
-                return
+            # Find the RVLinearize node (File LUT slot)
+            lin_node = self._findNodeInSG(sg, "RVLinearize")
+            look_node = self._findNodeInSG(sg, "RVLookLUT")
 
-            print("[LUT-DIAG]   Found RVLookLUT node: %s" % node)
+            print("[LUT-DIAG]   RVLinearize node: %s" % lin_node)
+            print("[LUT-DIAG]   RVLookLUT node: %s" % look_node)
 
             # File checks
-            print("[LUT-DIAG]   File exists (fwd-slash): %s" % os.path.isfile(norm_path))
             if not os.path.isfile(norm_path) and os.path.isfile(lut_file):
-                print("[LUT-DIAG]   Backslash path works, using that instead")
                 norm_path = lut_file
             try:
                 fsize = os.path.getsize(lut_file)
                 print("[LUT-DIAG]   LUT file size: %d bytes" % fsize)
             except Exception:
-                print("[LUT-DIAG]   Could not stat LUT file")
-
-            # Props before
-            try:
-                cur_file = rvc.getStringProperty(node + ".lut.file")
-                cur_active = rvc.getIntProperty(node + ".lut.active")
-                print("[LUT-DIAG]   BEFORE: .lut.file=%s  .lut.active=%s"
-                      % (cur_file, cur_active))
-            except Exception:
-                print("[LUT-DIAG]   (could not read current LUT props)")
-
-            # readLUT parses the .cube/.3dl file and loads LUT data
-            print("[LUT-DIAG]   Calling rvc.readLUT('%s', '%s') ..." % (norm_path, node))
-            rvc.readLUT(norm_path, node)
-            print("[LUT-DIAG]   readLUT returned OK")
-
-            rvc.setIntProperty(node + ".lut.active", [1], True)
-
-            # Props after
-            try:
-                new_file = rvc.getStringProperty(node + ".lut.file")
-                new_active = rvc.getIntProperty(node + ".lut.active")
-                print("[LUT-DIAG]   AFTER: .lut.file=%s  .lut.active=%s"
-                      % (new_file, new_active))
-            except Exception:
                 pass
 
-            # Force RV to re-render the pipeline with the new LUT
+            # Try BOTH slots — File LUT (RVLinearize) and Look LUT
+            # so we can see which one looks correct
+            target_node = lin_node or look_node
+            if not target_node:
+                print("[LUT-DIAG] WARNING: No LUT node found at all")
+                return
+
+            print("[LUT-DIAG]   Using node: %s (type: %s)"
+                  % (target_node, rvc.nodeType(target_node)))
+
+            # readLUT parses the file and loads LUT data
+            print("[LUT-DIAG]   Calling rvc.readLUT('%s', '%s') ..."
+                  % (norm_path, target_node))
+            rvc.readLUT(norm_path, target_node)
+            print("[LUT-DIAG]   readLUT returned OK")
+
+            rvc.setIntProperty(target_node + ".lut.active", [1], True)
+
+            # Also disable any auto-linearization so we don't double-transform
+            if lin_node:
+                try:
+                    rvc.setIntProperty(lin_node + ".color.logtype", [0], True)
+                    rvc.setIntProperty(lin_node + ".color.sRGB2linear", [0], True)
+                    rvc.setIntProperty(lin_node + ".color.Rec709ToLinear", [0], True)
+                    rvc.setFloatProperty(lin_node + ".color.fileGamma", [1.0], True)
+                    print("[LUT-DIAG]   Disabled linearization on %s" % lin_node)
+                except Exception as e:
+                    print("[LUT-DIAG]   Could not disable linearization: %s" % e)
+
+            # Dump pipeline state AFTER
+            self._dumpColorPipeline(sg)
+
+            # Force redraw
             try:
                 rvc.updateLUT()
             except Exception:
                 pass
             rvc.redraw()
-            rve.displayFeedback("Look LUT: %s" % lut_name, 3.0)
+            rve.displayFeedback("File LUT: %s" % lut_name, 3.0)
 
             print("[LUT-DIAG]   SUCCESS: Applied LUT '%s' to %s" % (lut_name, sg))
 
