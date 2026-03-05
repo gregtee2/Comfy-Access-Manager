@@ -5008,12 +5008,10 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 print("[OVERLAY-DIAG] Frame %d: FBO=%d  shader=%d  viewport=%s  domain=%dx%d" %
                       (_diag_count, _prev_fbo, _prev_prog, _vp, w, h))
 
-            # ── Switch to default framebuffer (screen) if OCIO is using an FBO ──
-            if _prev_fbo != 0 and _glBindFramebuffer is not None:
-                _glBindFramebuffer(_GL_FRAMEBUFFER, 0)
-                if _do_diag:
-                    print("[OVERLAY-DIAG] Frame %d: switched FBO %d -> 0 (screen)" %
-                          (_diag_count, _prev_fbo))
+            # ── Stay in current FBO (do NOT switch to FBO 0) ──
+            # RV composites FBO 1 onto the screen, so we must draw INTO FBO 1.
+            # Switching to FBO 0 causes overlays to be overwritten by RV's
+            # final composite pass.
 
             # ── Disable active shader ──
             if _HAS_GL_SHADERS and _glUseProgram and _prev_prog:
@@ -5036,6 +5034,36 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             glEnable(GL_BLEND)
             glBlendFunc(GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA)
 
+            # ── Diagnostic: draw a large bright red quad ──
+            # If this shows on all frames → glBitmap is the problem.
+            # If this only shows on frame 0 → FBO/pipeline stage issue.
+            if _diag_count < 20:
+                glColor4f(1.0, 0.0, 0.0, 0.9)
+                glBegin(GL_QUADS)
+                glVertex2f(50, 50)
+                glVertex2f(250, 50)
+                glVertex2f(250, 250)
+                glVertex2f(50, 250)
+                glEnd()
+                # Also try a raster-based draw (green dot via glBitmap)
+                glColor4f(0.0, 1.0, 0.0, 1.0)
+                glRasterPos2f(100.0, 100.0)
+                # Check if raster position is valid
+                if _glGetIntegerv_ct is not None:
+                    try:
+                        _rp_valid = _ct.c_int(0)
+                        _glGetIntegerv_ct(0x0B08, _ct.byref(_rp_valid))  # GL_CURRENT_RASTER_POSITION_VALID
+                        if _do_diag:
+                            print("[OVERLAY-DIAG] Frame %d: raster_pos_valid=%d" %
+                                  (_diag_count, _rp_valid.value))
+                    except Exception as e:
+                        if _do_diag:
+                            print("[OVERLAY-DIAG] Frame %d: raster_pos query err: %s" %
+                                  (_diag_count, e))
+                # Tiny 8x7 test bitmap
+                _test_bits = (b'\xFF' * 7)
+                glBitmap(8, 7, 0.0, 0.0, 10.0, 0.0, _test_bits)
+
             if self._show_metadata:
                 self._drawMetadataBurnIn(w, h)
             if self._show_status:
@@ -5053,14 +5081,12 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             glPopMatrix()
             glMatrixMode(GL_MODELVIEW)
 
-            # ── Restore shader + FBO + GL state ──
+            # ── Restore shader + GL state ──
             if _HAS_GL_SHADERS and _glUseProgram and _prev_prog:
                 try:
                     _glUseProgram(_prev_prog)
                 except Exception:
                     pass
-            if _prev_fbo != 0 and _glBindFramebuffer is not None:
-                _glBindFramebuffer(_GL_FRAMEBUFFER, _prev_fbo)
 
             glPopAttrib()
 
