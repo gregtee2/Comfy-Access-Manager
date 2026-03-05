@@ -2,6 +2,13 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.9.41] - 2026-03-04
+
+### Fixed — RV OCIO: Set Global OCIO Env Var + Re-set After ocioUpdateConfig
+- **Set `OCIO` environment variable** — `os.environ['OCIO']` is now set to the generated ACES config path before any node manipulation. This gives RV's global OCIO subsystem a valid config with ACEScg/ACEScct defined, eliminating the `OCIO environment variable not set` warning and ensuring Display nodes can resolve color spaces immediately.
+- **Re-set `outColorSpace` after `ocioUpdateConfig`** — `ocioUpdateConfig()` may clear user-created properties like `ocio.outColorSpace` during its internal re-init (this property isn't part of the default OCIOLook node schema). We now read it back after the call and re-set to `ACEScg` if it was wiped, fixing `LookTransform: empty destination color space name`.
+- Combined, these two fixes address the root cause: RV validates OCIO nodes at every pipeline swap, property change, and config reload — the global env var ensures color spaces are always resolvable.
+
 ## [1.9.4] - 2026-03-04
 
 ### Fixed — RV OCIO: Load Config Before Re-Enable
