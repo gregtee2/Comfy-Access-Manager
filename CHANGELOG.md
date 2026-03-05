@@ -2,6 +2,18 @@
 
 All notable changes to Comfy Asset Manager (CAM) will be documented in this file.
 
+## [1.9.45] - 2026-03-05
+
+### Fixed — EXR Overlay Invisible After Frame 1 (Comprehensive Fix)
+- **Root Cause 1 — Shader import silently failed**: The `glUseProgram` import was in a nested `try/except` that only caught `ImportError`. If RV's PyOpenGL doesn't expose GL 2.0 functions via named imports, `_HAS_GL_SHADERS` was False and the entire OCIO shader bypass from v1.9.43 was inactive — the OCIO shader stayed bound and ate all overlay GL calls.
+- **Fix (3-tier shader resolution)**: Try standard PyOpenGL import -> PyOpenGL lazy `getattr` -> Windows `ctypes.windll.opengl32.wglGetProcAddress` (deferred to first render() call when GL context exists). Diagnostic prints at startup and first render so we can see which method succeeded.
+- **Root Cause 2 — per-frame heavy work**: `after-progressive-loading` fires on EVERY EXR frame (each frame is a separate file). `_onSourceLoaded` was doing HTTP calls (`_getRolesData`), menu rebuilds, and re-setting `_lut_pending` on every single frame change. This caused `_applyProjectLUTs()` to run inside render() every frame.
+- **Fix (source group init guard)**: Track which source groups have completed first-time init in `_source_init_sgs`. On subsequent frames of the same EXR sequence, skip heavy work (HTTP calls, menu rebuild, LUT setup) and only update lightweight overlay pointers.
+- **Additional GL state cleanup**: Now disables `GL_DEPTH_TEST`, `GL_SCISSOR_TEST`, and `GL_TEXTURE_2D` before overlay drawing, in case OCIO leaves them enabled.
+- Moved `glGetIntegerv` to main GL import block (GL 1.0 function, always available).
+- Added `GL_DEPTH_TEST`, `GL_SCISSOR_TEST`, `GL_TEXTURE_2D` to GL imports.
+- Render error handler now logs first error instead of silently swallowing all exceptions.
+
 ## [1.9.44] - 2026-03-05
 
 ### Fixed — OCIO LUT File Not Found on Windows (Drive Letter ':' Split)

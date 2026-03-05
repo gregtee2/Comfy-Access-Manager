@@ -29,24 +29,45 @@ except ImportError:
 # ─── OpenGL for overlay rendering ─────────────────────────────
 _HAS_GL = False
 _HAS_GL_SHADERS = False
+_glUseProgram = None            # function ref — may come from PyOpenGL or ctypes
+_GL_CURRENT_PROGRAM = 0x8B8D    # GL 2.0 enum constant (same on all drivers)
 try:
     from OpenGL.GL import (
         glMatrixMode, glPushMatrix, glPopMatrix, glLoadIdentity,
         glEnable, glDisable, glBlendFunc, glColor4f,
         glBegin, glEnd, glVertex2f, glRasterPos2f, glLineWidth,
         glBitmap, glPixelStorei, glPixelZoom,
-        glDrawPixels,
+        glDrawPixels, glGetIntegerv,
         GL_PROJECTION, GL_MODELVIEW, GL_BLEND,
         GL_SRC_ALPHA, GL_ONE_MINUS_SRC_ALPHA, GL_QUADS, GL_LINE_LOOP,
         GL_UNPACK_ALIGNMENT, GL_RGBA, GL_UNSIGNED_BYTE,
+        GL_DEPTH_TEST, GL_SCISSOR_TEST, GL_TEXTURE_2D,
     )
     from OpenGL.GLU import gluOrtho2D
     _HAS_GL = True
+    # glUseProgram (GL 2.0) — needed to disable OCIO shaders before
+    # drawing fixed-function overlays.
+    # Strategy 1: standard PyOpenGL named import
     try:
-        from OpenGL.GL import glUseProgram, glGetIntegerv, GL_CURRENT_PROGRAM
+        from OpenGL.GL import glUseProgram
+        _glUseProgram = glUseProgram
         _HAS_GL_SHADERS = True
     except ImportError:
         pass
+    # Strategy 2: PyOpenGL lazy attribute access
+    if not _HAS_GL_SHADERS:
+        try:
+            import OpenGL.GL as _GL_mod
+            _fn = getattr(_GL_mod, 'glUseProgram', None)
+            if callable(_fn):
+                _glUseProgram = _fn
+                _HAS_GL_SHADERS = True
+        except Exception:
+            pass
+    # Strategy 3 (ctypes/WGL) deferred to first render() call —
+    # needs active GL context which doesn't exist at import time.
+    print("[MediaVault] GL init: HAS_GL=%s  HAS_GL_SHADERS=%s" %
+          (_HAS_GL, _HAS_GL_SHADERS))
 except ImportError:
     pass
 
@@ -1142,6 +1163,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         self._lut_cache        = {}     # {norm_key: lut_info_dict | False}
         self._lut_applied_sgs  = set()  # source groups that already have LUT applied
         self._lut_name_by_sg   = {}     # {source_group: lut_filename} for overlay display
+        self._source_init_sgs  = set()  # source groups that completed first-time init
 
         # ── ShotGrid Notes side-panel ────────────────────────────
         self._notes_panel = None         # ShotGridNotesPanel instance (lazy)
@@ -3264,11 +3286,20 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         """Auto-probe ComfyUI metadata whenever a source finishes loading.
 
         Fires on 'source-group-complete' and 'after-progressive-loading'
-        events — BEFORE the user ever toggles the overlay.  This way the
-        cache is already populated and the overlay appears instantly when
-        toggled on, with zero ffprobe delay and zero playback impact.
+        events.  For EXR sequences, 'after-progressive-loading' fires
+        on EVERY frame.  Heavy work (HTTP calls, menu rebuilds, LUT
+        setup) is guarded so it only runs once per source group.
         """
         event.reject()
+
+        # Determine which source groups are NEW (first-time init)
+        try:
+            current_sgs = set(rvc.nodesOfType("RVSourceGroup"))
+        except Exception:
+            current_sgs = set()
+        new_sgs = current_sgs - self._source_init_sgs
+
+        # Always probe new files for ComfyUI metadata (cache-guarded)
         all_paths = self._getAllSourcePaths()
         newly_probed = 0
         last_probed_path = None
@@ -3282,14 +3313,19 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             print("[MediaVault] ComfyUI auto-probe: %d new source(s) cached"
                   " (%d total)" % (newly_probed, len(self._comfyui_cache)))
 
-        # ALWAYS pre-set ComfyUI pointers from cache so they're ready
-        # when the user toggles the overlay on.  Don't gate behind
-        # _show_comfyui — the whole point is to have this ready BEFORE
-        # the toggle.
         self._setComfyUIPointersFromCache(last_probed_path)
 
-        # Update standard overlay pointers
+        # Always update overlay pointers (lightweight path comparison)
         self._syncCurrentSource()
+
+        if not new_sgs:
+            # All source groups already initialized — skip heavy work.
+            # This prevents per-frame HTTP calls, menu rebuilds, and
+            # redundant LUT application when scrubbing EXR sequences.
+            return
+
+        # ── First-time init for new source group(s) ──
+        self._source_init_sgs.update(current_sgs)
 
         # Pre-populate Compare/Switch role cache so the menu shows
         # correct enabled/disabled states on first open.
@@ -3309,8 +3345,6 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         # DEFERRED: We must wait until source_setup.py and other
         # source-group-complete handlers finish setting up the color
         # pipeline — otherwise our LUT gets overwritten.
-        # Use RV's native afterProgressiveLoading event binding to
-        # re-apply on next idle, NOT threading.Timer (deadlocks RV).
         self._lut_pending = True
 
     def _onViewChanged(self, event):
@@ -4868,6 +4902,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
     def render(self, event):
         """Called every frame by RV (auto-bound by MinorMode name convention).
         Draw overlay when enabled."""
+        global _HAS_GL_SHADERS, _glUseProgram
 
         # Apply pending LUT on main thread (deferred from source-load)
         if getattr(self, '_lut_pending', False):
@@ -4881,12 +4916,32 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         if not self._overlay_enabled or not _HAS_GL:
             return
 
-        # One-time render confirmation
+        # ── Lazy init: resolve glUseProgram via ctypes on Windows ──
+        # PyOpenGL may not expose GL 2.0 functions.  wglGetProcAddress
+        # requires an active GL context, which exists here in render().
+        if not _HAS_GL_SHADERS and not getattr(self, '_gl_ctypes_tried', False):
+            self._gl_ctypes_tried = True
+            if sys.platform == 'win32':
+                try:
+                    import ctypes as _ct
+                    _ogl32 = _ct.windll.opengl32
+                    _wglGPA = _ogl32.wglGetProcAddress
+                    _wglGPA.restype = _ct.c_void_p
+                    _wglGPA.argtypes = [_ct.c_char_p]
+                    _addr = _wglGPA(b"glUseProgram")
+                    if _addr:
+                        _glUseProgram = _ct.CFUNCTYPE(None, _ct.c_uint)(_addr)
+                        _HAS_GL_SHADERS = True
+                        print("[MediaVault] glUseProgram resolved via ctypes/WGL")
+                    else:
+                        print("[MediaVault] WARNING: wglGetProcAddress('glUseProgram') returned NULL")
+                except Exception as e:
+                    print("[MediaVault] WARNING: ctypes glUseProgram failed: %s" % e)
+
+        # One-time diagnostic
         if not hasattr(self, '_render_logged'):
-            if _VERBOSE:
-                print("[MediaVault] render() called – drawing overlay (w=%s, h=%s)" %
-                      (event.domain()[0], event.domain()[1]))
             self._render_logged = True
+            print("[MediaVault] First overlay render: HAS_GL_SHADERS=%s" % _HAS_GL_SHADERS)
 
         try:
             domain = event.domain()
@@ -4895,25 +4950,32 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             if w < 100 or h < 100:
                 return
 
-            # Source-change detection is handled by event handlers
-            # (_onSourceLoaded, _onViewChanged) — NOT here.
-            # The render loop is 100% non-blocking: pure display only.
-
-            # ── Disable active shaders ──
-            # The OCIO color pipeline uses GL shaders to apply color
-            # transforms.  After RV renders an EXR with OCIO, the
-            # shader stays bound.  Fixed-function GL calls (glColor4f,
-            # glVertex2f, glBitmap) go through that shader instead of
-            # the normal pipeline, making the overlay invisible.
-            # Save the active program, switch to fixed-function (0),
-            # draw overlays, then restore.
-            _prev_prog = None
-            if _HAS_GL_SHADERS:
+            # ── Disable active OCIO shader ──
+            # After OCIO renders a color-managed EXR, its GL shader
+            # stays bound.  Fixed-function calls (glColor4f, glBitmap)
+            # go through it and produce invisible output.  Save the
+            # active program, switch to fixed-function (0), draw
+            # overlays, then restore.
+            _prev_prog = 0
+            if _HAS_GL_SHADERS and _glUseProgram:
                 try:
-                    _prev_prog = int(glGetIntegerv(GL_CURRENT_PROGRAM))
-                    glUseProgram(0)
+                    _result = glGetIntegerv(_GL_CURRENT_PROGRAM)
+                    if hasattr(_result, '__getitem__'):
+                        _prev_prog = int(_result[0])
+                    elif _result is not None:
+                        _prev_prog = int(_result)
+                    _glUseProgram(0)
                 except Exception:
-                    _prev_prog = None
+                    _prev_prog = 0
+
+            # ── Ensure clean fixed-function GL state ──
+            # OCIO may leave depth test, scissor, or textures enabled.
+            try:
+                glDisable(GL_DEPTH_TEST)
+                glDisable(GL_SCISSOR_TEST)
+                glDisable(GL_TEXTURE_2D)
+            except Exception:
+                pass
 
             # ── Set up 2D ortho projection ──
             glMatrixMode(GL_PROJECTION)
@@ -4945,14 +5007,16 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             glMatrixMode(GL_MODELVIEW)
 
             # ── Restore shader program ──
-            if _HAS_GL_SHADERS and _prev_prog is not None:
+            if _HAS_GL_SHADERS and _glUseProgram and _prev_prog:
                 try:
-                    glUseProgram(_prev_prog)
+                    _glUseProgram(_prev_prog)
                 except Exception:
                     pass
 
-        except Exception:
-            pass  # never crash RV's render loop
+        except Exception as e:
+            if not hasattr(self, '_render_err_logged'):
+                self._render_err_logged = True
+                print("[MediaVault] render() error: %s" % e)
 
     # ── GL drawing helpers ───────────────────────────────────────
 
