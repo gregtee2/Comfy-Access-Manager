@@ -1428,17 +1428,38 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                             else self._switchTo(_p)),
                         None, None))
                 else:
-                    # Multiple versions — sub-submenu
+                    # Multiple versions — group by version family
+                    groups = self._groupAssetsForMenu(available)
                     ver_items = []
-                    for a in available:
-                        vlabel = self._formatVersionLabel(a)
-                        rv_path = self._assetToRvPath(a)
-                        ver_items.append((
-                            vlabel,
-                            lambda e, _m=mode, _p=rv_path: (
-                                self._loadAsCompare(_p) if _m == "compare"
-                                else self._switchTo(_p)),
-                            None, None))
+                    for root_asset, variants in groups:
+                        if not variants:
+                            # Singleton version — flat item
+                            vlabel = self._formatVersionLabel(root_asset)
+                            rv_path = self._assetToRvPath(root_asset)
+                            ver_items.append((
+                                vlabel,
+                                lambda e, _m=mode, _p=rv_path: (
+                                    self._loadAsCompare(_p) if _m == "compare"
+                                    else self._switchTo(_p)),
+                                None, None))
+                        else:
+                            # Multi-variant version — sub-submenu
+                            root_name = os.path.splitext(
+                                root_asset.get("vault_name", ""))[0]
+                            ver = "v%03d" % root_asset["version"] if root_asset.get("version") else ""
+                            group_label = "%s  [%d]" % (
+                                ver or root_name, len(variants))
+                            sub_items = []
+                            for va in variants:
+                                vlabel = self._formatVersionLabel(va)
+                                rv_path = self._assetToRvPath(va)
+                                sub_items.append((
+                                    vlabel,
+                                    lambda e, _m=mode, _p=rv_path: (
+                                        self._loadAsCompare(_p) if _m == "compare"
+                                        else self._switchTo(_p)),
+                                    None, None))
+                            ver_items.append((group_label, sub_items))
                     items.append((role_name, ver_items))
 
             if not items:
@@ -2551,6 +2572,70 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         return int(m.group(1)) if m else 0
 
     @staticmethod
+    def _groupAssetsForMenu(assets):
+        """Group a flat list of assets into version families for menus.
+
+        Within the same version number, finds the asset with the shortest
+        vault_name (the 'root').  All assets whose name starts with that
+        root prefix are grouped under it as a sub-submenu.
+
+        Returns a list of (root_asset, [variant_assets]) tuples.
+        variant_assets includes the root itself so it can be selected.
+        Singletons (or unique versions) return (asset, []).
+        Results are sorted by version descending.
+        """
+        import re
+        version_re = re.compile(r'_v(\d+)')
+
+        # Parse version and stem from each name
+        parsed = []
+        for a in assets:
+            name = a.get('vault_name', '')
+            match = version_re.search(name)
+            if match:
+                version = int(match.group(1))
+                stem = name[:match.start()]
+            else:
+                version = -1
+                stem = name
+            parsed.append((a, stem, version))
+
+        # Group by version number
+        by_version = {}
+        for a, stem, ver in parsed:
+            by_version.setdefault(ver, []).append((a, stem))
+
+        # Within each version, cluster by shared prefix
+        result = []
+        for ver in sorted(by_version.keys(), reverse=True):
+            group = by_version[ver]
+            if len(group) == 1:
+                result.append((group[0][0], []))
+                continue
+
+            group.sort(key=lambda x: len(x[1]))
+            assigned = set()
+
+            for i, (root_a, root_stem) in enumerate(group):
+                if i in assigned:
+                    continue
+                variants = [(root_a, root_stem)]
+                assigned.add(i)
+                for j, (other_a, other_stem) in enumerate(group):
+                    if j in assigned:
+                        continue
+                    if other_stem == root_stem or other_stem.startswith(root_stem + '_'):
+                        variants.append((other_a, other_stem))
+                        assigned.add(j)
+
+                if len(variants) > 1:
+                    result.append((root_a, [v[0] for v in variants]))
+                else:
+                    result.append((root_a, []))
+
+        return result
+
+    @staticmethod
     def _formatVersionLabel(asset, include_current=True):
         """Build a rich version label like ShotGrid's take list.
 
@@ -2752,42 +2837,42 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 sub = QMenu(role_name, menu)
                 sub.setStyleSheet(menu.styleSheet())
 
-                # Group by media type: prefer same ext as current source
-                same_type = []
-                other_type = []
-                for a in available:
-                    if current_ext:
-                        a_ext = (a.get("file_ext") or os.path.splitext(a.get("file_path", ""))[1] or "").lower().lstrip(".")
-                        if a_ext == current_ext.lstrip("."):
-                            same_type.append(a)
-                            continue
-                    other_type.append(a)
+                # Group variants by version family
+                version_groups = self._groupAssetsForMenu(available)
 
-                # Show same-type versions first, then separator + others
-                groups = []
-                if same_type:
-                    groups.append(same_type)
-                if other_type:
-                    groups.append(other_type)
-
-                for gi, group in enumerate(groups):
-                    if gi > 0:
-                        sub.addSeparator()
-                    for a in group:
-                        vlabel = self._formatVersionLabel(a)
-
+                for root_asset, variants in version_groups:
+                    if not variants:
+                        # Singleton version — flat item in role submenu
+                        vlabel = self._formatVersionLabel(root_asset)
                         v_action = sub.addAction(vlabel)
-                        v_action.setData(self._assetToRvPath(a))
-
-                        # Disable clicking the currently loaded version in switch mode
-                        if a.get("is_current") and mode == "switch":
+                        v_action.setData(self._assetToRvPath(root_asset))
+                        if root_asset.get("is_current") and mode == "switch":
                             v_action.setEnabled(False)
-
-                        # Bold the current version
-                        if a.get("is_current"):
+                        if root_asset.get("is_current"):
                             font = v_action.font()
                             font.setBold(True)
                             v_action.setFont(font)
+                    else:
+                        # Multi-variant version — nested sub-submenu
+                        root_name = os.path.splitext(
+                            root_asset.get("vault_name", ""))[0]
+                        ver = "v%03d" % root_asset["version"] if root_asset.get("version") else ""
+                        group_label = "%s  [%d]" % (ver or root_name, len(variants))
+                        ver_sub = QMenu(group_label, sub)
+                        ver_sub.setStyleSheet(menu.styleSheet())
+
+                        for va in variants:
+                            vlabel = self._formatVersionLabel(va)
+                            v_action = ver_sub.addAction(vlabel)
+                            v_action.setData(self._assetToRvPath(va))
+                            if va.get("is_current") and mode == "switch":
+                                v_action.setEnabled(False)
+                            if va.get("is_current"):
+                                font = v_action.font()
+                                font.setBold(True)
+                                v_action.setFont(font)
+
+                        sub.addMenu(ver_sub)
 
                 # Bold the role submenu title if it's the current role
                 role_action = menu.addMenu(sub)
