@@ -4288,6 +4288,33 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
             self._comfyui_meta = (
                 cached if cached is not False else None)
 
+        # ── Refresh Compare/Switch menus if viewed source changed ──
+        # When the user loads a new clip (rvpush, File > Open, etc.),
+        # _onSourceLoaded may fire before RV switches the viewNode.
+        # By the time _onViewChanged/_syncCurrentSource runs, the
+        # menus are built from stale _cached_data.  Detect this by
+        # comparing the current source path to _cached_path.
+        cur_key = self._normKey(cur)
+        cached_key = self._normKey(self._cached_path) if self._cached_path else None
+        if cached_key is not None and cur_key != cached_key:
+            print("[MediaVault] Viewed source changed (%s → %s), "
+                  "refreshing menus"
+                  % (os.path.basename(self._cached_path or ""),
+                     os.path.basename(cur)))
+            self._cached_data = None
+            self._cached_path = None
+            try:
+                # Don't force_refresh — clearing the cache above is
+                # enough to trigger a fresh fetch.  If _onSourceLoaded
+                # calls _getRolesData(force_refresh=True) later, that
+                # will use the data we just fetched (same path → cache
+                # hit) or re-fetch if the source changed again.
+                self._getRolesData()
+                if self._cached_data:
+                    self._rebuildNativeMenu()
+            except Exception as e:
+                print("[MediaVault] Menu refresh failed: %s" % e)
+
         # Auto-refresh ShotGrid Notes panel if open
         if (self._notes_panel and self._notes_panel.isVisible()):
             try:
