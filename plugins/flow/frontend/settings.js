@@ -52,6 +52,10 @@ export function init() {
     if (scanDryRunBtn) scanDryRunBtn.addEventListener('click', () => scanTree(true));
     if (scanTreeBtn) scanTreeBtn.addEventListener('click', () => scanTree(false));
 
+    // Auto-Publish toggle
+    const autoPublishToggle = document.getElementById('flowAutoPublishToggle');
+    if (autoPublishToggle) autoPublishToggle.addEventListener('change', onAutoPublishToggle);
+
     // Live Sync toggle
     const liveSyncToggle = document.getElementById('flowLiveSyncToggle');
     if (liveSyncToggle) liveSyncToggle.addEventListener('change', onLiveSyncToggle);
@@ -80,6 +84,10 @@ export function loadSettings(settings) {
     if (siteEl)   siteEl.value   = settings.flow_site_url || '';
     if (scriptEl) scriptEl.value = settings.flow_script_name || '';
     if (keyEl)    keyEl.value    = settings.flow_api_key || '';
+
+    // Auto-publish checkbox
+    const autoPublishEl = document.getElementById('flowAutoPublishToggle');
+    if (autoPublishEl) autoPublishEl.checked = settings.flow_auto_publish === 'true';
 
     // Path matching fields are loaded separately via loadPathConfig() in init()
 }
@@ -503,6 +511,26 @@ async function scanTree(dryRun) {
         }
     } catch (err) {
         _pathLog(`❌ Scan: ${err.message}`);
+    }
+}
+
+// ─── Auto-Publish ────────────────────────────────────
+
+async function onAutoPublishToggle() {
+    const toggle = document.getElementById('flowAutoPublishToggle');
+    if (!toggle) return;
+
+    try {
+        await api('/api/settings', {
+            method: 'POST',
+            body: { flow_auto_publish: toggle.checked ? 'true' : 'false' },
+        });
+        _status(toggle.checked
+            ? 'Auto-publish enabled — ComfyUI saves will create ShotGrid Versions'
+            : 'Auto-publish disabled', toggle.checked ? 'var(--success)' : 'var(--text-dim)');
+    } catch (err) {
+        _status(`Auto-publish toggle error: ${err.message}`, 'var(--danger)');
+        toggle.checked = !toggle.checked; // revert
     }
 }
 

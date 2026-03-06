@@ -52,6 +52,17 @@
     <div id="flowSyncLog" style="margin-top:8px;font-size:0.82rem;color:var(--text-dim);max-height:150px;overflow-y:auto;"></div>
 </div>
 
+<div id="flowAutoPublishPanel" style="margin-top:14px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px;">
+    <h4 style="margin:0 0 6px 0;font-size:0.9rem;">Auto-Publish to Flow</h4>
+    <p class="hint" style="margin:0 0 8px 0;">When ComfyUI saves an asset to a Flow-linked project, automatically create a Version in ShotGrid. The Version is linked to the correct shot and task, and video files are uploaded for Screening Room playback.</p>
+    <div style="display:flex; align-items:center; gap:10px;">
+        <label style="display:flex; align-items:center; gap:6px; cursor:pointer; margin:0; font-size:0.85rem;">
+            <input type="checkbox" id="flowAutoPublishToggle" style="width:16px; height:16px; cursor:pointer;">
+            <span>Auto-publish ComfyUI saves to ShotGrid</span>
+        </label>
+    </div>
+</div>
+
 <div id="flowLiveSyncPanel" style="margin-top:14px; padding:10px; background:rgba(255,255,255,0.03); border-radius:6px;">
     <h4 style="margin:0 0 6px 0;font-size:0.9rem;">Live Sync</h4>
     <p class="hint" style="margin:0 0 8px 0;">Automatically poll ShotGrid for changes on a timer. Syncs shot statuses, tasks, new media, and thumbnails for all linked projects.</p>

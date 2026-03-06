@@ -320,6 +320,58 @@ router.post('/save', async (req, res) => {
 
         const asset = db.prepare('SELECT * FROM assets WHERE id = ?').get(assetId);
         res.json(asset);
+
+        // ── Auto-publish to Flow/ShotGrid (fire-and-forget) ──
+        // If the project came from SG and auto-publish is enabled,
+        // create a Version in ShotGrid so it shows up in Screening Room.
+        try {
+            const autoPublish = getSetting('flow_auto_publish');
+            if (autoPublish === 'true' && project.flow_id) {
+                const FlowService = require('../flow/services/FlowService');
+                if (FlowService.isConfigured()) {
+                    const publishParams = {
+                        assetId,
+                        flowProjectId: project.flow_id,
+                        code: imported.vaultName,
+                        description: 'Auto-published from ComfyUI via CAM',
+                    };
+
+                    // Link to shot in SG if the shot has a flow_id
+                    if (shot?.flow_id) {
+                        publishParams.flowShotId = shot.flow_id;
+                    }
+
+                    // Find matching task (shot + role's pipeline step)
+                    if (shot?.flow_id && role) {
+                        const task = db.prepare(
+                            `SELECT flow_id FROM flow_tasks
+                             WHERE entity_type = 'Shot'
+                               AND entity_flow_id = ?
+                               AND LOWER(step_name) = LOWER(?)
+                             LIMIT 1`
+                        ).get(shot.flow_id, role.name);
+                        if (task) publishParams.flowTaskId = task.flow_id;
+                    }
+
+                    // Include movie path for video files (Screening Room)
+                    if (['video'].includes(imported.mediaType)) {
+                        publishParams.moviePath = imported.vaultPath;
+                        publishParams.uploadMedia = true;
+                    }
+
+                    FlowService.publishVersion(publishParams)
+                        .then(r => {
+                            const fvId = r?.version?.flow_id;
+                            console.log(`[ComfyUI → Flow] Published Version ${fvId || '(unknown)'} for ${imported.vaultName}`);
+                        })
+                        .catch(e => console.warn(`[ComfyUI → Flow] Auto-publish failed: ${e.message}`));
+                }
+            }
+        } catch (flowErr) {
+            // Never let Flow errors affect the ComfyUI save
+            console.warn(`[ComfyUI → Flow] Auto-publish setup error: ${flowErr.message}`);
+        }
+
     } catch (err) {
         res.status(500).json({ error: err.message });
     }
