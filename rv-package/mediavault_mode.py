@@ -1281,6 +1281,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         # ── Compare / version cache ──────────────────────────────
         self._cached_data = None
         self._cached_path = None
+        self._menu_source_dir = None   # norm dir the native menu was built for
 
         print("[MediaVault] Initialising mediavault-mode")
 
@@ -1534,9 +1535,17 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
         try:
             self.setMenu(new_menu)
+            # Record which directory (shot) this menu was built for
+            try:
+                cur = self._getCurrentSourcePath()
+                if cur:
+                    self._menu_source_dir = self._normKey(os.path.dirname(cur))
+            except Exception:
+                pass
             role_count = len([r for r in (self._cached_data or {}).get("roles", [])
                               if any(a.get("file_path") for a in r.get("assets", []))])
-            print("[MediaVault] Native menu rebuilt with %d roles (version submenus)" % role_count)
+            print("[MediaVault] Native menu rebuilt with %d roles for %s"
+                  % (role_count, os.path.basename(self._menu_source_dir or '?')))
         except Exception as e:
             print("[MediaVault] Failed to rebuild native menu: %s" % e)
 
@@ -4289,27 +4298,20 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                 cached if cached is not False else None)
 
         # ── Refresh Compare/Switch menus if viewed source changed ──
-        # When the user loads a new clip (rvpush, File > Open, etc.),
-        # _onSourceLoaded may fire before RV switches the viewNode.
-        # By the time _onViewChanged/_syncCurrentSource runs, the
-        # menus are built from stale _cached_data.  Detect this by
-        # comparing the current source path to _cached_path.
-        cur_key = self._normKey(cur)
-        cached_key = self._normKey(self._cached_path) if self._cached_path else None
-        if cached_key is not None and cur_key != cached_key:
-            print("[MediaVault] Viewed source changed (%s → %s), "
+        # Compare by DIRECTORY (not full path) so EXR frame changes
+        # (render.1000.exr vs render.1001.exr) don't trigger needless
+        # rebuilds, but switching shots (different folders) always does.
+        cur_dir = self._normKey(os.path.dirname(cur))
+        if (self._menu_source_dir is not None
+                and cur_dir != self._menu_source_dir):
+            print("[MediaVault] Viewed source dir changed (%s -> %s), "
                   "refreshing menus"
-                  % (os.path.basename(self._cached_path or ""),
-                     os.path.basename(cur)))
+                  % (os.path.basename(self._menu_source_dir or ""),
+                     os.path.basename(cur_dir)))
             self._cached_data = None
             self._cached_path = None
             try:
-                # Don't force_refresh — clearing the cache above is
-                # enough to trigger a fresh fetch.  If _onSourceLoaded
-                # calls _getRolesData(force_refresh=True) later, that
-                # will use the data we just fetched (same path → cache
-                # hit) or re-fetch if the source changed again.
-                self._getRolesData()
+                self._getRolesData(force_refresh=True)
                 if self._cached_data:
                     self._rebuildNativeMenu()
             except Exception as e:
