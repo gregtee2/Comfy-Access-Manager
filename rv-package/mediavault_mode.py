@@ -845,8 +845,7 @@ class AssetPickerDialog(QDialog):
                 import re as _re
                 _vm = _re.search(r'_v(\d+)', root_name)
                 version = 'v%s' % _vm.group(1) if _vm else ''
-                label = '%s   [%d]' % (root_name, len(variants))
-                parent = QTreeWidgetItem([label, '', version, ''])
+                parent = QTreeWidgetItem([root_name, '', version, ''])
                 # Group header is not selectable — just a label
                 parent.setFlags(parent.flags() & ~Qt.ItemIsSelectable)
                 for c in range(4):
@@ -1451,8 +1450,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                             import re as _re
                             _vm = _re.search(r'_v(\d+)', root_asset.get('vault_name', ''))
                             ver = "v%s" % _vm.group(1) if _vm else ""
-                            group_label = "%s  [%d]" % (
-                                ver or root_name, len(variants))
+                            group_label = ver or root_name
                             sub_items = []
                             for va in variants:
                                 vlabel = self._formatVersionLabel(va)
@@ -2864,7 +2862,7 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                         import re as _re
                         _vm = _re.search(r'_v(\d+)', root_asset.get('vault_name', ''))
                         ver = "v%s" % _vm.group(1) if _vm else ""
-                        group_label = "%s  [%d]" % (ver or root_name, len(variants))
+                        group_label = ver or root_name
                         ver_sub = QMenu(group_label, sub)
                         ver_sub.setStyleSheet(menu.styleSheet())
 
