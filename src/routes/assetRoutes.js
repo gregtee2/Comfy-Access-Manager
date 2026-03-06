@@ -634,6 +634,8 @@ router.get('/compare-targets-by-path', (req, res) => {
             WHERE a.shot_id = ? AND a.project_id = ?
             ${baseOrder}
         `).all(asset.shot_id, asset.project_id);
+        console.log('[compare-targets] Resolved: vault_name=%s shot_id=%d → %d siblings',
+            asset.vault_name, asset.shot_id, siblings.length);
         if (siblings.length > 0) {
             return res.json({ asset: { id: asset.id, vault_name: asset.vault_name }, scope: 'shot', roles: groupByRole(siblings, asset.id), hierarchy });
         }
