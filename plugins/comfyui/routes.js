@@ -121,13 +121,16 @@ router.get('/asset/:id/path', (req, res) => {
         .get(req.params.id);
 
     if (!asset) return res.status(404).json({ error: 'Asset not found' });
-    if (!fs.existsSync(asset.file_path)) {
-        return res.status(404).json({ error: 'File missing from vault', expected: asset.file_path });
+
+    // Resolve cross-platform paths (e.g., Mac path in DB on Windows)
+    const resolved = resolveFilePath(asset.file_path);
+    if (!fs.existsSync(resolved)) {
+        return res.status(404).json({ error: 'File missing from vault', expected: resolved });
     }
 
     res.json({
         id: asset.id,
-        path: asset.file_path,
+        path: resolved,
         name: asset.vault_name,
         type: asset.media_type,
     });

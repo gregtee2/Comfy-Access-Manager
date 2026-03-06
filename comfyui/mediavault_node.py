@@ -87,6 +87,10 @@ try:
             req = urllib.request.Request(url, headers={"Content-Type": "application/json"})
             with urllib.request.urlopen(req, timeout=3) as resp:
                 return json.loads(resp.read().decode())
+        except urllib.error.HTTPError as e:
+            # HTTP 4xx/5xx = server is alive, just this resource failed
+            print(f"[MediaVault] proxy {e.code} on {path}: {e.reason}")
+            return []
         except Exception as e:
             global _mv_alive, _mv_last_check
             _mv_alive = False
@@ -286,11 +290,16 @@ def mv_api(path, method="GET", data=None, timeout=3):
     try:
         with urllib.request.urlopen(req, timeout=timeout) as resp:
             return json.loads(resp.read().decode())
+    except urllib.error.HTTPError as e:
+        # HTTP 4xx/5xx means the server IS alive — don't trigger backoff
+        print(f"[MediaVault] API {e.code} on {path}: {e.reason}")
+        return None
     except urllib.error.URLError as e:
+        # Connection refused / timeout / DNS failure — server is actually down
         global _mv_alive, _mv_last_check
         _mv_alive = False
         _mv_last_check = time.time()
-        print(f"[MediaVault] API error (backing off {_MV_BACKOFF_SEC}s): {e}")
+        print(f"[MediaVault] Server unreachable (backing off {_MV_BACKOFF_SEC}s): {e}")
         return None
     except json.JSONDecodeError:
         return None
