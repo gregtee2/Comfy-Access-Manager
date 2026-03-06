@@ -3664,15 +3664,36 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
         # Pre-populate Compare/Switch role cache so the menu shows
         # correct enabled/disabled states on first open.
+        # IMPORTANT: Use the NEW source group's path directly, not
+        # _getCurrentSourcePath() which may still return the OLD
+        # source's path (RV hasn't switched its view yet when
+        # source-group-complete fires).
         try:
-            self._getRolesData(force_refresh=True)
-            if self._cached_data:
-                scope = self._cached_data.get("scope", "?")
-                role_names = [r.get("name") for r in self._cached_data.get("roles", [])]
-                print("[MediaVault] Role cache ready (scope=%s, %d roles with assets: %s)"
-                      % (scope, len(role_names), ", ".join(role_names[:10])))
-                # Rebuild the native right-click menu with version submenus
-                self._rebuildNativeMenu()
+            # Get path from the newest source group
+            new_sg_path = None
+            for sg in sorted(new_sgs, reverse=True):
+                p = self._pathFromSourceGroup(sg)
+                if p:
+                    new_sg_path = p
+                    break
+
+            if new_sg_path:
+                print("[MediaVault] New source path (from SG): %s"
+                      % os.path.basename(new_sg_path))
+                data = self._fetchShotRoles(new_sg_path)
+                if data and "error" not in data:
+                    self._cached_data = data
+                    self._cached_path = new_sg_path
+                    scope = data.get("scope", "?")
+                    role_names = [r.get("name") for r in data.get("roles", [])]
+                    print("[MediaVault] Role cache ready (scope=%s, %d roles: %s)"
+                          % (scope, len(role_names), ", ".join(role_names[:10])))
+                    self._rebuildNativeMenu()
+            else:
+                # Fallback: try _getCurrentSourcePath
+                self._getRolesData(force_refresh=True)
+                if self._cached_data:
+                    self._rebuildNativeMenu()
         except Exception as e:
             print("[MediaVault] Pre-cache roles failed: %s" % e)
 
