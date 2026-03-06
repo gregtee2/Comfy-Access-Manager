@@ -1373,6 +1373,8 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
 
     # ── dynamic native menu ──────────────────────────────────────
 
+    _menu_rebuild_count = 0  # class‑level counter
+
     def _rebuildNativeMenu(self):
         """Rebuild the MediaVault right-click menu with version sub-submenus.
 
@@ -1380,6 +1382,9 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         Uses self._cached_data to populate Compare/Switch submenus with
         per-role version lists instead of flat "load latest" entries.
         """
+        MediaVaultMode._menu_rebuild_count += 1
+        build_id = MediaVaultMode._menu_rebuild_count
+
         def _version_items(mode):
             """Build role submenu items using cached data.
 
@@ -1534,6 +1539,37 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         ])]
 
         try:
+            # --- Diagnostic: log exactly what assets go into the menu ---
+            diag_data = self._cached_data or {}
+            diag_roles = diag_data.get("roles", [])
+            all_vnames = []
+            for dr in diag_roles:
+                for da in dr.get("assets", []):
+                    vn = da.get("vault_name", "?")
+                    all_vnames.append(vn)
+            # Extract distinct shot identifiers from vault_names
+            import re as _re_diag
+            shot_ids_in_menu = set()
+            for vn in all_vnames:
+                m = _re_diag.search(r'VBP_\d+', vn, _re_diag.IGNORECASE)
+                if m:
+                    shot_ids_in_menu.add(m.group(0))
+            print("[MenuDiag] Build #%d — %d roles, %d assets, "
+                  "distinct_shots=%s, first_5=%s"
+                  % (build_id, len(diag_roles), len(all_vnames),
+                     sorted(shot_ids_in_menu) or ['(none)'],
+                     all_vnames[:5]))
+            # Also log the cached_path that produced this data
+            print("[MenuDiag] Build #%d — cached_path=%s"
+                  % (build_id,
+                     os.path.basename(self._cached_path or '(None)')))
+
+            # Defensive: clear old menu before setting new one
+            try:
+                self.setMenu(None)
+            except Exception:
+                pass
+
             self.setMenu(new_menu)
             # Record which directory (shot) this menu was built for
             try:
@@ -1542,12 +1578,14 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
                     self._menu_source_dir = self._normKey(os.path.dirname(cur))
             except Exception:
                 pass
-            role_count = len([r for r in (self._cached_data or {}).get("roles", [])
+            role_count = len([r for r in diag_roles
                               if any(a.get("file_path") for a in r.get("assets", []))])
             print("[MediaVault] Native menu rebuilt with %d roles for %s"
                   % (role_count, os.path.basename(self._menu_source_dir or '?')))
         except Exception as e:
+            import traceback
             print("[MediaVault] Failed to rebuild native menu: %s" % e)
+            traceback.print_exc()
 
     # ── source path resolution ───────────────────────────────────
 
@@ -2847,6 +2885,15 @@ class MediaVaultMode(rv.rvtypes.MinorMode):
         if not roles:
             rve.displayFeedback("No related assets found", 3.0)
             return
+
+        # --- Diagnostic: log what the Qt popup received ---
+        qt_vnames = []
+        for r in roles:
+            for a in r.get("assets", []):
+                qt_vnames.append(a.get("vault_name", "?"))
+        print("[MenuDiag] Qt popup (%s): filepath=%s, %d roles, %d assets, first_5=%s"
+              % (mode, os.path.basename(filepath or "?"), len(roles),
+                 len(qt_vnames), qt_vnames[:5]))
 
         # Find current asset's role so we can highlight it
         current_role_id = None
